@@ -38,8 +38,15 @@ ancestry optimizer across different locators.
 Qt 6.4 emitted historical `siiv(so)` property-event bodies whose property kind was
 `accessible-name`. `atspi` 0.30 rejected that spelling while constructing its typed wrapper.
 The backend therefore consumes the raw zbus message stream, first tries `atspi::Event`, and has
-one protocol-level compatibility decoder for this Qt event body. It still produces the same
-toolkit-independent `NodePropertyChanged` value.
+one protocol-level compatibility decoder in `backend/protocol_compat.rs` for this wire body. It
+still produces the same toolkit-independent `NodePropertyChanged` value and contains no
+toolkit-name branch.
+
+The producer uses a bounded 2,048-event channel by default. A full channel atomically marks one
+pending resynchronization and counts dropped messages; it never silently treats the remaining
+prefix as authoritative. The cache owner drains that prefix, performs one full bootstrap, and
+then resumes incremental processing. A Chrome Add100 live run with capacity 4 dropped 197 events,
+performed one resync to 382 nodes, and ended at `full_snapshots=2` without panic or deadlock.
 
 ## Recorded event bursts
 

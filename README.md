@@ -5,7 +5,7 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
 This repository contains the validated inspector, cross-toolkit semantic TUI, container operations,
-and the **Phase 2C event-driven semantic cache** validated with GTK4, Qt6, and Chrome:
+event-driven cache, and the **Phase 3A bulk semantic bootstrap** validated with GTK4, Qt6, and Chrome:
 
 ```text
 GUI application
@@ -14,7 +14,9 @@ GUI application
       ↓
 Accessibility tree
       ↓
-Initial semantic snapshot / live semantic cache
+AT-SPI Cache bulk bootstrap (recursive-walk fallback)
+      ↓
+Arena-backed live semantic cache
       ↓
 Terminal-native view model
       ↓
@@ -42,6 +44,7 @@ The first prototype provides:
 - terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
 - arrow, PageUp/PageDown, and mouse-wheel scrolling with focus auto-scroll;
 - event-driven incremental node/subtree refresh, with manual `r` full-snapshot fallback;
+- fast bulk bootstrap through AT-SPI Cache when its inventory is complete, with automatic walk fallback;
 - non-fatal stale-object/application-gone status messages;
 - password redaction before data reaches the TUI renderer;
 - role-aware action resolution with no implicit first-action fallback; and
@@ -66,13 +69,15 @@ Text input editing is deliberately not implemented. The raw normalized stream ca
 ## Architecture
 
 ```text
-src/backend/atspi.rs       AT-SPI traversal, event subscription, and operations
+src/backend/atspi.rs       AT-SPI traversal, bulk enrichment, events, and operations
+src/backend/bootstrap.rs   Cache/walk strategy + bulk tree reconstruction
+src/backend/protocol_compat.rs  modern/legacy wire normalization
            │
            ▼
 src/events.rs              normalized events + dirty-scope coalescing
            │
            ▼
-src/semantic/cache.rs      single-owner live tree + identity reconciliation
+src/semantic/cache.rs      canonical arena/hash maps + identity reconciliation
            │
            ▼
 src/semantic/              SemanticNode + BackendLocator + RuntimeNodeId
@@ -118,6 +123,7 @@ Open a named application directly or select one interactively:
 gui2tui
 gui2tui --app gui2tui-live-fixture
 gui2tui --app gtk4-demo --max-depth 20 --max-nodes 2000
+gui2tui --app firefox --bootstrap auto
 ```
 
 Keys:
@@ -158,6 +164,10 @@ gui2tui-inspect --app firefox
 gui2tui-inspect --app-id 1
 gui2tui-inspect --app firefox --verbose
 gui2tui-inspect --watch-events --app firefox
+gui2tui-inspect --app firefox --probe-cache
+gui2tui-inspect --app firefox --bootstrap cache
+gui2tui-inspect --app firefox --bootstrap walk
+gui2tui-inspect --app firefox --probe-collection
 ```
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
@@ -293,18 +303,20 @@ AT-SPI, and both fixtures, then checks discovery, password redaction, and safe b
 
 ```bash
 ./scripts/live-test-linux.sh
+CACHE_BOOTSTRAP_TEST=1 ./scripts/live-test-linux.sh
 ```
 
 It requires the GTK4/PyGObject and PyQt6 fixture dependencies and is intentionally not part of
 the default CI. Browser probing is also optional because it installs a large external package;
 the exact Chrome 152 observations are recorded in [browser-probe.md](docs/browser-probe.md).
 The raw-to-normalized event contract and measured incremental results are in
-[events.md](docs/events.md).
+[events.md](docs/events.md). Bulk/walk behavior and measured bootstrap speed are in
+[bootstrap.md](docs/bootstrap.md).
 
 ## Current limitations
 
-- Initial loading still performs a synchronous full traversal; Chrome's 5,158-node fixture takes
-  several seconds before the event-driven cache becomes available.
+- Initial loading uses Cache.GetItems when the returned inventory is usable. A missing, empty,
+  malformed, or detectably incomplete cache falls back to the slower recursive walk.
 - Backend locators remain valid only for their accessible object's lifetime. Conservative runtime
   reconciliation intentionally drops identity when sibling fingerprints are ambiguous.
 - Role mapping is intentionally conservative; known but unmapped AT-SPI roles become `Unknown(original-role)`.

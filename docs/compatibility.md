@@ -29,6 +29,9 @@ Validated on 2026-08-28 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5
 | Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED |
 | Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected |
 | ComboBox semantic role | NOT TESTED | NOT TESTED | PASS read-only mapping |
+| Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items |
+| Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync |
+| Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero |
 
 ## Qt accessibility activation
 
@@ -65,6 +68,12 @@ gate. Phase 2C subsequently validated the common event cache. A repeat run of th
 printed 5,158 nodes in 5.595 s; its local checkbox/status mutation then refreshed only five backend
 nodes in 212 ms with zero additional full snapshots. Add/remove 100 controls refreshed 103/3 nodes
 in 161/21 ms respectively.
+
+Phase 3A forced-cache bootstrap rebuilt the same 5,158-node Chrome tree in a 201.751 ms backend
+median (0.236 s command wall median), versus 5,150.075 ms (5.167 s wall) for walk. Auto measured
+191.531 ms backend / 0.206 s wall median. See
+[bootstrap.md](bootstrap.md) for the three runs, selective-enrichment count, partial-cache guard,
+and Collection probe.
 
 ## Browser environment and caveat
 

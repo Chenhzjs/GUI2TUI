@@ -61,6 +61,40 @@ PROJECT_ROOT="$project_root" TARGET_DIR="$target_dir" dbus-run-session -- bash -
     "$inspect" --app gui2tui-live-fixture > /tmp/gui2tui-live-gtk-tree.txt
     "$inspect" --app gui2tui-qt-fixture > /tmp/gui2tui-live-qt-tree.txt
 
+    if [[ "${CACHE_BOOTSTRAP_TEST:-0}" == 1 ]]; then
+        normalize_tree() {
+            sed -E "s/ actions=\[[^]]*\] id=[^ ]*//; s/ id=[^ ]*//" "$1"
+        }
+
+        "$inspect" --app gui2tui-live-fixture --bootstrap walk \
+            >/tmp/gui2tui-live-gtk-walk.txt
+        "$inspect" --app gui2tui-live-fixture --bootstrap cache \
+            >/tmp/gui2tui-live-gtk-cache.txt
+        normalize_tree /tmp/gui2tui-live-gtk-walk.txt \
+            >/tmp/gui2tui-live-gtk-walk-core.txt
+        normalize_tree /tmp/gui2tui-live-gtk-cache.txt \
+            >/tmp/gui2tui-live-gtk-cache-core.txt
+        diff -u /tmp/gui2tui-live-gtk-walk-core.txt \
+            /tmp/gui2tui-live-gtk-cache-core.txt
+        echo "GTK cache/walk core semantic equivalence passed"
+
+        if "$inspect" --app gui2tui-qt-fixture --bootstrap cache \
+            >/tmp/gui2tui-live-qt-cache.txt 2>/tmp/gui2tui-live-qt-cache.err; then
+            "$inspect" --app gui2tui-qt-fixture --bootstrap walk \
+                >/tmp/gui2tui-live-qt-walk.txt
+            normalize_tree /tmp/gui2tui-live-qt-walk.txt \
+                >/tmp/gui2tui-live-qt-walk-core.txt
+            normalize_tree /tmp/gui2tui-live-qt-cache.txt \
+                >/tmp/gui2tui-live-qt-cache-core.txt
+            diff -u /tmp/gui2tui-live-qt-walk-core.txt \
+                /tmp/gui2tui-live-qt-cache-core.txt
+            echo "Qt cache/walk core semantic equivalence passed"
+        else
+            echo "Qt cache bootstrap unavailable; Auto walk fallback remains required"
+            sed -n "1p" /tmp/gui2tui-live-qt-cache.err
+        fi
+    fi
+
     if grep -qE "phase-zero-secret|phase-two-secret" \
         /tmp/gui2tui-live-gtk-tree.txt /tmp/gui2tui-live-qt-tree.txt; then
         echo "password sentinel leaked into inspector output" >&2
