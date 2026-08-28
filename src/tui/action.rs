@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::semantic::{SemanticAction, SemanticRole};
+use crate::semantic::{SemanticAction, SemanticCapability, SemanticRole};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiIntent {
@@ -8,6 +8,8 @@ pub enum UiIntent {
     FocusPrevious,
     Activate,
     Toggle,
+    Select,
+    OpenMenu,
     Refresh,
     ScrollLines(i16),
     ScrollPages(i16),
@@ -19,6 +21,8 @@ pub enum InteractionCapability {
     None,
     Activate,
     Toggle,
+    Select,
+    OpenMenu,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -59,10 +63,23 @@ pub fn resolve_action<'a>(
 pub fn interaction_capability(
     role: &SemanticRole,
     actions: &[SemanticAction],
+    parent_capabilities: &[SemanticCapability],
 ) -> InteractionCapability {
     let intent = match role {
         SemanticRole::ToggleButton | SemanticRole::CheckBox => UiIntent::Toggle,
-        SemanticRole::Button | SemanticRole::ListItem | SemanticRole::MenuItem => {
+        SemanticRole::Button => UiIntent::Activate,
+        SemanticRole::ListItem => {
+            if resolve_action(role, actions, UiIntent::Select).is_ok()
+                || parent_capabilities.contains(&SemanticCapability::SelectChildren)
+            {
+                return InteractionCapability::Select;
+            }
+            return InteractionCapability::None;
+        }
+        SemanticRole::MenuItem => {
+            if resolve_action(role, actions, UiIntent::OpenMenu).is_ok() {
+                return InteractionCapability::OpenMenu;
+            }
             UiIntent::Activate
         }
         _ => return InteractionCapability::None,
@@ -87,8 +104,9 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::CheckBox, UiIntent::Activate | UiIntent::Toggle) => {
             &["toggle", "click", "press"]
         }
-        // Qt 6 QListWidgetItem exposes Toggle, which selects the item.
-        (SemanticRole::ListItem, UiIntent::Activate) => &["select", "toggle", "activate", "click"],
+        // Qt 6 QListWidgetItem exposes Toggle, but the user operation is Select.
+        (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
+        (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
         _ => &[],
     }
@@ -153,20 +171,53 @@ mod tests {
     #[test]
     fn capability_requires_a_role_compatible_advertised_action() {
         assert_eq!(
-            interaction_capability(&SemanticRole::Button, &actions(&["Click"])),
+            interaction_capability(&SemanticRole::Button, &actions(&["Click"]), &[]),
             InteractionCapability::Activate
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::CheckBox, &[]),
+            interaction_capability(&SemanticRole::CheckBox, &[], &[]),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"])),
+            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[]),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"])),
-            InteractionCapability::Activate
+            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"]), &[]),
+            InteractionCapability::Select
+        );
+    }
+
+    #[test]
+    fn menu_open_and_leaf_activation_are_distinct() {
+        let submenu = actions(&["ShowMenu"]);
+        assert!(resolve_action(&SemanticRole::MenuItem, &submenu, UiIntent::Activate).is_err());
+        assert_eq!(
+            resolve_action(&SemanticRole::MenuItem, &submenu, UiIntent::OpenMenu)
+                .unwrap()
+                .name,
+            "ShowMenu"
+        );
+
+        let leaf = actions(&["Press"]);
+        assert!(resolve_action(&SemanticRole::MenuItem, &leaf, UiIntent::OpenMenu).is_err());
+        assert_eq!(
+            resolve_action(&SemanticRole::MenuItem, &leaf, UiIntent::Activate)
+                .unwrap()
+                .name,
+            "Press"
+        );
+    }
+
+    #[test]
+    fn parent_selection_makes_a_gtk_style_list_item_selectable() {
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::ListItem,
+                &actions(&["listitem.scroll-to"]),
+                &[SemanticCapability::SelectChildren]
+            ),
+            InteractionCapability::Select
         );
     }
 }

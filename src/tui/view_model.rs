@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use crate::semantic::{
-    BackendLocator, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole, SemanticState,
-    TextInputKind,
+    BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability, SemanticNode, SemanticRole,
+    SemanticState, TextInputKind,
 };
 
 use super::action::{InteractionCapability, interaction_capability};
@@ -14,8 +16,23 @@ pub enum TuiElementKind {
     CheckBox { label: String, checked: bool },
     TextInput { label: String, display: String },
     List { label: String },
-    ListItem { label: String },
+    ListItem { label: String, selected: bool },
+    MenuBar,
+    Menu { label: String },
+    MenuItem { label: String, opens_menu: bool },
     Unsupported { role: String, label: Option<String> },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeContext {
+    pub parent_id: Option<RuntimeNodeId>,
+    pub index_in_parent: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NodeMetadata {
+    pub backend_locator: BackendLocator,
+    pub capabilities: Vec<SemanticCapability>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +54,7 @@ impl TuiElement {
                 | TuiElementKind::CheckBox { .. }
                 | TuiElementKind::TextInput { .. }
                 | TuiElementKind::ListItem { .. }
+                | TuiElementKind::MenuItem { .. }
         )
     }
 
@@ -53,6 +71,8 @@ impl TuiElement {
 pub struct TuiViewModel {
     pub title: String,
     pub elements: Vec<TuiElement>,
+    node_contexts: HashMap<RuntimeNodeId, NodeContext>,
+    node_metadata: HashMap<RuntimeNodeId, NodeMetadata>,
 }
 
 impl TuiViewModel {
@@ -62,9 +82,17 @@ impl TuiViewModel {
             .clone()
             .unwrap_or_else(|| "Accessible application".to_owned());
         let mut elements = Vec::new();
-        map_node(root, &mut title, &mut elements);
+        let mut node_contexts = HashMap::new();
+        let mut node_metadata = HashMap::new();
+        index_nodes(root, None, &mut node_contexts, &mut node_metadata);
+        map_node(root, &[], &mut title, &mut elements);
         remove_redundant_input_labels(&mut elements);
-        Self { title, elements }
+        Self {
+            title,
+            elements,
+            node_contexts,
+            node_metadata,
+        }
     }
 
     pub fn element(&self, id: RuntimeNodeId) -> Option<&TuiElement> {
@@ -105,9 +133,47 @@ impl TuiViewModel {
             height.saturating_add(element.height())
         })
     }
+
+    pub fn node_context(&self, id: RuntimeNodeId) -> Option<NodeContext> {
+        self.node_contexts.get(&id).copied()
+    }
+
+    pub fn node_metadata(&self, id: RuntimeNodeId) -> Option<&NodeMetadata> {
+        self.node_metadata.get(&id)
+    }
 }
 
-fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement>) {
+fn index_nodes(
+    node: &SemanticNode,
+    parent_id: Option<RuntimeNodeId>,
+    contexts: &mut HashMap<RuntimeNodeId, NodeContext>,
+    metadata: &mut HashMap<RuntimeNodeId, NodeMetadata>,
+) {
+    contexts.insert(
+        node.runtime_id,
+        NodeContext {
+            parent_id,
+            index_in_parent: node.index_in_parent,
+        },
+    );
+    metadata.insert(
+        node.runtime_id,
+        NodeMetadata {
+            backend_locator: node.backend_locator.clone(),
+            capabilities: node.capabilities.clone(),
+        },
+    );
+    for child in &node.children {
+        index_nodes(child, Some(node.runtime_id), contexts, metadata);
+    }
+}
+
+fn map_node(
+    node: &SemanticNode,
+    parent_capabilities: &[SemanticCapability],
+    title: &mut String,
+    output: &mut Vec<TuiElement>,
+) {
     let terminal_leaf = matches!(
         node.role,
         SemanticRole::Button
@@ -163,7 +229,19 @@ fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement
                 .clone()
                 .or_else(|| first_descendant_text(node))
                 .unwrap_or_else(|| "List item".to_owned()),
+            selected: node.states.contains(&SemanticState::Selected),
         }),
+        SemanticRole::MenuBar => Some(TuiElementKind::MenuBar),
+        SemanticRole::Menu => Some(TuiElementKind::Menu {
+            label: node.name.clone().unwrap_or_else(|| "Menu".to_owned()),
+        }),
+        SemanticRole::MenuItem => {
+            let capability = interaction_capability(&node.role, &node.actions, parent_capabilities);
+            Some(TuiElementKind::MenuItem {
+                label: node.name.clone().unwrap_or_else(|| "Menu item".to_owned()),
+                opens_menu: capability == InteractionCapability::OpenMenu,
+            })
+        }
         role => Some(TuiElementKind::Unsupported {
             role: role.to_string(),
             label: node.name.clone(),
@@ -171,7 +249,7 @@ fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement
     };
 
     if let Some(kind) = kind {
-        let capability = interaction_capability(&node.role, &node.actions);
+        let capability = interaction_capability(&node.role, &node.actions, parent_capabilities);
         output.push(TuiElement {
             runtime_id: node.runtime_id,
             backend_locator: node.backend_locator.clone(),
@@ -184,7 +262,7 @@ fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement
 
     if !terminal_leaf {
         for child in &node.children {
-            map_node(child, title, output);
+            map_node(child, &node.capabilities, title, output);
         }
     }
 }
@@ -231,6 +309,7 @@ mod tests {
         SemanticNode {
             runtime_id: RuntimeNodeId::new(id),
             backend_locator: BackendLocator::new(":1.2", format!("/node/{id}")),
+            index_in_parent: None,
             role,
             name: Some(name.to_owned()),
             description: None,
@@ -238,6 +317,7 @@ mod tests {
             text_input_kind: None,
             states: Vec::new(),
             actions: Vec::new(),
+            capabilities: Vec::new(),
             children: Vec::new(),
             truncations: Vec::new(),
             debug: DebugInfo::default(),
@@ -274,6 +354,56 @@ mod tests {
         assert!(view.elements[2].is_focusable());
         assert_eq!(view.elements[1].capability, InteractionCapability::None);
         assert_eq!(view.elements[2].capability, InteractionCapability::Activate);
+    }
+
+    #[test]
+    fn indexes_child_parent_and_original_backend_position() {
+        let mut root = node(0, SemanticRole::Window, "Settings");
+        let mut list = node(1, SemanticRole::List, "Items");
+        let mut item = node(2, SemanticRole::ListItem, "Beta");
+        item.index_in_parent = Some(4);
+        list.children.push(item);
+        root.children.push(list);
+
+        let view = TuiViewModel::from_snapshot(&root);
+        assert_eq!(
+            view.node_context(RuntimeNodeId::new(2)),
+            Some(NodeContext {
+                parent_id: Some(RuntimeNodeId::new(1)),
+                index_in_parent: Some(4),
+            })
+        );
+    }
+
+    #[test]
+    fn maps_menu_items_without_conflating_open_and_activate() {
+        let mut root = node(0, SemanticRole::Window, "Settings");
+        let mut opener = node(1, SemanticRole::MenuItem, "Tools");
+        opener.actions.push(SemanticAction {
+            index: 0,
+            name: "ShowMenu".to_owned(),
+            description: None,
+            keybinding: None,
+        });
+        let mut leaf = node(2, SemanticRole::MenuItem, "Activate Demo");
+        leaf.actions.push(SemanticAction {
+            index: 0,
+            name: "Press".to_owned(),
+            description: None,
+            keybinding: None,
+        });
+        root.children = vec![opener, leaf];
+
+        let view = TuiViewModel::from_snapshot(&root);
+        assert_eq!(view.elements[0].capability, InteractionCapability::OpenMenu);
+        assert_eq!(view.elements[1].capability, InteractionCapability::Activate);
+        assert!(matches!(
+            view.elements[0].kind,
+            TuiElementKind::MenuItem {
+                opens_menu: true,
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -1,0 +1,249 @@
+use thiserror::Error;
+
+use crate::semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability};
+
+use super::{
+    action::{ActionResolutionError, UiIntent, resolve_action},
+    view_model::TuiViewModel,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SemanticOperation {
+    ActivateNode(RuntimeNodeId),
+    ToggleNode(RuntimeNodeId),
+    SelectNode(RuntimeNodeId),
+    OpenMenu(RuntimeNodeId),
+}
+
+impl SemanticOperation {
+    pub fn from_intent(runtime_id: RuntimeNodeId, intent: UiIntent) -> Option<Self> {
+        match intent {
+            UiIntent::Activate => Some(Self::ActivateNode(runtime_id)),
+            UiIntent::Toggle => Some(Self::ToggleNode(runtime_id)),
+            UiIntent::Select => Some(Self::SelectNode(runtime_id)),
+            UiIntent::OpenMenu => Some(Self::OpenMenu(runtime_id)),
+            _ => None,
+        }
+    }
+
+    fn runtime_id(self) -> RuntimeNodeId {
+        match self {
+            Self::ActivateNode(id)
+            | Self::ToggleNode(id)
+            | Self::SelectNode(id)
+            | Self::OpenMenu(id) => id,
+        }
+    }
+
+    fn intent(self) -> UiIntent {
+        match self {
+            Self::ActivateNode(_) => UiIntent::Activate,
+            Self::ToggleNode(_) => UiIntent::Toggle,
+            Self::SelectNode(_) => UiIntent::Select,
+            Self::OpenMenu(_) => UiIntent::OpenMenu,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BackendOperation {
+    InvokeAction {
+        locator: BackendLocator,
+        action: SemanticAction,
+    },
+    SelectChild {
+        container_locator: BackendLocator,
+        child_index: usize,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SelectionStrategy {
+    NodeAction {
+        action: SemanticAction,
+    },
+    ParentSelection {
+        container_locator: BackendLocator,
+        child_index: usize,
+    },
+    Unsupported,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum OperationResolutionError {
+    #[error("semantic node {0} is not present in the current TUI snapshot")]
+    NodeNotFound(RuntimeNodeId),
+    #[error("no compatible semantic operation is available: {0}")]
+    NoCompatibleOperation(String),
+}
+
+pub fn resolve_backend_operation(
+    view: &TuiViewModel,
+    operation: SemanticOperation,
+) -> Result<BackendOperation, OperationResolutionError> {
+    let runtime_id = operation.runtime_id();
+    let element = view
+        .element(runtime_id)
+        .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+
+    if matches!(operation, SemanticOperation::SelectNode(_)) {
+        return match resolve_selection_strategy(view, runtime_id) {
+            SelectionStrategy::NodeAction { action } => Ok(BackendOperation::InvokeAction {
+                locator: element.backend_locator.clone(),
+                action,
+            }),
+            SelectionStrategy::ParentSelection {
+                container_locator,
+                child_index,
+            } => Ok(BackendOperation::SelectChild {
+                container_locator,
+                child_index,
+            }),
+            SelectionStrategy::Unsupported => Err(OperationResolutionError::NoCompatibleOperation(
+                "the list item has neither a compatible action nor a selectable parent".to_owned(),
+            )),
+        };
+    }
+
+    let action = resolve_action(&element.semantic_role, &element.actions, operation.intent())
+        .map_err(action_error)?
+        .clone();
+    Ok(BackendOperation::InvokeAction {
+        locator: element.backend_locator.clone(),
+        action,
+    })
+}
+
+pub fn resolve_selection_strategy(
+    view: &TuiViewModel,
+    runtime_id: RuntimeNodeId,
+) -> SelectionStrategy {
+    let Some(element) = view.element(runtime_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+
+    if let Ok(action) = resolve_action(&element.semantic_role, &element.actions, UiIntent::Select) {
+        return SelectionStrategy::NodeAction {
+            action: action.clone(),
+        };
+    }
+
+    let Some(context) = view.node_context(runtime_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+    let (Some(parent_id), Some(child_index)) = (context.parent_id, context.index_in_parent) else {
+        return SelectionStrategy::Unsupported;
+    };
+    let Some(parent) = view.node_metadata(parent_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+    if parent
+        .capabilities
+        .contains(&SemanticCapability::SelectChildren)
+    {
+        SelectionStrategy::ParentSelection {
+            container_locator: parent.backend_locator.clone(),
+            child_index,
+        }
+    } else {
+        SelectionStrategy::Unsupported
+    }
+}
+
+fn action_error(error: ActionResolutionError) -> OperationResolutionError {
+    OperationResolutionError::NoCompatibleOperation(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::semantic::{
+        DebugInfo, SemanticNode, SemanticRole, SemanticState, TextInputKind, TreeTruncation,
+    };
+
+    use super::*;
+
+    fn node(id: u64, role: SemanticRole, name: &str) -> SemanticNode {
+        SemanticNode {
+            runtime_id: RuntimeNodeId::new(id),
+            backend_locator: BackendLocator::new(":1.2", format!("/node/{id}")),
+            index_in_parent: None,
+            role,
+            name: Some(name.to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None::<TextInputKind>,
+            states: Vec::<SemanticState>::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::<TreeTruncation>::new(),
+            debug: DebugInfo::default(),
+        }
+    }
+
+    fn action(name: &str) -> SemanticAction {
+        SemanticAction {
+            index: 0,
+            name: name.to_owned(),
+            description: None,
+            keybinding: None,
+        }
+    }
+
+    #[test]
+    fn gtk_style_selection_uses_parent_container_and_original_child_index() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut list = node(1, SemanticRole::List, "Items");
+        list.capabilities.push(SemanticCapability::SelectChildren);
+        let mut alpha = node(2, SemanticRole::ListItem, "Alpha");
+        alpha.index_in_parent = Some(7);
+        alpha.actions.push(action("listitem.scroll-to"));
+        list.children.push(alpha);
+        root.children.push(list);
+
+        let view = TuiViewModel::from_snapshot(&root);
+        assert_eq!(
+            resolve_selection_strategy(&view, RuntimeNodeId::new(2)),
+            SelectionStrategy::ParentSelection {
+                container_locator: BackendLocator::new(":1.2", "/node/1"),
+                child_index: 7,
+            }
+        );
+    }
+
+    #[test]
+    fn qt_style_toggle_action_resolves_to_select_not_toggle_semantics() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut item = node(1, SemanticRole::ListItem, "Beta");
+        item.index_in_parent = Some(1);
+        item.actions.push(action("Toggle"));
+        root.children.push(item);
+        let view = TuiViewModel::from_snapshot(&root);
+
+        assert_eq!(
+            SemanticOperation::from_intent(RuntimeNodeId::new(1), UiIntent::Select),
+            Some(SemanticOperation::SelectNode(RuntimeNodeId::new(1)))
+        );
+        assert!(matches!(
+            resolve_selection_strategy(&view, RuntimeNodeId::new(1)),
+            SelectionStrategy::NodeAction { action } if action.name == "Toggle"
+        ));
+    }
+
+    #[test]
+    fn unsafe_actions_never_become_a_backend_operation() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut button = node(1, SemanticRole::Button, "Danger");
+        button.actions.push(action("delete"));
+        root.children.push(button);
+        let view = TuiViewModel::from_snapshot(&root);
+
+        assert!(matches!(
+            resolve_backend_operation(
+                &view,
+                SemanticOperation::ActivateNode(RuntimeNodeId::new(1))
+            ),
+            Err(OperationResolutionError::NoCompatibleOperation(_))
+        ));
+    }
+}

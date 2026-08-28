@@ -144,6 +144,7 @@ mod tests {
         SemanticNode {
             runtime_id: RuntimeNodeId::new(1),
             backend_locator: BackendLocator::new(":1.2", "/node"),
+            index_in_parent: None,
             role,
             name: name.map(str::to_owned),
             description: None,
@@ -151,6 +152,7 @@ mod tests {
             text_input_kind: None,
             states: Vec::new(),
             actions: Vec::new(),
+            capabilities: Vec::new(),
             children: Vec::new(),
             truncations: Vec::new(),
             debug: DebugInfo {

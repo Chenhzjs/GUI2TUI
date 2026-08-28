@@ -15,27 +15,27 @@ use tracing_subscriber::EnvFilter;
 )]
 struct Cli {
     /// List applications currently exposed by the AT-SPI desktop.
-    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name"])]
+    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child"])]
     list: bool,
 
     /// Inspect an application by exact name or an unambiguous substring.
-    #[arg(long, value_name = "NAME", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name"])]
+    #[arg(long, value_name = "NAME", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name", "select_child"])]
     app: Option<String>,
 
     /// Inspect an application by the one-based index printed by --list.
-    #[arg(long, value_name = "INDEX", conflicts_with_all = ["list", "app", "actions", "activate", "action", "action_name"])]
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["list", "app", "actions", "activate", "action", "action_name", "select_child"])]
     app_id: Option<usize>,
 
     /// List actions exposed by NODE_ID.
-    #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "activate", "action", "action_name"])]
+    #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "activate", "action", "action_name", "select_child"])]
     actions: Option<String>,
 
     /// Invoke a safe convenience click/press/activate action on NODE_ID.
-    #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "actions", "action", "action_name"])]
+    #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "actions", "action", "action_name", "select_child"])]
     activate: Option<String>,
 
     /// Invoke an action on NODE_ID; requires --index.
-    #[arg(long, value_name = "NODE_ID", requires = "index", conflicts_with_all = ["list", "app", "app_id", "actions", "activate", "action_name"])]
+    #[arg(long, value_name = "NODE_ID", requires = "index", conflicts_with_all = ["list", "app", "app_id", "actions", "activate", "action_name", "select_child"])]
     action: Option<String>,
 
     /// Zero-based action index used with --action.
@@ -43,8 +43,16 @@ struct Cli {
     index: Option<i32>,
 
     /// Invoke an AT-SPI action by its exposed name (case-insensitive fallback).
-    #[arg(long, num_args = 2, value_names = ["NODE_ID", "NAME"], conflicts_with_all = ["list", "app", "app_id", "actions", "activate", "action", "index"])]
+    #[arg(long, num_args = 2, value_names = ["NODE_ID", "NAME"], conflicts_with_all = ["list", "app", "app_id", "actions", "activate", "action", "index", "select_child"])]
     action_name: Option<Vec<String>>,
+
+    /// Select a direct child through the container's AT-SPI Selection interface.
+    #[arg(long, value_name = "PARENT_NODE_ID", requires = "child_index", conflicts_with_all = ["list", "app", "app_id", "actions", "activate", "action", "index", "action_name"])]
+    select_child: Option<String>,
+
+    /// Zero-based direct-child index used with --select-child.
+    #[arg(long, value_name = "INDEX", requires = "select_child")]
+    child_index: Option<usize>,
 
     /// Include AT-SPI role, full states, interfaces, object identity and geometry.
     #[arg(short, long)]
@@ -140,6 +148,16 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             "Invoked action {} ({}) on {node_id}",
             action.index, action.name
         );
+        return Ok(());
+    }
+
+    if let Some(parent_id) = cli.select_child {
+        let child_index = cli
+            .child_index
+            .ok_or(BackendError::MissingSelectionChildIndex)?;
+        let parent = gui2tui::semantic::BackendLocator::decode(&parent_id)?;
+        backend.select_child(&parent, child_index).await?;
+        println!("Selected child {child_index} through container {parent_id}");
         return Ok(());
     }
 

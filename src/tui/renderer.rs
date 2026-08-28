@@ -43,7 +43,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     }
 
     let footer = format!(
-        "{} | Tab/Shift-Tab Focus | Enter/Space Activate | ↑/↓ Scroll | r Refresh | q Quit",
+        "{} | Tab/Shift-Tab Focus | Enter/Space Operate | ↑/↓ Scroll | r Refresh | q Quit",
         context.status
     );
     frame.render_widget(
@@ -105,7 +105,8 @@ fn interaction(element: &TuiElement) -> Option<HitInteraction> {
         TuiElementKind::Button { .. }
         | TuiElementKind::ToggleButton { .. }
         | TuiElementKind::CheckBox { .. }
-        | TuiElementKind::ListItem { .. } => {
+        | TuiElementKind::ListItem { .. }
+        | TuiElementKind::MenuItem { .. } => {
             Some(if element.capability == InteractionCapability::None {
                 HitInteraction::Unavailable
             } else {
@@ -143,9 +144,16 @@ pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
             ]
         }
         TuiElementKind::List { label } => vec![format!("  {label}:")],
-        TuiElementKind::ListItem { label } => {
-            vec![format!("{marker}• {label}{unavailable}")]
+        TuiElementKind::ListItem { label, selected } => {
+            let selection_marker = if *selected { "*" } else { "•" };
+            vec![format!("{marker}{selection_marker} {label}{unavailable}")]
         }
+        TuiElementKind::MenuBar => vec!["  Menu:".to_owned()],
+        TuiElementKind::Menu { label } => vec![format!("  {label}:")],
+        TuiElementKind::MenuItem { label, opens_menu } => vec![format!(
+            "{marker}{label}{}{unavailable}",
+            if *opens_menu { " >" } else { "" }
+        )],
         TuiElementKind::Unsupported { role, label } => vec![match label {
             Some(label) => format!("  <Unsupported: {role} \"{label}\">"),
             None => format!("  <Unsupported: {role}>"),
@@ -190,6 +198,30 @@ mod tests {
                 false
             ),
             vec!["  [x] Enabled"]
+        );
+    }
+
+    #[test]
+    fn distinguishes_selected_list_items_from_keyboard_focus() {
+        assert_eq!(
+            element_lines(
+                &element(TuiElementKind::ListItem {
+                    label: "Beta".to_owned(),
+                    selected: true,
+                }),
+                false
+            ),
+            vec!["  * Beta"]
+        );
+        assert_eq!(
+            element_lines(
+                &element(TuiElementKind::ListItem {
+                    label: "Beta".to_owned(),
+                    selected: false,
+                }),
+                true
+            ),
+            vec!["> • Beta"]
         );
     }
 

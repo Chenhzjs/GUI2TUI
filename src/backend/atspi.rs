@@ -12,8 +12,8 @@ use tracing::warn;
 use zbus::{names::UniqueName, zvariant::ObjectPath};
 
 use crate::semantic::{
-    BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticNode,
-    SemanticRole, SemanticState, TextInputKind, TreeTruncation,
+    BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticCapability,
+    SemanticNode, SemanticRole, SemanticState, TextInputKind, TreeTruncation,
 };
 
 #[derive(Clone, Debug)]
@@ -96,6 +96,12 @@ pub enum BackendError {
     ActionUnsupported(String),
     #[error("AT-SPI object {0} exposes the Action interface but has no available actions")]
     NoActions(String),
+    #[error("AT-SPI container {0} does not expose the Selection interface")]
+    SelectionUnsupported(String),
+    #[error("selection child index {index} is too large for AT-SPI container {node_id}")]
+    SelectionIndexOutOfRange { node_id: String, index: usize },
+    #[error("selection of child {index} was rejected by AT-SPI container {node_id}")]
+    SelectionRejected { node_id: String, index: usize },
     #[error(
         "no safe convenience action was found on {node_id}\nAvailable actions:\n{available}\nUse --action-name or --action --index for explicit low-level invocation"
     )]
@@ -134,6 +140,8 @@ pub enum BackendError {
     MissingActionIndex,
     #[error("--action-name requires NODE_ID and NAME")]
     MissingActionNameArguments,
+    #[error("--select-child requires a zero-based --child-index")]
+    MissingSelectionChildIndex,
     #[error("AT-SPI operation {operation:?} timed out for {node_id} after {timeout_ms} ms")]
     OperationTimeout {
         operation: &'static str,
@@ -278,7 +286,7 @@ impl AtspiBackend {
             nodes: 0,
             runtime_ids: RuntimeIdAllocator::default(),
         };
-        self.build_node(application.object.clone(), 0, &mut context)
+        self.build_node(application.object.clone(), 0, None, &mut context)
             .await
     }
 
@@ -392,10 +400,68 @@ impl AtspiBackend {
         Ok(selected)
     }
 
+    /// Select a direct accessible child through its parent's Selection interface.
+    pub async fn select_child(
+        &self,
+        parent: &BackendLocator,
+        child_index: usize,
+    ) -> Result<(), BackendError> {
+        let encoded_id = parent.encode();
+        let index =
+            i32::try_from(child_index).map_err(|_| BackendError::SelectionIndexOutOfRange {
+                node_id: encoded_id.clone(),
+                index: child_index,
+            })?;
+        let object = object_ref_from_id(parent)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "read interfaces for selection",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        if !interfaces.contains(Interface::Selection) {
+            return Err(BackendError::SelectionUnsupported(encoded_id));
+        }
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for selection",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let selection = atspi_operation(
+            self.operation_timeout,
+            "create Selection proxy",
+            &encoded_id,
+            proxies.selection(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "select child",
+            &encoded_id,
+            selection.select_child(index),
+        )
+        .await?;
+        if !accepted {
+            return Err(BackendError::SelectionRejected {
+                node_id: encoded_id,
+                index: child_index,
+            });
+        }
+        Ok(())
+    }
+
     fn build_node<'a>(
         &'a self,
         object: ObjectRefOwned,
         depth: usize,
+        index_in_parent: Option<usize>,
         context: &'a mut TraversalContext,
     ) -> Pin<Box<dyn Future<Output = Result<SemanticNode, BackendError>> + Send + 'a>> {
         Box::pin(async move {
@@ -552,7 +618,7 @@ impl AtspiBackend {
                 .await
                 {
                     Ok(child_refs) => {
-                        for child in child_refs {
+                        for (child_index, child) in child_refs.into_iter().enumerate() {
                             if context.nodes >= context.options.max_nodes {
                                 truncations.push(TreeTruncation::MaxNodes {
                                     limit: context.options.max_nodes,
@@ -566,7 +632,10 @@ impl AtspiBackend {
                                 warn!(node_id = %child_id, "skipping AT-SPI cycle or duplicate object");
                                 continue;
                             }
-                            match self.build_node(child, depth + 1, context).await {
+                            match self
+                                .build_node(child, depth + 1, Some(child_index), context)
+                                .await
+                            {
                                 Ok(child) => children.push(child),
                                 Err(BackendError::ObjectUnavailable(node_id, error)) => {
                                     warn!(%node_id, %error, "skipping stale AT-SPI child object");
@@ -611,10 +680,12 @@ impl AtspiBackend {
             }
 
             let (semantic_role, text_input_kind) = semantic_role_and_input_kind(role, interfaces);
+            let capabilities = semantic_capabilities(interfaces);
 
             Ok(SemanticNode {
                 runtime_id,
                 backend_locator: id,
+                index_in_parent,
                 role: semantic_role,
                 name,
                 description,
@@ -622,6 +693,7 @@ impl AtspiBackend {
                 text_input_kind,
                 states,
                 actions,
+                capabilities,
                 children,
                 truncations,
                 debug,
@@ -910,6 +982,14 @@ fn semantic_role_and_input_kind(
     (semantic_role, input_kind)
 }
 
+fn semantic_capabilities(interfaces: atspi::InterfaceSet) -> Vec<SemanticCapability> {
+    if interfaces.contains(Interface::Selection) {
+        vec![SemanticCapability::SelectChildren]
+    } else {
+        Vec::new()
+    }
+}
+
 async fn read_geometry(
     timeout: Duration,
     node_id: &str,
@@ -1063,6 +1143,15 @@ mod tests {
             semantic_role_and_input_kind(Role::PasswordText, editable_text),
             (SemanticRole::TextInput, Some(TextInputKind::Password))
         );
+    }
+
+    #[test]
+    fn selection_interface_maps_to_container_selection_capability() {
+        assert_eq!(
+            semantic_capabilities(Interface::Selection.into()),
+            vec![SemanticCapability::SelectChildren]
+        );
+        assert!(semantic_capabilities(Interface::Action.into()).is_empty());
     }
 
     #[test]

@@ -288,6 +288,13 @@ pub struct SemanticAction {
     pub keybinding: Option<String>,
 }
 
+/// Backend-independent capabilities advertised by a semantic node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SemanticCapability {
+    /// The container can select one of its direct children.
+    SelectChildren,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Geometry {
     pub x: i32,
@@ -335,6 +342,8 @@ impl fmt::Display for TreeTruncation {
 pub struct SemanticNode {
     pub runtime_id: RuntimeNodeId,
     pub backend_locator: BackendLocator,
+    /// Original child position in the direct parent, if this is not a root.
+    pub index_in_parent: Option<usize>,
     pub role: SemanticRole,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -343,6 +352,7 @@ pub struct SemanticNode {
     pub text_input_kind: Option<TextInputKind>,
     pub states: Vec<SemanticState>,
     pub actions: Vec<SemanticAction>,
+    pub capabilities: Vec<SemanticCapability>,
     pub children: Vec<SemanticNode>,
     pub truncations: Vec<TreeTruncation>,
     pub debug: DebugInfo,

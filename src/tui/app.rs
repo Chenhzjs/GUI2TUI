@@ -5,10 +5,11 @@ use ratatui::Frame;
 use crate::backend::{AtspiBackend, BackendError, InspectOptions};
 
 use super::{
-    action::{InteractionCapability, UiIntent, resolve_action},
+    action::{InteractionCapability, UiIntent},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::MouseIntent,
+    operation::{BackendOperation, SemanticOperation, resolve_backend_operation},
     renderer::{RenderContext, render},
     view_model::{TuiElement, TuiElementKind, TuiViewModel},
 };
@@ -80,7 +81,9 @@ impl TuiApplication {
                 self.focus.previous(&self.view);
                 self.ensure_focus_visible();
             }
-            UiIntent::Activate | UiIntent::Toggle => self.activate_focused(intent).await,
+            UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
+                self.execute_focused(intent).await
+            }
             UiIntent::Refresh => {
                 self.reload(Some("Refreshed semantic snapshot".to_owned()))
                     .await;
@@ -116,7 +119,7 @@ impl TuiApplication {
                             .element(region.runtime_id)
                             .map(intent_for_element)
                             .unwrap_or(UiIntent::Activate);
-                        self.activate_focused(intent).await;
+                        self.execute_focused(intent).await;
                     }
                     HitInteraction::Unavailable => self.report_unavailable(region.runtime_id),
                     HitInteraction::Focus => {}
@@ -125,7 +128,7 @@ impl TuiApplication {
         }
     }
 
-    async fn activate_focused(&mut self, intent: UiIntent) {
+    async fn execute_focused(&mut self, _requested_intent: UiIntent) {
         let Some(runtime_id) = self.focus.current() else {
             self.status = "No focusable control".to_owned();
             return;
@@ -141,33 +144,48 @@ impl TuiApplication {
             );
             return;
         }
-        let action = match resolve_action(&element.semantic_role, &element.actions, intent) {
-            Ok(action) => action.clone(),
+        let intent = intent_for_element(&element);
+        let semantic_operation = SemanticOperation::from_intent(runtime_id, intent)
+            .expect("interaction capabilities only produce operation intents");
+        let backend_operation = match resolve_backend_operation(&self.view, semantic_operation) {
+            Ok(operation) => operation,
             Err(error) => {
-                self.status = format!("Cannot activate {}: {error}", element_label(&element));
+                self.status = format!("Cannot operate {}: {error}", element_label(&element));
                 return;
             }
         };
 
-        let locator = element.backend_locator.encode();
-        match self.backend.do_action(&locator, action.index).await {
+        let operation_description = describe_operation(intent, &backend_operation);
+        let result = match &backend_operation {
+            BackendOperation::InvokeAction { locator, action } => self
+                .backend
+                .do_action(&locator.encode(), action.index)
+                .await
+                .map(|_| ()),
+            BackendOperation::SelectChild {
+                container_locator,
+                child_index,
+            } => {
+                self.backend
+                    .select_child(container_locator, *child_index)
+                    .await
+            }
+        };
+        match result {
             Ok(_) => {
                 let status = format!(
-                    "Activated \"{}\" via {}",
+                    "{} \"{}\" via {}",
+                    operation_verb(intent),
                     element_label(&element),
-                    action.name
+                    operation_description
                 );
                 tokio::time::sleep(self.settle_delay).await;
                 self.reload(Some(status)).await;
             }
             Err(error) => {
-                let stale = matches!(error, BackendError::ObjectUnavailable(_, _));
-                self.status = if stale {
-                    "Action failed: object became stale. Refreshing...".to_owned()
-                } else {
-                    format!("Action failed: {error}")
-                };
-                if stale {
+                let (status, refresh) = operation_error_status(&error);
+                self.status = status;
+                if refresh {
                     let status = self.status.clone();
                     self.reload(Some(status)).await;
                 }
@@ -247,7 +265,41 @@ fn application_is_gone(error: &BackendError) -> bool {
 fn intent_for_element(element: &TuiElement) -> UiIntent {
     match element.capability {
         InteractionCapability::Toggle => UiIntent::Toggle,
+        InteractionCapability::Select => UiIntent::Select,
+        InteractionCapability::OpenMenu => UiIntent::OpenMenu,
         InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
+    }
+}
+
+fn operation_verb(intent: UiIntent) -> &'static str {
+    match intent {
+        UiIntent::Select => "Selected",
+        UiIntent::OpenMenu => "Opened menu",
+        UiIntent::Toggle => "Toggled",
+        _ => "Activated",
+    }
+}
+
+fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String {
+    match operation {
+        BackendOperation::InvokeAction { action, .. } => action.name.clone(),
+        BackendOperation::SelectChild { child_index, .. } => {
+            debug_assert_eq!(intent, UiIntent::Select);
+            format!("parent Selection child {child_index}")
+        }
+    }
+}
+
+fn operation_error_status(error: &BackendError) -> (String, bool) {
+    match error {
+        BackendError::SelectionRejected { .. } => {
+            ("Selection was rejected by application".to_owned(), false)
+        }
+        BackendError::ObjectUnavailable(_, _) => (
+            "Action failed: object became stale. Refreshing...".to_owned(),
+            true,
+        ),
+        _ => (format!("Action failed: {error}"), false),
     }
 }
 
@@ -260,7 +312,10 @@ fn element_label(element: &TuiElement) -> &str {
         | TuiElementKind::CheckBox { label, .. }
         | TuiElementKind::TextInput { label, .. }
         | TuiElementKind::List { label }
-        | TuiElementKind::ListItem { label } => label,
+        | TuiElementKind::ListItem { label, .. }
+        | TuiElementKind::Menu { label }
+        | TuiElementKind::MenuItem { label, .. } => label,
+        TuiElementKind::MenuBar => "Menu",
         TuiElementKind::Unsupported { role, .. } => role,
     }
 }
@@ -313,6 +368,18 @@ mod tests {
                 InteractionCapability::Activate,
             )),
             UiIntent::Activate
+        );
+    }
+
+    #[test]
+    fn rejected_parent_selection_is_reported_without_local_refresh_or_state_change() {
+        let error = BackendError::SelectionRejected {
+            node_id: "container".to_owned(),
+            index: 3,
+        };
+        assert_eq!(
+            operation_error_status(&error),
+            ("Selection was rejected by application".to_owned(), false)
         );
     }
 }
