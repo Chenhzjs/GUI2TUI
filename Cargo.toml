@@ -2,8 +2,8 @@
 name = "gui2tui"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
-description = "Phase 0 AT-SPI semantic UI inspector for GUI2TUI"
+rust-version = "1.88"
+description = "AT-SPI semantic GUI inspector and interactive terminal UI"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
@@ -14,8 +14,14 @@ path = "src/main.rs"
 atspi = { version = "0.30", features = ["tracing", "zbus"] }
 base64 = "0.22"
 clap = { version = "4.6", features = ["derive"] }
+crossterm = "0.29"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 thiserror = "2.0"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus = "5.19"
+
+[[bin]]
+name = "gui2tui"
+path = "src/bin/gui2tui.rs"

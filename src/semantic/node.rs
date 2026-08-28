@@ -7,13 +7,13 @@ use thiserror::Error;
 const NODE_ID_PREFIX: &str = "atspi1_";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct NodeId {
+pub struct BackendLocator {
     bus_name: String,
     object_path: String,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub enum NodeIdError {
+pub enum BackendLocatorError {
     #[error("node ID must start with '{NODE_ID_PREFIX}'")]
     MissingPrefix,
     #[error("node ID payload is not valid URL-safe Base64")]
@@ -28,7 +28,7 @@ pub enum NodeIdError {
     InvalidObjectPath(String),
 }
 
-impl NodeId {
+impl BackendLocator {
     pub fn new(bus_name: impl Into<String>, object_path: impl Into<String>) -> Self {
         Self {
             bus_name: bus_name.into(),
@@ -49,28 +49,53 @@ impl NodeId {
         format!("{NODE_ID_PREFIX}{}", URL_SAFE_NO_PAD.encode(raw))
     }
 
-    pub fn decode(encoded: &str) -> Result<Self, NodeIdError> {
+    pub fn decode(encoded: &str) -> Result<Self, BackendLocatorError> {
         let payload = encoded
             .strip_prefix(NODE_ID_PREFIX)
-            .ok_or(NodeIdError::MissingPrefix)?;
+            .ok_or(BackendLocatorError::MissingPrefix)?;
         let raw = URL_SAFE_NO_PAD
             .decode(payload)
-            .map_err(|_| NodeIdError::InvalidBase64)?;
-        let raw = String::from_utf8(raw).map_err(|_| NodeIdError::InvalidUtf8)?;
-        let (bus_name, object_path) = raw.split_once('\0').ok_or(NodeIdError::MissingSeparator)?;
+            .map_err(|_| BackendLocatorError::InvalidBase64)?;
+        let raw = String::from_utf8(raw).map_err(|_| BackendLocatorError::InvalidUtf8)?;
+        let (bus_name, object_path) = raw
+            .split_once('\0')
+            .ok_or(BackendLocatorError::MissingSeparator)?;
 
         zbus::names::UniqueName::try_from(bus_name)
-            .map_err(|_| NodeIdError::InvalidBusName(bus_name.to_owned()))?;
+            .map_err(|_| BackendLocatorError::InvalidBusName(bus_name.to_owned()))?;
         zbus::zvariant::ObjectPath::try_from(object_path)
-            .map_err(|_| NodeIdError::InvalidObjectPath(object_path.to_owned()))?;
+            .map_err(|_| BackendLocatorError::InvalidObjectPath(object_path.to_owned()))?;
 
         Ok(Self::new(bus_name, object_path))
     }
 }
 
-impl fmt::Display for NodeId {
+impl fmt::Display for BackendLocator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.encode())
+    }
+}
+
+/// Compact identity assigned while building one semantic snapshot.
+///
+/// Runtime IDs are suitable for focus, renderer state, and hit testing. They are
+/// deliberately regenerated on refresh and cannot be used to locate AT-SPI objects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RuntimeNodeId(u64);
+
+impl RuntimeNodeId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl fmt::Display for RuntimeNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -298,11 +323,14 @@ impl fmt::Display for TreeTruncation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SemanticNode {
-    pub id: NodeId,
+    pub runtime_id: RuntimeNodeId,
+    pub backend_locator: BackendLocator,
     pub role: SemanticRole,
     pub name: Option<String>,
     pub description: Option<String>,
     pub value: Option<String>,
+    /// Marks content that must never be copied into a frontend view model.
+    pub sensitive: bool,
     pub states: Vec<SemanticState>,
     pub actions: Vec<SemanticAction>,
     pub children: Vec<SemanticNode>,
@@ -315,20 +343,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn node_id_round_trip() {
-        let id = NodeId::new(":1.42", "/org/a11y/atspi/accessible/17");
+    fn backend_locator_round_trip() {
+        let id = BackendLocator::new(":1.42", "/org/a11y/atspi/accessible/17");
         let encoded = id.encode();
         assert!(!encoded.contains('/'));
-        assert_eq!(NodeId::decode(&encoded).unwrap(), id);
+        assert_eq!(BackendLocator::decode(&encoded).unwrap(), id);
     }
 
     #[test]
     fn invalid_node_ids_are_rejected() {
-        assert_eq!(NodeId::decode("abc"), Err(NodeIdError::MissingPrefix));
+        assert_eq!(
+            BackendLocator::decode("abc"),
+            Err(BackendLocatorError::MissingPrefix)
+        );
         assert!(matches!(
-            NodeId::decode("atspi1_!!!"),
-            Err(NodeIdError::InvalidBase64)
+            BackendLocator::decode("atspi1_!!!"),
+            Err(BackendLocatorError::InvalidBase64)
         ));
+    }
+
+    #[test]
+    fn runtime_node_id_is_compact_and_copyable() {
+        let id = RuntimeNodeId::new(42);
+        let copied = id;
+        assert_eq!(copied.get(), 42);
+        assert_eq!(std::mem::size_of::<RuntimeNodeId>(), 8);
     }
 
     #[test]

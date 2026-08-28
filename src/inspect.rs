@@ -90,7 +90,7 @@ fn write_node_summary(node: &SemanticNode, options: FormatOptions, output: &mut 
     }
 
     if !node.actions.is_empty() || options.verbose {
-        let _ = write!(output, " id={}", node.id);
+        let _ = write!(output, " id={}", node.backend_locator);
     }
 
     if options.verbose {
@@ -136,17 +136,19 @@ fn escape(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::{DebugInfo, NodeId, SemanticAction, SemanticRole};
+    use crate::semantic::{BackendLocator, DebugInfo, RuntimeNodeId, SemanticAction, SemanticRole};
 
     use super::*;
 
     fn node(role: SemanticRole, name: Option<&str>) -> SemanticNode {
         SemanticNode {
-            id: NodeId::new(":1.2", "/node"),
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/node"),
             role,
             name: name.map(str::to_owned),
             description: None,
             value: None,
+            sensitive: false,
             states: Vec::new(),
             actions: Vec::new(),
             children: Vec::new(),

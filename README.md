@@ -4,7 +4,7 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
-This repository currently contains only **Phase 0**: `gui2tui-inspect`, a command-line probe for validating this path:
+This repository contains the validated Phase 0 inspector and a **Phase 1 interactive semantic TUI prototype**:
 
 ```text
 GUI application
@@ -13,12 +13,37 @@ GUI application
       ↓
 Accessibility tree
       ↓
-Semantic UI model
+Semantic snapshot
       ↓
-CLI tree output / Action invocation
+Terminal-native view model
+      ↓
+Ratatui keyboard/mouse interaction
+      ↓
+AT-SPI action → original GUI
 ```
 
-It does not contain a Ratatui frontend, raster capture, a Wayland compositor, or SSH session plumbing.
+It does not reconstruct GUI pixels or map GUI screen coordinates into terminal coordinates. It also does not contain raster capture, a Wayland compositor, or SSH session plumbing.
+
+## Phase 1 prototype
+
+Run the semantic TUI against one accessible application:
+
+```bash
+gui2tui --app gui2tui-live-fixture
+```
+
+The first prototype provides:
+
+- terminal-native representations for labels, text, buttons, toggle buttons, checkboxes, read-only text inputs, lists, and list items;
+- visible keyboard focus with Tab and Shift-Tab wrapping;
+- Enter/Space action dispatch through the node's advertised semantic actions;
+- terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
+- arrow, PageUp/PageDown, and mouse-wheel scrolling with focus auto-scroll;
+- manual `r` refresh and automatic snapshot refresh after successful actions;
+- non-fatal stale-object/application-gone status messages; and
+- password redaction before data reaches the TUI renderer.
+
+Text input editing and AT-SPI event subscriptions are deliberately not implemented.
 
 ## Phase 0 capabilities
 
@@ -37,20 +62,23 @@ It does not contain a Ratatui frontend, raster capture, a Wayland compositor, or
 src/backend/atspi.rs       AT-SPI connection, traversal, and action calls
            │
            ▼
-src/semantic/node.rs       SemanticNode / Role / State / Action / NodeId
-           │
-           ▼
-src/inspect.rs             Human-readable tree formatter
-           │
-           ▼
-src/main.rs                clap CLI and user-facing diagnostics
+src/semantic/              SemanticNode + BackendLocator + RuntimeNodeId
+           ├───────────────────────────┐
+           ▼                           ▼
+src/inspect.rs             src/tui/view_model.rs
+Inspector formatter                    │
+                                       ▼
+                             focus / action / hit test
+                                       │
+                                       ▼
+                             Ratatui renderer + input
 ```
 
-The formatter does not hold AT-SPI proxies. Backend-specific identity and debug data are confined to `NodeId` and `DebugInfo`, leaving the core semantic fields suitable for a future TUI renderer.
+Neither frontend holds AT-SPI proxies. `BackendLocator` retains the ephemeral D-Bus identity needed to reach the original GUI object; compact `RuntimeNodeId` values are regenerated for each snapshot and are used only for focus, widget identity, and terminal hit testing.
 
 ## Build
 
-Install stable Rust 1.87 or newer, then run:
+Install stable Rust 1.88 or newer, then run:
 
 ```bash
 cargo build
@@ -61,6 +89,32 @@ cargo install --path .
 The AT-SPI implementation is pure Rust and uses D-Bus through `zbus`; it does not link to `libatspi`.
 
 ## Usage
+
+### Interactive TUI
+
+The Phase 1 prototype currently requires `--app`:
+
+```bash
+gui2tui --app gui2tui-live-fixture
+gui2tui --app gtk4-demo --max-depth 20 --max-nodes 2000
+```
+
+Keys:
+
+```text
+Tab / Shift-Tab  focus next / previous
+Enter / Space    activate or toggle the focused control
+↑ / ↓            scroll one line
+PageUp/PageDown  scroll one page
+r                 refresh the semantic snapshot
+q / Esc           quit
+Mouse wheel       scroll
+Left click        focus; buttons/toggles/checkboxes also activate
+```
+
+Text inputs are display/focus-only. Editing is not implemented.
+
+### Inspector
 
 With no selector, the command behaves like `--list`:
 
@@ -123,13 +177,18 @@ Set `RUST_LOG=debug` for backend diagnostics. Warnings caused by objects disappe
 
 ## Node identity
 
-A node ID is a versioned, URL-safe Base64 encoding of:
+The semantic IR uses two identities:
+
+- `BackendLocator`: the versioned locator encoded as `atspi1_...`; it contains the AT-SPI unique bus name and object path and can relocate a live GUI object.
+- `RuntimeNodeId`: a compact `u64` allocated while building one snapshot; it is used by focus, renderer state, and mouse hit testing.
+
+The backend locator is a URL-safe Base64 encoding of:
 
 ```text
 AT-SPI unique D-Bus bus name NUL D-Bus object path
 ```
 
-The current prefix is `atspi1_`. This identity is stable across separate `gui2tui-inspect` processes while the original application and accessibility object remain alive. It does **not** survive application restarts, and non-root accessibility objects may be destroyed and recreated whenever the GUI changes. In that case the CLI reports the object as stale and the tree must be inspected again. The encoding is reversible, not secret or cryptographic.
+The locator is stable across separate processes while the original object remains alive, but does **not** survive application restarts. `RuntimeNodeId` is intentionally snapshot-local and may be reassigned after every refresh. The locator encoding is reversible, not secret or cryptographic.
 
 ## Environment requirements
 
@@ -180,34 +239,37 @@ For repeatable input/password/action checks, a small non-destructive GTK4 fixtur
 ```bash
 python3 tests/fixtures/gtk4_live_fixture.py
 gui2tui-inspect --app gui2tui-live-fixture --verbose
+gui2tui --app gui2tui-live-fixture
 ```
 
-The fixture intentionally contains a normal entry with value `alice`, a password entry with a sentinel secret that must never appear in inspector output, a checkbox, and a button that changes both a status label and checkbox state.
+The fixture intentionally contains a normal entry with value `alice`, a password entry with a sentinel secret that must never appear in inspector or TUI output, a checkbox, and a button that changes both a status label and checkbox state. Tab to `Activate safely` and press Enter, or click its terminal hit region; the refreshed TUI should show a checked checkbox and `Status: activated`.
 
 ## Current limitations
 
 - This is a synchronous snapshot traversal, not an event-driven cache. The UI can change while it is being read.
-- Node IDs remain valid only for the lifetime of their backing accessible object.
+- Backend locators remain valid only for the lifetime of their backing accessible object; runtime IDs last only for one snapshot.
 - Role mapping is intentionally conservative; known but unmapped AT-SPI roles become `Unknown(original-role)`.
 - Text values are read only for ordinary entry-like roles, capped at 256 characters. Password text is intentionally not read.
 - Numeric values are read for sliders, progress/level bars, and spin buttons.
 - `--activate` is a heuristic convenience; use an explicit action index when correctness matters.
 - The basic GTK4 tree/action path and the bundled fixture have been exercised manually on Linux. Broad GTK3, Qt, Firefox, Chromium, and Electron compatibility is still unverified.
-- There is no keyboard input, editable-text mutation, event subscription, TUI renderer, raster fallback, compositor, or SSH integration yet.
+- TextInput editing, selection, cursor synchronization, IME, and clipboard integration are not implemented.
+- There is no AT-SPI event cache, runtime identity reconciliation, raster fallback, compositor, or SSH integration yet.
+- The first version requires `gui2tui --app NAME`; an in-TUI application selector is not implemented.
 
 ## Roadmap
 
 ```text
-Phase 0  AT-SPI inspector                         ← current
-Phase 1  Semantic UI IR + Ratatui renderer
-Phase 2  Keyboard / mouse → semantic actions
+Phase 0  AT-SPI inspector                         ✓ validated
+Phase 1  Interactive semantic TUI prototype       ← current
+Phase 2  Event cache + richer semantic controls
 Phase 3  GTK + Qt compatibility
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration
 ```
 
-Phase 1 can proceed after the GTK Phase 0 path has been validated end to end. Qt and browser compatibility remain separate coverage gates for Phases 3 and 4 and should continue to be tested without blocking the initial semantic TUI prototype.
+Qt and browser compatibility remain separate coverage gates for Phases 3 and 4. The Phase 1 renderer remains semantic-first and does not consume AT-SPI geometry for layout.
 
 ## License
 

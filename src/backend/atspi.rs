@@ -12,15 +12,15 @@ use tracing::warn;
 use zbus::{names::UniqueName, zvariant::ObjectPath};
 
 use crate::semantic::{
-    DebugInfo, Geometry, NodeId, SemanticAction, SemanticNode, SemanticRole, SemanticState,
-    TreeTruncation,
+    BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticNode,
+    SemanticRole, SemanticState, TreeTruncation,
 };
 
 #[derive(Clone, Debug)]
 pub struct ApplicationRef {
     pub index: usize,
     pub name: String,
-    pub id: NodeId,
+    pub backend_locator: BackendLocator,
     object: ObjectRefOwned,
 }
 
@@ -89,7 +89,7 @@ pub enum BackendError {
     #[error("application selector '{selector}' is ambiguous; matches: {matches}")]
     AmbiguousApplication { selector: String, matches: String },
     #[error("invalid NODE_ID: {0}")]
-    InvalidNodeId(#[from] crate::semantic::NodeIdError),
+    InvalidNodeId(#[from] crate::semantic::BackendLocatorError),
     #[error("AT-SPI object {0} is unavailable or has become stale: {1}")]
     ObjectUnavailable(String, atspi::AtspiError),
     #[error("AT-SPI object {0} does not expose the Action interface")]
@@ -213,7 +213,7 @@ impl AtspiBackend {
                     applications.push(ApplicationRef {
                         index: applications.len() + 1,
                         name,
-                        id,
+                        backend_locator: id,
                         object,
                     });
                 }
@@ -272,13 +272,14 @@ impl AtspiBackend {
             options,
             visited: HashSet::new(),
             nodes: 0,
+            runtime_ids: RuntimeIdAllocator::default(),
         };
         self.build_node(application.object.clone(), 0, &mut context)
             .await
     }
 
     pub async fn actions(&self, encoded_id: &str) -> Result<Vec<SemanticAction>, BackendError> {
-        let id = NodeId::decode(encoded_id)?;
+        let id = BackendLocator::decode(encoded_id)?;
         let object = object_ref_from_id(&id)?;
         let proxy = object
             .as_accessible_proxy(self.connection.connection())
@@ -361,7 +362,7 @@ impl AtspiBackend {
             })?
             .clone();
 
-        let id = NodeId::decode(encoded_id)?;
+        let id = BackendLocator::decode(encoded_id)?;
         let object = object_ref_from_id(&id)?;
         let proxy = object
             .as_accessible_proxy(self.connection.connection())
@@ -405,6 +406,7 @@ impl AtspiBackend {
     ) -> Pin<Box<dyn Future<Output = Result<SemanticNode, BackendError>> + Send + 'a>> {
         Box::pin(async move {
             context.nodes += 1;
+            let runtime_id = context.runtime_ids.allocate();
 
             let id = node_id_from_ref(&object).ok_or_else(|| {
                 BackendError::ObjectUnavailable(
@@ -615,11 +617,13 @@ impl AtspiBackend {
             }
 
             Ok(SemanticNode {
-                id,
+                runtime_id,
+                backend_locator: id,
                 role: SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText)),
                 name,
                 description,
                 value,
+                sensitive: role == Role::PasswordText,
                 states,
                 actions,
                 children,
@@ -634,20 +638,22 @@ struct TraversalContext {
     options: InspectOptions,
     visited: HashSet<String>,
     nodes: usize,
+    runtime_ids: RuntimeIdAllocator,
 }
 
-fn node_id_from_ref(object: &ObjectRefOwned) -> Option<NodeId> {
-    Some(NodeId::new(
+fn node_id_from_ref(object: &ObjectRefOwned) -> Option<BackendLocator> {
+    Some(BackendLocator::new(
         object.name_as_str()?,
         object.path_as_str().to_owned(),
     ))
 }
 
-fn object_ref_from_id(id: &NodeId) -> Result<ObjectRefOwned, BackendError> {
-    let name = UniqueName::try_from(id.bus_name().to_owned())
-        .map_err(|_| crate::semantic::NodeIdError::InvalidBusName(id.bus_name().to_owned()))?;
+fn object_ref_from_id(id: &BackendLocator) -> Result<ObjectRefOwned, BackendError> {
+    let name = UniqueName::try_from(id.bus_name().to_owned()).map_err(|_| {
+        crate::semantic::BackendLocatorError::InvalidBusName(id.bus_name().to_owned())
+    })?;
     let path = ObjectPath::try_from(id.object_path().to_owned()).map_err(|_| {
-        crate::semantic::NodeIdError::InvalidObjectPath(id.object_path().to_owned())
+        crate::semantic::BackendLocatorError::InvalidObjectPath(id.object_path().to_owned())
     })?;
     Ok(ObjectRef::new_owned(name, path))
 }
@@ -846,10 +852,9 @@ async fn read_value(
                 .ok()?;
         if let Ok(text) =
             dbus_operation(timeout, "read textual value", node_id, value_proxy.text()).await
+            && let Some(text) = nonempty(text)
         {
-            if let Some(text) = nonempty(text) {
-                return Some(text);
-            }
+            return Some(text);
         }
         return dbus_operation(
             timeout,
@@ -913,7 +918,7 @@ mod tests {
             .map(|(index, name)| ApplicationRef {
                 index: index + 1,
                 name: name.to_owned(),
-                id: NodeId::new(":1.1", format!("/app/{index}")),
+                backend_locator: BackendLocator::new(":1.1", format!("/app/{index}")),
                 object: ObjectRefOwned::default(),
             })
             .collect()

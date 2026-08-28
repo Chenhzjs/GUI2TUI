@@ -1,6 +1,8 @@
 mod node;
+mod snapshot;
 
 pub use node::{
-    DebugInfo, Geometry, NodeId, NodeIdError, SemanticAction, SemanticNode, SemanticRole,
-    SemanticState, TreeTruncation,
+    BackendLocator, BackendLocatorError, DebugInfo, Geometry, RuntimeNodeId, SemanticAction,
+    SemanticNode, SemanticRole, SemanticState, TreeTruncation,
 };
+pub(crate) use snapshot::RuntimeIdAllocator;
