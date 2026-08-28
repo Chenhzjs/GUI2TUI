@@ -232,8 +232,9 @@ impl TuiApplication {
                 self.focus.reconcile(&self.view, previous_locator.as_ref());
                 self.application_available = true;
                 self.status = format!(
-                    "{} — snapshot {snapshot_ms} ms",
-                    success_status.unwrap_or_else(|| "Refreshed".to_owned())
+                    "{} — snapshot {snapshot_ms} ms full_snapshots={}",
+                    success_status.unwrap_or_else(|| "Refreshed".to_owned()),
+                    self.cache.full_snapshot_count()
                 );
                 self.ensure_focus_visible();
             }
