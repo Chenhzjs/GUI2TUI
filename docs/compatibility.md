@@ -1,37 +1,42 @@
 # Compatibility matrix
 
-Validated on 2026-08-28 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5, and Qt 6.4.2 through PyQt 6.6.1.
+Validated on 2026-08-28 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5,
+Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 
-| Feature | GTK4 | Qt6 | Browser |
-| --- | --- | --- | --- |
-| Application discovery | PASS | PASS | PASS (Chrome 152) |
-| Button role | PASS (`button`) | PASS (`button`) | PASS (`button`) |
-| Button action | PASS (`Click`) | PASS (`Press`) | PARTIAL: two anonymous actions; explicit index 0 worked |
-| Plain TextInput | PASS (`text`) | PASS (`text`) | PARTIAL (`entry`; value unavailable) |
-| Password TextInput | PASS (`password text`) | PASS (`password text`) | PASS (`password text`) |
-| Password redaction | PASS | PASS | PASS: sentinel absent from normal/verbose/TUI/log |
-| Checkbox state | PASS | PASS | PASS |
-| Checkbox action | NO ACTION EXPOSED in fixture | PASS (`Toggle`) | PARTIAL: anonymous actions only |
-| List | PASS; parent `Selection` | PASS; `Table` interface | PARTIAL: HTML select is `combo box`; popup has `Selection` |
-| ListItem selection | PASS through parent `Selection.select_child` | PASS through item `Toggle` | NOT TESTED |
-| Selection backend | PASS | N/A for fixture strategy | NOT TESTED |
-| Menu inspection | NOT TESTED in bundled fixture | PASS | PASS for HTML select popup |
-| OpenMenu | NOT TESTED | PASS (`ShowMenu`) | NOT TESTED |
-| MenuItem activation | NOT TESTED | PASS (`Press`) | NOT TESTED |
-| Browser tree | N/A | N/A | PASS: small fixture 277 printed nodes |
-| Browser large tree | N/A | N/A | PASS: up to 5,152 nodes |
-| Browser object churn | N/A | N/A | PASS: old locator became stale, new locator changed |
-| Keyboard TUI loop | PASS | PASS | N/A |
-| Mouse TUI loop | PASS (automated SGR input) | PASS (automated SGR input) | N/A |
-| Application-gone handling | PASS | PASS | NOT TESTED |
-| Raw event watcher | PASS | PASS (including Qt-compatible property body) | PASS |
-| Incremental button update | PASS: 13 nodes / 31 ms | PASS: 2 nodes / 3 ms | PASS: 5 nodes / 212 ms on 5,158-node tree |
-| Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED |
-| Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected |
-| ComboBox semantic role | NOT TESTED | NOT TESTED | PASS read-only mapping |
-| Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items |
-| Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync |
-| Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero |
+| Feature | GTK4 | Qt6 | Chrome | Firefox |
+| --- | --- | --- | --- | --- |
+| Application discovery | PASS | PASS | PASS (Chrome 152) | PASS (Firefox 154.0.1) |
+| Button role | PASS (`button`) | PASS (`button`) | PASS (`button`) | PASS (`button`) |
+| Button action | PASS (`Click`) | PASS (`Press`) | PARTIAL: two anonymous actions; explicit index 0 worked | PARTIAL: anonymous actions only |
+| Plain TextInput | PASS (`text`) | PASS (`text`) | PARTIAL (`entry`; value unavailable) | PASS (`entry`; value available) |
+| EditableText interface | PASS | PASS | NOT EXPOSED | EXPOSED |
+| Atomic SetTextContents | PASS | PASS | UNAVAILABLE | REJECTED/NORMALIZED: call returned true, independent read-back stayed unchanged |
+| Commit events | `TextChanged` delete + insert | `TextChanged` delete + insert (plus one legacy property signal) | N/A | no target event for rejected atomic write; native edits emit `TextChanged` |
+| TUI edit loop | PASS | PASS | Read-only by contract | PARTIAL: local editor works and safely reports rejected GUI write |
+| Password TextInput | PASS (`password text`) | PASS (`password text`) | PASS (`password text`) | PASS (`password text`) |
+| Password redaction | PASS | PASS | PASS: sentinel absent from normal/verbose/TUI/log | PASS: sentinel absent from normal/verbose/TUI/events/log |
+| Checkbox state | PASS | PASS | PASS | PASS |
+| Checkbox action | NO ACTION EXPOSED in fixture | PASS (`Toggle`) | PARTIAL: anonymous actions only | PARTIAL: anonymous actions only |
+| List | PASS; parent `Selection` | PASS; `Table` interface | PARTIAL: HTML select is `combo box`; popup has `Selection` | PARTIAL: HTML select maps to `combo box` |
+| ListItem selection | PASS through parent `Selection.select_child` | PASS through item `Toggle` | NOT TESTED | NOT TESTED |
+| Selection backend | PASS | N/A for fixture strategy | NOT TESTED | NOT TESTED |
+| Menu inspection | NOT TESTED in bundled fixture | PASS | PASS for HTML select popup | NOT TESTED |
+| OpenMenu | NOT TESTED | PASS (`ShowMenu`) | NOT TESTED | NOT TESTED |
+| MenuItem activation | NOT TESTED | PASS (`Press`) | NOT TESTED | NOT TESTED |
+| Browser tree | N/A | N/A | PASS: small fixture 277 printed nodes | PASS: fixture tree 234 nodes after dismissing first-run spotlight |
+| Browser large tree | N/A | N/A | PASS: up to 5,152 nodes | NOT TESTED |
+| Browser object churn | N/A | N/A | PASS: old locator became stale, new locator changed | NOT TESTED |
+| Keyboard TUI loop | PASS | PASS | Text input read-only | PARTIAL: Begin/Edit/Commit executes; GUI read-back rejects unchanged value |
+| Mouse TUI loop | PASS (automated SGR input) | PASS (automated SGR input) | N/A | NOT TESTED |
+| Application-gone handling | PASS | PASS | NOT TESTED | NOT TESTED |
+| Raw event watcher | PASS | PASS (including Qt-compatible property body) | PASS | PASS: native input emitted focus/caret/selection/text events |
+| Incremental button update | PASS: 13 nodes / 31 ms | PASS: 2 nodes / 3 ms | PASS: 5 nodes / 212 ms on 5,158-node tree | NOT TESTED |
+| Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED | NOT TESTED |
+| Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected | NOT TESTED |
+| ComboBox semantic role | NOT TESTED | NOT TESTED | PASS read-only mapping | PASS read-only mapping |
+| Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items | PARTIAL: modern, 217 items / 27.048 ms; incomplete record triggers walk fallback |
+| Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync | NOT TESTED |
+| Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero | PARTIAL: 227 Collection nodes; root queries returned zero |
 
 ## Qt accessibility activation
 
@@ -82,3 +87,22 @@ The probe used official Google Chrome stable 152.0.7977.64 (`google-chrome-stabl
 `--force-renderer-accessibility=complete`. The sandbox remained enabled; `--no-sandbox` was not
 used. See [browser-probe.md](browser-probe.md) for commands, dynamic-tree results, and the action
 compatibility caveat.
+
+## Firefox Phase 3B probe
+
+Firefox 154.0.1 for Linux aarch64 was installed from Mozilla's official release tarball because
+Ubuntu's `firefox` APT package is a Snap transition package and Snap was unavailable in the test
+VM. It was launched on Xvfb with a fresh test profile and the local browser fixture; no
+Firefox-specific semantic branch or accessibility command-line flag was used. The desktop AT-SPI
+status properties were already enabled. First-run spotlight UI had to be dismissed before the Web
+document became the active accessible subtree.
+
+The fixture exposed 234 nodes through recursive inspection. `Cache.GetItems` used the modern
+signature and returned 217 records in 27.048 ms, but one cached object advertised a missing child,
+so forced cache reconstruction correctly rejected it and Auto retained the walk fallback. The
+plain HTML input exposed `Text` + `EditableText` and state `editable`. Firefox returned `true` from
+`SetTextContents`, but emitted no target value event and an independent full-text read remained
+unchanged. GUI2TUI therefore reported a normalized/rejected update and did not mutate its semantic
+cache optimistically. Native editing of the same field emitted `TextChanged` plus caret/selection
+events, proving the event stream itself was active. Password redaction counts were zero in normal,
+verbose, TUI, event, and Firefox log captures.

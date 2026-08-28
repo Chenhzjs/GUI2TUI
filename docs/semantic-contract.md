@@ -36,6 +36,36 @@ Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` 
 
 Action-name comparisons in the TUI are ASCII case-insensitive because GTK and Qt expose different capitalization. The selected action must still be in the role-specific compatibility list.
 
+## Atomic plain-text editing
+
+`InteractionCapability::EditText` is present only when all of the following are true:
+
+- the semantic role is `TextInput`;
+- `TextInputKind` is `Plain`;
+- AT-SPI advertises both `Text` and `EditableText`;
+- the node has the AT-SPI `editable` state.
+
+Enter on such a focused input begins a local `EditSession`. The session loads the complete value
+using `Text.CharacterCount` and `Text.GetText(0, count)`, so the inspector's 256-character display
+limit can never truncate an editing source. Enter commits one atomic
+`EditableText.SetTextContents`; Escape discards the local buffer. The semantic cache is updated
+only after a GUI read-back, normally prompted by `TextChanged`. A missing event falls back to one
+node refresh, never a full application snapshot.
+
+The 2026-08-28 Ubuntu live test confirmed this contract for GTK4 and Qt6. Chrome 152 exposed
+`Text` but not `EditableText`, so its plain HTML inputs remain read-only; no keyboard injection is
+used. Firefox 154 exposed `EditableText` on the plain HTML input and accepted the D-Bus method
+call, but the authoritative GUI read-back remained unchanged and no target `TextChanged` arrived.
+That result is treated as an application-normalized/rejected write, not success. In other words,
+the cross-browser contract depends on observed interface capability plus GUI confirmation, never
+on the proxy method's boolean alone. Firefox observations are recorded in the compatibility
+matrix.
+
+Password inputs never receive `EditText`, and the backend independently rejects password roles
+before creating either a Text or EditableText edit proxy. External target changes mark an edit
+conflict, and locator replacement rejects/cancels commit rather than writing through an old or
+reconciled object identity.
+
 ## Interaction capability
 
 `InteractionCapability` is derived from the semantic role, advertised node actions, parent
@@ -46,6 +76,7 @@ capabilities, and the node's relationship to its parent:
 - `Toggle`: a compatible toggle action is available.
 - `Select`: either a compatible list-item action exists or its direct parent can select children.
 - `OpenMenu`: the menu item advertises a compatible show-menu action.
+- `EditText`: a plain TextInput satisfies the explicit interface/state contract above.
 
 The TUI never invokes `actions[0]` as a fallback and never mutates checked/selected state locally. Explicit inspector commands `--action-name` and `--action --index` remain available as low-level APIs.
 
@@ -102,6 +133,10 @@ the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome 
 - Qt6 `QListWidgetItem.Toggle` is accepted only for the ListItem Select operation; it is not a global alias.
 - Menu keyboard hierarchy, Escape/back behavior, and popup focus trapping are not implemented; the current model opens the real menu and refreshes its semantic snapshot.
 - Chrome 152 on Linux arm64 returned two completely unnamed AT-SPI actions for web controls. Explicit `--action --index 0` worked on the controlled fixture, but the semantic resolver correctly refuses an anonymous action.
-- Text inputs are presentation/focus-only. `EditableText` operations are not implemented.
+- Text editing is atomic single-line replacement only. Remote caret/selection synchronization,
+  multiline/rich text, IME-specific handling, and clipboard operations are not implemented. The
+  local cursor is Unicode-scalar-safe but not grapheme-cluster-aware, so a combining sequence or
+  multi-code-point emoji may take more than one edit step. Tab is blocked until the session is
+  explicitly committed or cancelled.
 - `manages-descendants` and ActiveDescendant events are retained, but virtualized collection
   traversal is LIMITED SUPPORT.
