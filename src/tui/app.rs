@@ -3,7 +3,10 @@ use std::time::{Duration, Instant};
 use ratatui::Frame;
 
 use crate::{
-    backend::{AtspiBackend, BackendError, InspectOptions},
+    backend::{
+        AtspiBackend, BackendError, BootstrapStrategy, EventDelivery, EventSubscription,
+        InspectOptions,
+    },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::SemanticCache,
 };
@@ -22,9 +25,10 @@ pub struct TuiApplication {
     backend: AtspiBackend,
     app_selector: String,
     inspect_options: InspectOptions,
+    bootstrap_strategy: BootstrapStrategy,
     settle_delay: Duration,
     cache: SemanticCache,
-    event_receiver: tokio::sync::mpsc::UnboundedReceiver<NormalizedEvent>,
+    event_subscription: EventSubscription,
     event_stream_available: bool,
     view: TuiViewModel,
     focus: FocusModel,
@@ -41,40 +45,69 @@ impl TuiApplication {
         app_selector: String,
         inspect_options: InspectOptions,
         settle_delay: Duration,
+        bootstrap_strategy: BootstrapStrategy,
+        event_buffer_capacity: usize,
     ) -> Result<Self, BackendError> {
         let started = Instant::now();
         let applications = backend.applications().await?;
         let application =
             AtspiBackend::select_application(&applications, Some(&app_selector), None)?.clone();
-        let mut event_receiver = backend.subscribe_events(&application).await?;
-        let snapshot = backend
-            .inspect_application(&application, inspect_options)
+        let mut event_subscription = backend
+            .subscribe_events(&application, event_buffer_capacity)
             .await?;
-        let cache = SemanticCache::from_snapshot(snapshot)
-            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
-        // Registration/cache bootstrap signals describe state already captured above.
+        // Registration/cache-population signals precede the bootstrap boundary;
+        // any subsequent event is buffered and replayed.
         tokio::time::sleep(Duration::from_millis(50)).await;
-        while event_receiver.try_recv().is_ok() {}
-        let view = TuiViewModel::from_snapshot(cache.root());
+        while event_subscription.try_recv().is_ok() {}
+        let _ = event_subscription.take_resync();
+        let bootstrap = backend
+            .bootstrap_application(&application, inspect_options, bootstrap_strategy)
+            .await?;
+        let cache = SemanticCache::from_snapshot(bootstrap.root)
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let projected = cache
+            .materialize_tree()
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let view = TuiViewModel::from_snapshot(&projected);
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&view, None);
-        Ok(Self {
+        let mut application = Self {
             backend,
             app_selector,
             inspect_options,
+            bootstrap_strategy,
             settle_delay,
             cache,
-            event_receiver,
+            event_subscription,
             event_stream_available: true,
             view,
             focus,
             viewport: Viewport::default(),
             viewport_height: 1,
             hit_map: HitMap::default(),
-            status: format!("Ready — snapshot {snapshot_ms} ms; text input read-only"),
+            status: format!(
+                "Loaded {} semantic nodes via {} in {snapshot_ms} ms; text input read-only",
+                bootstrap.metrics.node_count, bootstrap.metrics.strategy
+            ),
             application_available: true,
-        })
+        };
+        if let Some(EventDelivery::ResyncRequired { dropped }) =
+            application.event_subscription.take_resync()
+        {
+            application.resynchronize_after_overflow(dropped).await;
+        } else {
+            let mut buffered = Vec::new();
+            while let Ok(event) = application.event_subscription.try_recv() {
+                buffered.push(event);
+            }
+            if !buffered.is_empty() {
+                application
+                    .apply_event_batch(buffered, Some("Replayed bootstrap events".to_owned()))
+                    .await;
+            }
+        }
+        Ok(application)
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
@@ -221,19 +254,35 @@ impl TuiApplication {
             .and_then(|id| self.view.element(id))
             .map(|element| element.backend_locator.clone());
         let started = Instant::now();
-        match load_snapshot(&self.backend, &self.app_selector, self.inspect_options).await {
-            Ok(snapshot) => {
+        match load_snapshot(
+            &self.backend,
+            &self.app_selector,
+            self.inspect_options,
+            self.bootstrap_strategy,
+        )
+        .await
+        {
+            Ok(bootstrap) => {
                 let snapshot_ms = started.elapsed().as_millis();
-                if let Err(error) = self.cache.full_refresh(snapshot) {
+                if let Err(error) = self.cache.full_refresh(bootstrap.root) {
                     self.status = format!("Full refresh fallback failed: {error}");
                     return;
                 }
-                self.view = TuiViewModel::from_snapshot(self.cache.root());
+                let projected = match self.cache.materialize_tree() {
+                    Ok(projected) => projected,
+                    Err(error) => {
+                        self.status = format!("Tree projection failed: {error}");
+                        return;
+                    }
+                };
+                self.view = TuiViewModel::from_snapshot(&projected);
                 self.focus.reconcile(&self.view, previous_locator.as_ref());
                 self.application_available = true;
                 self.status = format!(
-                    "{} — snapshot {snapshot_ms} ms full_snapshots={}",
+                    "{} — {} nodes via {} in {snapshot_ms} ms full_snapshots={}",
                     success_status.unwrap_or_else(|| "Refreshed".to_owned()),
+                    bootstrap.metrics.node_count,
+                    bootstrap.metrics.strategy,
                     self.cache.full_snapshot_count()
                 );
                 self.ensure_focus_visible();
@@ -249,30 +298,40 @@ impl TuiApplication {
     }
 
     async fn update_from_action_events(&mut self, success_status: String) {
-        let first = match tokio::time::timeout(self.settle_delay, self.event_receiver.recv()).await
-        {
-            Ok(Some(event)) => event,
-            _ => {
-                self.full_reload(Some(format!(
-                    "Full refresh fallback: no related AT-SPI event after {success_status}"
-                )))
-                .await;
-                return;
-            }
-        };
+        let first =
+            match tokio::time::timeout(self.settle_delay, self.event_subscription.recv()).await {
+                Ok(Some(EventDelivery::Event(event))) => event,
+                Ok(Some(EventDelivery::ResyncRequired { dropped })) => {
+                    self.resynchronize_after_overflow(dropped).await;
+                    return;
+                }
+                _ => {
+                    self.full_reload(Some(format!(
+                        "Full refresh fallback: no related AT-SPI event after {success_status}"
+                    )))
+                    .await;
+                    return;
+                }
+            };
         tokio::time::sleep(Duration::from_millis(40)).await;
         let mut events = vec![first];
-        while let Ok(event) = self.event_receiver.try_recv() {
+        while let Ok(event) = self.event_subscription.try_recv() {
             events.push(event);
+        }
+        if let Some(EventDelivery::ResyncRequired { dropped }) =
+            self.event_subscription.take_resync()
+        {
+            self.resynchronize_after_overflow(dropped).await;
+            return;
         }
         self.apply_event_batch(events, Some(success_status)).await;
     }
 
-    pub async fn next_event(&mut self) -> Option<NormalizedEvent> {
+    pub async fn next_event(&mut self) -> Option<EventDelivery> {
         if !self.event_stream_available {
             return std::future::pending().await;
         }
-        let event = self.event_receiver.recv().await;
+        let event = self.event_subscription.recv().await;
         if event.is_none() {
             self.event_stream_available = false;
         }
@@ -286,28 +345,91 @@ impl TuiApplication {
         .await;
     }
 
-    pub async fn apply_external_event(&mut self, first: NormalizedEvent) {
+    pub async fn apply_external_delivery(&mut self, delivery: EventDelivery) {
+        let first = match delivery {
+            EventDelivery::Event(event) => event,
+            EventDelivery::ResyncRequired { dropped } => {
+                self.resynchronize_after_overflow(dropped).await;
+                return;
+            }
+        };
         tokio::time::sleep(Duration::from_millis(40)).await;
         let mut events = vec![first];
-        while let Ok(event) = self.event_receiver.try_recv() {
+        while let Ok(event) = self.event_subscription.try_recv() {
             events.push(event);
+        }
+        if let Some(EventDelivery::ResyncRequired { dropped }) =
+            self.event_subscription.take_resync()
+        {
+            self.resynchronize_after_overflow(dropped).await;
+            return;
         }
         self.apply_event_batch(events, None).await;
     }
 
+    async fn resynchronize_after_overflow(&mut self, dropped: u64) {
+        // Discard the incomplete pre-overflow prefix. The full bootstrap below
+        // becomes the new baseline; events arriving during it remain buffered.
+        while self.event_subscription.try_recv().is_ok() {}
+        self.status =
+            format!("Event overflow detected ({dropped} dropped); resynchronizing semantic tree");
+        self.full_reload(Some(format!(
+            "Semantic tree resynchronized after event overflow ({dropped} dropped)"
+        )))
+        .await;
+        if let Some(EventDelivery::ResyncRequired { dropped }) =
+            self.event_subscription.take_resync()
+        {
+            // A distinct flood overlapped the resync. Coalesce it into one more
+            // correctness baseline rather than replaying an incomplete suffix.
+            while self.event_subscription.try_recv().is_ok() {}
+            self.full_reload(Some(format!(
+                "Semantic tree resynchronized after overlapping overflow ({dropped} dropped)"
+            )))
+            .await;
+        } else {
+            let mut events = Vec::new();
+            while let Ok(event) = self.event_subscription.try_recv() {
+                events.push(event);
+            }
+            if !events.is_empty() {
+                self.apply_event_batch(
+                    events,
+                    Some("Replayed events received during resync".to_owned()),
+                )
+                .await;
+            }
+        }
+    }
+
     async fn apply_event_batch(
         &mut self,
-        events: Vec<NormalizedEvent>,
+        mut events: Vec<NormalizedEvent>,
         success_status: Option<String>,
     ) {
         let started = Instant::now();
         let raw_count = events.len();
+        // Cache Add/Remove reports cache residency. A bootstrap (especially a
+        // recursive walk) can itself populate the toolkit cache, so replaying
+        // an Add for an object already present in our semantic baseline is a
+        // no-op. Likewise, removing an object we never owned cannot stale us.
+        events.retain(|event| event_requires_refresh(&self.cache, event));
+        if events.is_empty() {
+            if let Some(status) = success_status {
+                self.status = format!(
+                    "{status} — events={raw_count} cache-residency events already reflected; full_snapshots={}",
+                    self.cache.full_snapshot_count()
+                );
+            }
+            return;
+        }
         let scopes = coalesce_dirty_scopes(&events);
         let dirty_count = scopes.len();
         let mut refreshed_nodes = 0_usize;
         let mut reconciled = 0_usize;
         let mut reconciled_ids = Vec::new();
         let mut new_ids = 0_usize;
+        let mut removed_ids = 0_usize;
         for scope in scopes {
             let result = match scope {
                 DirtyScope::Node(locator) => match self.backend.refresh_node(&locator, false).await
@@ -336,6 +458,7 @@ impl TuiApplication {
                                 reconciled += report.locator_reconciled;
                                 reconciled_ids.extend(report.reconciled_runtime_ids);
                                 new_ids += report.new_runtime_ids;
+                                removed_ids += report.removed_runtime_ids;
                             })
                         }
                         Err(error) => {
@@ -363,23 +486,37 @@ impl TuiApplication {
         }
         self.rebuild_view_preserving_focus();
         let elapsed = started.elapsed().as_millis();
+        let cache_nodes = self.cache.node_count();
         let reconciled_detail = reconciled_ids
             .first()
             .map(|id| format!(" first_reconciled={id}"))
             .unwrap_or_default();
         self.status = format!(
-            "{} — events={raw_count} dirty={dirty_count} refreshed={refreshed_nodes} nodes reconciled={reconciled}{reconciled_detail} new_ids={new_ids} update={elapsed} ms full_snapshots={}",
+            "{} — events={raw_count} dirty={dirty_count} refreshed={refreshed_nodes} nodes cache_nodes={cache_nodes} reconciled={reconciled}{reconciled_detail} new_ids={new_ids} removed_ids={removed_ids} update={elapsed} ms full_snapshots={}",
             success_status.unwrap_or_else(|| "Live update".to_owned()),
             self.cache.full_snapshot_count()
         );
     }
 
     fn rebuild_view_preserving_focus(&mut self) {
+        let materialization_started = Instant::now();
         let previous_id = self.focus.current();
         let previous_locator = previous_id
             .and_then(|id| self.view.element(id))
             .map(|element| element.backend_locator.clone());
-        self.view = TuiViewModel::from_snapshot(self.cache.root());
+        let projected = match self.cache.materialize_tree() {
+            Ok(projected) => projected,
+            Err(error) => {
+                self.status = format!("Tree projection failed: {error}");
+                return;
+            }
+        };
+        self.view = TuiViewModel::from_snapshot(&projected);
+        tracing::debug!(
+            cache_nodes = self.cache.node_count(),
+            materialization_ms = materialization_started.elapsed().as_secs_f64() * 1000.0,
+            "materialized semantic arena for TUI view"
+        );
         if let Some(id) = previous_id
             && self.view.element(id).is_some_and(TuiElement::is_focusable)
         {
@@ -414,14 +551,25 @@ async fn load_snapshot(
     backend: &AtspiBackend,
     selector: &str,
     options: InspectOptions,
-) -> Result<crate::semantic::SemanticNode, BackendError> {
+    strategy: BootstrapStrategy,
+) -> Result<crate::backend::BootstrapResult, BackendError> {
     let applications = backend.applications().await?;
     let application = AtspiBackend::select_application(&applications, Some(selector), None)?;
-    backend.inspect_application(application, options).await
+    backend
+        .bootstrap_application(application, options, strategy)
+        .await
 }
 
 fn semantic_node_count(node: &crate::semantic::SemanticNode) -> usize {
     1 + node.children.iter().map(semantic_node_count).sum::<usize>()
+}
+
+fn event_requires_refresh(cache: &SemanticCache, event: &NormalizedEvent) -> bool {
+    match event {
+        NormalizedEvent::CacheAdded { locator } => cache.runtime_id(locator).is_none(),
+        NormalizedEvent::CacheRemoved { locator } => cache.runtime_id(locator).is_some(),
+        _ => true,
+    }
 }
 
 fn application_is_gone(error: &BackendError) -> bool {
@@ -494,7 +642,9 @@ fn element_label(element: &TuiElement) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticRole};
+    use crate::semantic::{
+        BackendLocator, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole,
+    };
 
     use super::*;
 
@@ -553,5 +703,44 @@ mod tests {
             operation_error_status(&error),
             ("Selection was rejected by application".to_owned(), false)
         );
+    }
+
+    #[test]
+    fn bootstrap_cache_residency_events_do_not_force_a_second_snapshot() {
+        let root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/root"),
+            index_in_parent: None,
+            role: SemanticRole::Application,
+            name: Some("root".to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: Vec::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: crate::semantic::DebugInfo::default(),
+        };
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        assert!(!event_requires_refresh(
+            &cache,
+            &NormalizedEvent::CacheAdded {
+                locator: BackendLocator::new(":1.2", "/root")
+            }
+        ));
+        assert!(!event_requires_refresh(
+            &cache,
+            &NormalizedEvent::CacheRemoved {
+                locator: BackendLocator::new(":1.2", "/not-cached")
+            }
+        ));
+        assert!(event_requires_refresh(
+            &cache,
+            &NormalizedEvent::CacheAdded {
+                locator: BackendLocator::new(":1.2", "/new")
+            }
+        ));
     }
 }

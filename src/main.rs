@@ -2,7 +2,10 @@ use std::{process::ExitCode, time::Duration};
 
 use clap::Parser;
 use gui2tui::{
-    backend::{AtspiBackend, BackendError, InspectOptions},
+    backend::{
+        AtspiBackend, BackendError, BootstrapStrategy, DEFAULT_EVENT_BUFFER_CAPACITY,
+        InspectOptions,
+    },
     inspect::{FormatOptions, format_tree},
 };
 use tracing_subscriber::EnvFilter;
@@ -15,7 +18,7 @@ use tracing_subscriber::EnvFilter;
 )]
 struct Cli {
     /// List applications currently exposed by the AT-SPI desktop.
-    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events"])]
+    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events", "probe_cache", "probe_collection"])]
     list: bool,
 
     /// Inspect an application by exact name or an unambiguous substring.
@@ -58,6 +61,14 @@ struct Cli {
     #[arg(long, requires = "app", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name", "select_child"])]
     watch_events: bool,
 
+    /// Probe the selected application's bulk AT-SPI Cache.GetItems support.
+    #[arg(long, requires = "app", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events"])]
+    probe_cache: bool,
+
+    /// Probe the selected application's AT-SPI Collection interface.
+    #[arg(long, requires = "app", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events", "probe_cache"])]
+    probe_collection: bool,
+
     /// Include AT-SPI role, full states, interfaces, object identity and geometry.
     #[arg(short, long)]
     verbose: bool,
@@ -73,6 +84,14 @@ struct Cli {
     /// Per-operation D-Bus/AT-SPI timeout in milliseconds.
     #[arg(long, default_value_t = 5_000, value_parser = clap::value_parser!(u64).range(1..))]
     timeout_ms: u64,
+
+    /// Initial semantic bootstrap strategy.
+    #[arg(long, value_enum, default_value_t = BootstrapStrategy::Auto)]
+    bootstrap: BootstrapStrategy,
+
+    /// Maximum buffered events used by --watch-events.
+    #[arg(long, default_value_t = DEFAULT_EVENT_BUFFER_CAPACITY)]
+    event_buffer_capacity: usize,
 }
 
 #[tokio::main]
@@ -183,22 +202,102 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             "Watching AT-SPI events for {} ({})",
             application.name, application.backend_locator
         );
-        return backend.watch_events(application).await;
+        return backend
+            .watch_events_with_capacity(application, cli.event_buffer_capacity)
+            .await;
     }
-    let tree = backend
-        .inspect_application(
+    if cli.probe_cache {
+        let result = backend.probe_cache(application).await?;
+        println!("Cache available: yes");
+        println!("signature: {}", result.format);
+        println!("items: {}", result.records.len());
+        println!(
+            "named items: {}",
+            result
+                .records
+                .iter()
+                .filter(|record| record.name.is_some())
+                .count()
+        );
+        println!(
+            "RPC duration: {:.3} ms",
+            result.rpc_duration.as_secs_f64() * 1000.0
+        );
+        if let Some(error) = result.modern_error {
+            println!("modern decode failed before legacy fallback: {error}");
+        }
+        for record in result.records.iter().take(5) {
+            println!(
+                "sample role={} name={:?} description={:?} path={} parent={:?} index={:?} children={:?}",
+                record.role.name(),
+                record.name,
+                record.description,
+                record.locator.object_path(),
+                record.parent.as_ref().map(|parent| parent.object_path()),
+                record.index_in_parent,
+                record.child_count,
+            );
+        }
+        return Ok(());
+    }
+    if cli.probe_collection {
+        let result = backend.probe_collection(application).await?;
+        println!("Collection nodes: {}", result.collection_nodes);
+        match result.source {
+            Some(source) => println!("query source: {source}"),
+            None => println!("query source: none"),
+        }
+        for query in result.queries {
+            match (query.count, query.error) {
+                (Some(count), _) => println!(
+                    "{}: {} matches in {:.3} ms",
+                    query.query,
+                    count,
+                    query.duration.as_secs_f64() * 1000.0
+                ),
+                (_, Some(error)) => println!(
+                    "{}: unavailable after {:.3} ms: {}",
+                    query.query,
+                    query.duration.as_secs_f64() * 1000.0,
+                    error
+                ),
+                _ => println!("{}: unavailable", query.query),
+            }
+        }
+        return Ok(());
+    }
+    let bootstrap = backend
+        .bootstrap_application(
             application,
             InspectOptions {
                 verbose: cli.verbose,
                 max_depth: cli.max_depth,
                 max_nodes: cli.max_nodes,
             },
+            cli.bootstrap,
         )
         .await?;
+    eprintln!(
+        "Bootstrap: {} nodes via {} in {:.3} ms (cache_rpc={:.3} ms enrichment={:.3} ms reconstruction={:.3} ms enrichment_rpcs={} orphans={}){}",
+        bootstrap.metrics.node_count,
+        bootstrap.metrics.strategy,
+        bootstrap.metrics.total.as_secs_f64() * 1000.0,
+        bootstrap.metrics.cache_rpc.as_secs_f64() * 1000.0,
+        bootstrap.metrics.enrichment.as_secs_f64() * 1000.0,
+        bootstrap.metrics.reconstruction.as_secs_f64() * 1000.0,
+        bootstrap.metrics.enrichment_rpc_count,
+        bootstrap.metrics.orphans_ignored,
+        bootstrap
+            .metrics
+            .fallback_reason
+            .as_ref()
+            .map(|reason| format!(" fallback={reason:?}"))
+            .unwrap_or_default(),
+    );
     print!(
         "{}",
         format_tree(
-            &tree,
+            &bootstrap.root,
             FormatOptions {
                 verbose: cli.verbose
             }

@@ -1,11 +1,21 @@
-use std::{collections::HashSet, future::Future, pin::Pin, time::Duration};
+use std::{
+    collections::HashSet,
+    future::Future,
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use atspi::{
-    AccessibilityConnection, CoordType, Interface, ObjectRef, ObjectRefOwned, Role,
-    events::{CacheEvents, Event, EventBodyQtOwned, ObjectEvents, WindowEvents},
+    AccessibilityConnection, CoordType, Interface, MatchType, ObjectMatchRule, ObjectRef,
+    ObjectRefOwned, Role, SortOrder, State,
+    events::{CacheEvents, Event, ObjectEvents, WindowEvents},
     proxy::{
-        accessible::ObjectRefExt, component::ComponentProxy, proxy_ext::ProxyExt, text::TextProxy,
-        value::ValueProxy,
+        accessible::ObjectRefExt, action::ActionProxy, collection::CollectionProxy,
+        component::ComponentProxy, proxy_ext::ProxyExt, text::TextProxy, value::ValueProxy,
     },
 };
 use futures_lite::StreamExt;
@@ -13,9 +23,20 @@ use thiserror::Error;
 use tracing::warn;
 use zbus::{MessageStream, message::Type as MessageType, names::UniqueName, zvariant::ObjectPath};
 
-use crate::semantic::{
-    BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticCapability,
-    SemanticNode, SemanticRole, SemanticState, TextInputKind, TreeTruncation,
+use crate::{
+    backend::{
+        bootstrap::{
+            BootstrapMetrics, BootstrapResult, BootstrapStrategy, BootstrapUsed, reconstruct_tree,
+        },
+        protocol_compat::{
+            BulkAccessibleRecord, CacheFetch, fetch_cache, normalize_legacy_property_event,
+        },
+    },
+    semantic::{
+        BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction,
+        SemanticCapability, SemanticNode, SemanticRole, SemanticState, TextInputKind,
+        TreeTruncation,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -86,6 +107,8 @@ pub enum BackendError {
     EventStream(atspi::AtspiError),
     #[error("semantic cache error: {0}")]
     SemanticCache(String),
+    #[error("AT-SPI cache bootstrap failed: {0}")]
+    CacheBootstrap(String),
     #[error("no accessible applications are currently exposed by AT-SPI")]
     NoApplications,
     #[error("application index {0} does not exist; run with --list to see current indices")]
@@ -159,6 +182,68 @@ pub enum BackendError {
 pub struct AtspiBackend {
     connection: AccessibilityConnection,
     operation_timeout: Duration,
+}
+
+pub const DEFAULT_EVENT_BUFFER_CAPACITY: usize = 2048;
+
+#[derive(Clone, Debug)]
+pub enum EventDelivery {
+    Event(crate::events::NormalizedEvent),
+    ResyncRequired { dropped: u64 },
+}
+
+pub struct EventSubscription {
+    receiver: tokio::sync::mpsc::Receiver<crate::events::NormalizedEvent>,
+    resync_required: Arc<AtomicBool>,
+    dropped: Arc<AtomicU64>,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CollectionQueryProbe {
+    pub query: &'static str,
+    pub count: Option<usize>,
+    pub duration: Duration,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CollectionProbe {
+    pub collection_nodes: usize,
+    pub source: Option<BackendLocator>,
+    pub queries: Vec<CollectionQueryProbe>,
+}
+
+impl EventSubscription {
+    pub async fn recv(&mut self) -> Option<EventDelivery> {
+        loop {
+            if let Some(resync) = self.take_resync() {
+                return Some(resync);
+            }
+            tokio::select! {
+                event = self.receiver.recv() => return event.map(EventDelivery::Event),
+                _ = self.notify.notified() => {
+                    // A notification permit may outlive the flag consumption
+                    // when the owner observed overflow before awaiting here.
+                    // It is not an event-stream closure; loop and re-check.
+                }
+            }
+        }
+    }
+
+    pub fn try_recv(
+        &mut self,
+    ) -> Result<crate::events::NormalizedEvent, tokio::sync::mpsc::error::TryRecvError> {
+        self.receiver.try_recv()
+    }
+
+    pub fn take_resync(&self) -> Option<EventDelivery> {
+        self.resync_required
+            .swap(false, Ordering::AcqRel)
+            .then(|| EventDelivery::ResyncRequired {
+                dropped: self.dropped.swap(0, Ordering::AcqRel),
+            })
+    }
 }
 
 impl AtspiBackend {
@@ -240,6 +325,240 @@ impl AtspiBackend {
         }
 
         Ok(applications)
+    }
+
+    pub async fn probe_cache(
+        &self,
+        application: &ApplicationRef,
+    ) -> Result<CacheFetch, BackendError> {
+        tokio::time::timeout(
+            self.operation_timeout,
+            fetch_cache(
+                self.connection.connection(),
+                application.backend_locator.bus_name(),
+            ),
+        )
+        .await
+        .map_err(|_| {
+            timeout_error(
+                self.operation_timeout,
+                "AT-SPI Cache.GetItems",
+                application.backend_locator.encode(),
+            )
+        })?
+        .map_err(|error| BackendError::CacheBootstrap(error.to_string()))
+    }
+
+    pub async fn probe_collection(
+        &self,
+        application: &ApplicationRef,
+    ) -> Result<CollectionProbe, BackendError> {
+        let fetch = self.probe_cache(application).await?;
+        let collection_nodes: Vec<_> = fetch
+            .records
+            .iter()
+            .filter(|record| record.interfaces.contains(Interface::Collection))
+            .map(|record| record.locator.clone())
+            .collect();
+        let Some(source) = collection_nodes
+            .iter()
+            .find(|locator| **locator == application.backend_locator)
+            .cloned()
+            .or_else(|| collection_nodes.first().cloned())
+        else {
+            return Ok(CollectionProbe {
+                collection_nodes: 0,
+                source: None,
+                queries: Vec::new(),
+            });
+        };
+        let proxy = CollectionProxy::builder(self.connection.connection())
+            .destination(source.bus_name())
+            .and_then(|builder| builder.path(source.object_path()))
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+            .build()
+            .await
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let queries = vec![
+            (
+                "buttons",
+                ObjectMatchRule::builder()
+                    .roles(&[Role::Button, Role::PushButtonMenu], MatchType::Any)
+                    .build(),
+            ),
+            (
+                "text-inputs",
+                ObjectMatchRule::builder()
+                    .roles(
+                        &[Role::Entry, Role::PasswordText, Role::Text],
+                        MatchType::Any,
+                    )
+                    .build(),
+            ),
+            (
+                "checkboxes",
+                ObjectMatchRule::builder()
+                    .roles(&[Role::CheckBox], MatchType::Any)
+                    .build(),
+            ),
+            (
+                "focusable",
+                ObjectMatchRule::builder()
+                    .states([State::Focusable], MatchType::All)
+                    .build(),
+            ),
+        ];
+        let mut results = Vec::new();
+        for (query, rule) in queries {
+            let started = Instant::now();
+            let result = tokio::time::timeout(
+                self.operation_timeout,
+                proxy.get_matches(rule, SortOrder::Canonical, 0, false),
+            )
+            .await;
+            let (count, error) = match result {
+                Ok(Ok(objects)) => (Some(objects.len()), None),
+                Ok(Err(error)) => (None, Some(error.to_string())),
+                Err(_) => (None, Some("operation timed out".to_owned())),
+            };
+            results.push(CollectionQueryProbe {
+                query,
+                count,
+                duration: started.elapsed(),
+                error,
+            });
+        }
+        Ok(CollectionProbe {
+            collection_nodes: collection_nodes.len(),
+            source: Some(source),
+            queries: results,
+        })
+    }
+
+    pub async fn bootstrap_application(
+        &self,
+        application: &ApplicationRef,
+        options: InspectOptions,
+        strategy: BootstrapStrategy,
+    ) -> Result<BootstrapResult, BackendError> {
+        let started = Instant::now();
+        if strategy != BootstrapStrategy::Walk && !options.verbose {
+            match self
+                .bootstrap_from_cache(application, options, started)
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(error) if strategy == BootstrapStrategy::Cache => return Err(error),
+                Err(error) => {
+                    let reason = error.to_string();
+                    let root = self.inspect_application(application, options).await?;
+                    return Ok(BootstrapResult {
+                        metrics: BootstrapMetrics {
+                            strategy: BootstrapUsed::Walk,
+                            node_count: semantic_node_count(&root),
+                            cache_format: None,
+                            cache_items: 0,
+                            cache_rpc: Duration::ZERO,
+                            enrichment: Duration::ZERO,
+                            enrichment_rpc_count: 0,
+                            reconstruction: Duration::ZERO,
+                            total: started.elapsed(),
+                            orphans_ignored: 0,
+                            fallback_reason: Some(reason),
+                        },
+                        root,
+                    });
+                }
+            }
+        }
+
+        let root = self.inspect_application(application, options).await?;
+        Ok(BootstrapResult {
+            metrics: BootstrapMetrics {
+                strategy: BootstrapUsed::Walk,
+                node_count: semantic_node_count(&root),
+                cache_format: None,
+                cache_items: 0,
+                cache_rpc: Duration::ZERO,
+                enrichment: Duration::ZERO,
+                enrichment_rpc_count: 0,
+                reconstruction: Duration::ZERO,
+                total: started.elapsed(),
+                orphans_ignored: 0,
+                fallback_reason: (strategy == BootstrapStrategy::Auto && options.verbose)
+                    .then(|| "verbose inspection uses recursive debug path".to_owned()),
+            },
+            root,
+        })
+    }
+
+    async fn bootstrap_from_cache(
+        &self,
+        application: &ApplicationRef,
+        options: InspectOptions,
+        started: Instant,
+    ) -> Result<BootstrapResult, BackendError> {
+        let fetch = self.probe_cache(application).await?;
+        if fetch.records.is_empty() {
+            return Err(BackendError::CacheBootstrap(
+                "Cache.GetItems returned no records".to_owned(),
+            ));
+        }
+        let cache_items = fetch.records.len();
+        let cache_format = fetch.format;
+        let cache_rpc = fetch.rpc_duration;
+        let enrichment_started = Instant::now();
+        let mut records = fetch.records;
+        let mut root_relationship_rpc_count = 0;
+        if let Ok(proxy) = application
+            .object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+        {
+            root_relationship_rpc_count = 1;
+            if let Ok(root_children) = dbus_operation(
+                self.operation_timeout,
+                "read application root children for cache reconstruction",
+                &application.backend_locator.encode(),
+                proxy.get_children(),
+            )
+            .await
+            {
+                repair_root_relationships(
+                    &mut records,
+                    &application.backend_locator,
+                    &root_children,
+                );
+            }
+        }
+        let (records, enrichment_rpc_count) = enrich_records(
+            self.connection.connection().clone(),
+            self.operation_timeout,
+            records,
+        )
+        .await;
+        let enrichment_rpc_count = enrichment_rpc_count + root_relationship_rpc_count;
+        let enrichment = enrichment_started.elapsed();
+        let reconstruction_started = Instant::now();
+        let (root, stats) = reconstruct_tree(records, &application.backend_locator, options)
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let reconstruction = reconstruction_started.elapsed();
+        Ok(BootstrapResult {
+            metrics: BootstrapMetrics {
+                strategy: BootstrapUsed::Cache,
+                node_count: semantic_node_count(&root),
+                cache_format: Some(cache_format),
+                cache_items,
+                cache_rpc,
+                enrichment,
+                enrichment_rpc_count,
+                reconstruction,
+                total: started.elapsed(),
+                orphans_ignored: stats.orphans_ignored,
+                fallback_reason: None,
+            },
+            root,
+        })
     }
 
     pub fn select_application<'a>(
@@ -332,11 +651,27 @@ impl AtspiBackend {
 
     /// Print a normalized, read-only event stream for one selected application.
     pub async fn watch_events(&self, application: &ApplicationRef) -> Result<(), BackendError> {
-        let mut events = self.subscribe_events(application).await?;
+        self.watch_events_with_capacity(application, DEFAULT_EVENT_BUFFER_CAPACITY)
+            .await
+    }
+
+    pub async fn watch_events_with_capacity(
+        &self,
+        application: &ApplicationRef,
+        capacity: usize,
+    ) -> Result<(), BackendError> {
+        let mut events = self.subscribe_events(application, capacity).await?;
         let mut sequence = 0_u64;
-        while let Some(event) = events.recv().await {
-            sequence = sequence.saturating_add(1);
-            println!("EVENT #{sequence}\n{event}\n");
+        while let Some(delivery) = events.recv().await {
+            match delivery {
+                EventDelivery::Event(event) => {
+                    sequence = sequence.saturating_add(1);
+                    println!("EVENT #{sequence}\n{event}\n");
+                }
+                EventDelivery::ResyncRequired { dropped } => {
+                    println!("EVENT OVERFLOW\ndropped={dropped}\nresync-required=true\n");
+                }
+            }
         }
         Ok(())
     }
@@ -344,8 +679,13 @@ impl AtspiBackend {
     pub async fn subscribe_events(
         &self,
         application: &ApplicationRef,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<crate::events::NormalizedEvent>, BackendError>
-    {
+        capacity: usize,
+    ) -> Result<EventSubscription, BackendError> {
+        if capacity == 0 {
+            return Err(BackendError::SemanticCache(
+                "event buffer capacity must be greater than zero".to_owned(),
+            ));
+        }
         self.connection
             .register_event::<ObjectEvents>()
             .await
@@ -362,7 +702,13 @@ impl AtspiBackend {
         let selected_bus = application.backend_locator.bus_name().to_owned();
         let application_locator = application.backend_locator.clone();
         let connection = self.connection.connection().clone();
-        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (sender, receiver) = tokio::sync::mpsc::channel(capacity);
+        let resync_required = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicU64::new(0));
+        let notify = Arc::new(tokio::sync::Notify::new());
+        let producer_resync = resync_required.clone();
+        let producer_dropped = dropped.clone();
+        let producer_notify = notify.clone();
         tokio::spawn(async move {
             let events = MessageStream::from(&connection);
             futures_lite::pin!(events);
@@ -371,13 +717,18 @@ impl AtspiBackend {
                     Ok(message) => message,
                     Err(error) => {
                         warn!(%error, "skipping unreadable D-Bus message on AT-SPI event stream");
-                        if sender
-                            .send(crate::events::NormalizedEvent::Unknown {
+                        if deliver_event(
+                            &sender,
+                            crate::events::NormalizedEvent::Unknown {
                                 locator: application_locator.clone(),
                                 interface: "event-stream".to_owned(),
                                 member: error.to_string(),
-                            })
-                            .is_err()
+                            },
+                            &producer_resync,
+                            &producer_dropped,
+                            &producer_notify,
+                        )
+                        .is_err()
                         {
                             break;
                         }
@@ -397,9 +748,9 @@ impl AtspiBackend {
 
                 let normalized = match Event::try_from(&message) {
                     Ok(event) => crate::events::NormalizedEvent::from_atspi(&event),
-                    Err(error) => match normalize_qt_property_event(&message) {
+                    Err(error) => match normalize_legacy_property_event(&message) {
                         Some(event) => {
-                            warn!(%error, "accepted Qt-compatible AT-SPI PropertyChange event body");
+                            warn!(%error, "accepted legacy-compatible AT-SPI PropertyChange event body");
                             event
                         }
                         None => {
@@ -426,12 +777,25 @@ impl AtspiBackend {
                         }
                     },
                 };
-                if sender.send(normalized).is_err() {
+                if deliver_event(
+                    &sender,
+                    normalized,
+                    &producer_resync,
+                    &producer_dropped,
+                    &producer_notify,
+                )
+                .is_err()
+                {
                     break;
                 }
             }
         });
-        Ok(receiver)
+        Ok(EventSubscription {
+            receiver,
+            resync_required,
+            dropped,
+            notify,
+        })
     }
 
     pub async fn actions(&self, encoded_id: &str) -> Result<Vec<SemanticAction>, BackendError> {
@@ -846,25 +1210,169 @@ impl AtspiBackend {
     }
 }
 
-/// Qt 6 emits the historical `siiv(so)` AT-SPI event body for some object
-/// property signals. `atspi::Event` normally handles this compatibility form,
-/// but Qt's `accessible-name` spelling is not accepted by the typed wrapper in
-/// atspi 0.30. Preserve the actual property name and source without inventing
-/// any semantic meaning.
-fn normalize_qt_property_event(message: &zbus::Message) -> Option<crate::events::NormalizedEvent> {
-    let header = message.header();
-    if header.interface()?.as_str() != "org.a11y.atspi.Event.Object"
-        || header.member()?.as_str() != "PropertyChange"
-    {
-        return None;
+fn deliver_event(
+    sender: &tokio::sync::mpsc::Sender<crate::events::NormalizedEvent>,
+    event: crate::events::NormalizedEvent,
+    resync_required: &AtomicBool,
+    dropped: &AtomicU64,
+    notify: &tokio::sync::Notify,
+) -> Result<(), ()> {
+    match sender.try_send(event) {
+        Ok(()) => Ok(()),
+        Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+            dropped.fetch_add(1, Ordering::Relaxed);
+            if !resync_required.swap(true, Ordering::AcqRel) {
+                notify.notify_one();
+            }
+            Ok(())
+        }
+        Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => Err(()),
     }
-    let sender = header.sender()?;
-    let path = header.path()?;
-    let body = message.body().deserialize::<EventBodyQtOwned>().ok()?;
-    Some(crate::events::NormalizedEvent::NodePropertyChanged {
-        locator: BackendLocator::new(sender.as_str(), path.as_str()),
-        property: body.kind,
-    })
+}
+
+const ENRICHMENT_CONCURRENCY: usize = 32;
+
+async fn enrich_records(
+    connection: zbus::Connection,
+    timeout: Duration,
+    records: Vec<BulkAccessibleRecord>,
+) -> (Vec<BulkAccessibleRecord>, usize) {
+    let mut pending = records.into_iter();
+    let mut tasks = tokio::task::JoinSet::new();
+    let mut enriched = Vec::new();
+    let mut rpc_count = 0;
+
+    for _ in 0..ENRICHMENT_CONCURRENCY {
+        let Some(record) = pending.next() else { break };
+        let connection = connection.clone();
+        tasks.spawn(enrich_record(connection, timeout, record));
+    }
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok((record, calls)) => {
+                enriched.push(record);
+                rpc_count += calls;
+            }
+            Err(error) => warn!(%error, "selective cache enrichment task failed"),
+        }
+        if let Some(record) = pending.next() {
+            let connection = connection.clone();
+            tasks.spawn(enrich_record(connection, timeout, record));
+        }
+    }
+    (enriched, rpc_count)
+}
+
+async fn enrich_record(
+    connection: zbus::Connection,
+    timeout: Duration,
+    mut record: BulkAccessibleRecord,
+) -> (BulkAccessibleRecord, usize) {
+    let mut calls = 0;
+    let node_id = record.locator.encode();
+    let object = match object_ref_from_id(&record.locator) {
+        Ok(object) => object,
+        Err(_) => return (record, calls),
+    };
+
+    if record.name.is_none() && role_needs_name(record.role) {
+        calls += 1;
+        if let Ok(proxy) = object.as_accessible_proxy(&connection).await
+            && let Ok(Ok(name)) = tokio::time::timeout(timeout, proxy.name()).await
+        {
+            record.name = nonempty(name);
+        }
+    }
+
+    if record.interfaces.contains(Interface::Action) && role_needs_actions(record.role) {
+        calls += 1;
+        if let Ok(proxy) = ActionProxy::builder(&connection)
+            .destination(record.locator.bus_name())
+            .and_then(|builder| builder.path(record.locator.object_path()))
+            && let Ok(Ok(proxy)) = tokio::time::timeout(timeout, proxy.build()).await
+            && let Ok(Ok(actions)) = tokio::time::timeout(timeout, proxy.get_actions()).await
+        {
+            record.actions = map_actions(actions);
+        }
+    }
+
+    if role_allows_text_value(record.role, record.interfaces)
+        && record.interfaces.contains(Interface::Text)
+        && let Ok(proxy) = TextProxy::builder(&connection)
+            .destination(record.locator.bus_name())
+            .and_then(|builder| builder.path(record.locator.object_path()))
+        && let Ok(Ok(proxy)) = tokio::time::timeout(timeout, proxy.build()).await
+    {
+        calls += 1;
+        if let Ok(Ok(total_count)) = tokio::time::timeout(timeout, proxy.character_count()).await {
+            let count = total_count.clamp(0, 256);
+            calls += 1;
+            if let Ok(Ok(mut text)) = tokio::time::timeout(timeout, proxy.get_text(0, count)).await
+            {
+                if total_count > count {
+                    text.push('…');
+                }
+                record.value = nonempty(text);
+            }
+        }
+    }
+    tracing::trace!(node_id, calls, "selectively enriched cache record");
+    (record, calls)
+}
+
+fn role_needs_name(role: Role) -> bool {
+    matches!(
+        SemanticRole::from(role),
+        SemanticRole::Application
+            | SemanticRole::Window
+            | SemanticRole::Dialog
+            | SemanticRole::Label
+            | SemanticRole::Button
+            | SemanticRole::ToggleButton
+            | SemanticRole::CheckBox
+            | SemanticRole::RadioButton
+            | SemanticRole::Text
+            | SemanticRole::TextInput
+            | SemanticRole::ComboBox
+            | SemanticRole::Menu
+            | SemanticRole::MenuItem
+            | SemanticRole::List
+            | SemanticRole::ListItem
+            | SemanticRole::StatusBar
+    )
+}
+
+fn role_needs_actions(role: Role) -> bool {
+    matches!(
+        SemanticRole::from(role),
+        SemanticRole::Button
+            | SemanticRole::ToggleButton
+            | SemanticRole::CheckBox
+            | SemanticRole::ListItem
+            | SemanticRole::MenuItem
+    )
+}
+
+fn semantic_node_count(node: &SemanticNode) -> usize {
+    1 + node.children.iter().map(semantic_node_count).sum::<usize>()
+}
+
+fn repair_root_relationships(
+    records: &mut [BulkAccessibleRecord],
+    application: &BackendLocator,
+    root_children: &[ObjectRefOwned],
+) {
+    let indices: std::collections::HashMap<_, _> = root_children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| node_id_from_ref(child).map(|locator| (locator, index)))
+        .collect();
+    for record in records {
+        if let Some(index) = indices.get(&record.locator) {
+            record.parent = Some(application.clone());
+            record.index_in_parent = Some(*index);
+        }
+    }
 }
 
 struct TraversalContext {
@@ -1188,6 +1696,49 @@ async fn read_geometry(
 mod tests {
     use super::*;
 
+    fn test_event(path: &str) -> crate::events::NormalizedEvent {
+        crate::events::NormalizedEvent::NodePropertyChanged {
+            locator: BackendLocator::new(":1.2", path),
+            property: "accessible-name".to_owned(),
+        }
+    }
+
+    fn test_subscription(
+        capacity: usize,
+    ) -> (
+        tokio::sync::mpsc::Sender<crate::events::NormalizedEvent>,
+        EventSubscription,
+    ) {
+        let (sender, receiver) = tokio::sync::mpsc::channel(capacity);
+        let resync_required = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicU64::new(0));
+        let notify = Arc::new(tokio::sync::Notify::new());
+        (
+            sender,
+            EventSubscription {
+                receiver,
+                resync_required,
+                dropped,
+                notify,
+            },
+        )
+    }
+
+    fn send_test_event(
+        sender: &tokio::sync::mpsc::Sender<crate::events::NormalizedEvent>,
+        subscription: &EventSubscription,
+        path: &str,
+    ) {
+        deliver_event(
+            sender,
+            test_event(path),
+            &subscription.resync_required,
+            &subscription.dropped,
+            &subscription.notify,
+        )
+        .unwrap();
+    }
+
     fn applications() -> Vec<ApplicationRef> {
         ["Firefox", "GNOME Settings", "GNOME Text Editor"]
             .into_iter()
@@ -1320,6 +1871,30 @@ mod tests {
     }
 
     #[test]
+    fn application_get_children_repairs_cached_root_relationships() {
+        let root = BackendLocator::new(":1.2", "/root");
+        let window = ObjectRefOwned::from_static_str_unchecked(":1.2", "/window");
+        let mut records = vec![BulkAccessibleRecord {
+            locator: BackendLocator::new(":1.2", "/window"),
+            application: Some(root.clone()),
+            parent: Some(BackendLocator::new(":1.2", "/wrong-parent")),
+            index_in_parent: Some(7),
+            child_count: Some(0),
+            explicit_children: None,
+            interfaces: Interface::Accessible.into(),
+            name: Some("Window".to_owned()),
+            role: Role::Frame,
+            description: None,
+            states: Default::default(),
+            actions: Vec::new(),
+            value: None,
+        }];
+        repair_root_relationships(&mut records, &root, &[window]);
+        assert_eq!(records[0].parent.as_ref(), Some(&root));
+        assert_eq!(records[0].index_in_parent, Some(0));
+    }
+
+    #[test]
     fn classifies_unknown_object_as_stale() {
         let error = zbus::Error::FDO(Box::new(zbus::fdo::Error::UnknownObject("gone".to_owned())));
         assert!(matches!(
@@ -1356,6 +1931,72 @@ mod tests {
                 node_id,
                 ..
             } if node_id == "node"
+        ));
+    }
+
+    #[tokio::test]
+    async fn bounded_event_delivery_preserves_normal_events() {
+        let (sender, mut subscription) = test_subscription(2);
+        send_test_event(&sender, &subscription, "/one");
+        assert!(matches!(
+            subscription.recv().await,
+            Some(EventDelivery::Event(
+                crate::events::NormalizedEvent::NodePropertyChanged { locator, .. }
+            )) if locator.object_path() == "/one"
+        ));
+        assert!(subscription.take_resync().is_none());
+    }
+
+    #[test]
+    fn event_overflow_requests_one_resync_and_counts_all_drops() {
+        let (sender, subscription) = test_subscription(1);
+        send_test_event(&sender, &subscription, "/queued");
+        send_test_event(&sender, &subscription, "/dropped-one");
+        send_test_event(&sender, &subscription, "/dropped-two");
+        assert!(matches!(
+            subscription.take_resync(),
+            Some(EventDelivery::ResyncRequired { dropped: 2 })
+        ));
+        assert!(subscription.take_resync().is_none());
+
+        send_test_event(&sender, &subscription, "/next-flood");
+        assert!(matches!(
+            subscription.take_resync(),
+            Some(EventDelivery::ResyncRequired { dropped: 1 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn consumed_overflow_notification_never_looks_like_stream_closure() {
+        let (sender, mut subscription) = test_subscription(1);
+        send_test_event(&sender, &subscription, "/queued");
+        send_test_event(&sender, &subscription, "/dropped");
+        assert!(matches!(
+            subscription.take_resync(),
+            Some(EventDelivery::ResyncRequired { dropped: 1 })
+        ));
+        assert!(matches!(
+            subscription.recv().await,
+            Some(EventDelivery::Event(_))
+        ));
+    }
+
+    #[test]
+    fn bootstrap_events_are_replayable_and_bootstrap_overflow_forces_resync() {
+        let (sender, mut subscription) = test_subscription(2);
+        send_test_event(&sender, &subscription, "/during-bootstrap");
+        assert!(matches!(
+            subscription.try_recv(),
+            Ok(crate::events::NormalizedEvent::NodePropertyChanged { locator, .. })
+                if locator.object_path() == "/during-bootstrap"
+        ));
+
+        send_test_event(&sender, &subscription, "/one");
+        send_test_event(&sender, &subscription, "/two");
+        send_test_event(&sender, &subscription, "/overflow");
+        assert!(matches!(
+            subscription.take_resync(),
+            Some(EventDelivery::ResyncRequired { dropped: 1 })
         ));
     }
 }

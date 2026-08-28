@@ -9,7 +9,10 @@ use crossterm::{
 };
 use futures_lite::StreamExt;
 use gui2tui::{
-    backend::{AtspiBackend, BackendError, InspectOptions},
+    backend::{
+        AtspiBackend, BackendError, BootstrapStrategy, DEFAULT_EVENT_BUFFER_CAPACITY,
+        InspectOptions,
+    },
     tui::{
         app::TuiApplication,
         input::{key_to_intent, mouse_to_intent},
@@ -41,9 +44,17 @@ struct Cli {
     #[arg(long, default_value_t = 5_000, value_parser = clap::value_parser!(u64).range(1..))]
     timeout_ms: u64,
 
-    /// Delay after an action before refreshing the semantic snapshot.
+    /// Maximum wait for a related AT-SPI event before fallback refresh.
     #[arg(long, default_value_t = 500, value_parser = clap::value_parser!(u64).range(1..))]
     settle_ms: u64,
+
+    /// Initial semantic bootstrap strategy.
+    #[arg(long, value_enum, default_value_t = BootstrapStrategy::Auto)]
+    bootstrap: BootstrapStrategy,
+
+    /// Maximum buffered AT-SPI events before a correctness resync.
+    #[arg(long, default_value_t = DEFAULT_EVENT_BUFFER_CAPACITY)]
+    event_buffer_capacity: usize,
 }
 
 #[tokio::main]
@@ -90,6 +101,8 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             max_nodes: cli.max_nodes,
         },
         Duration::from_millis(cli.settle_ms),
+        cli.bootstrap,
+        cli.event_buffer_capacity,
     )
     .await?;
 
@@ -118,7 +131,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             },
             event = app.next_event() => {
                 if let Some(event) = event {
-                    app.apply_external_event(event).await;
+                    app.apply_external_delivery(event).await;
                 } else {
                     app.handle_event_stream_closed().await;
                 }
