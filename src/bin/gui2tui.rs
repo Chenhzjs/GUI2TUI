@@ -8,10 +8,11 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use gui2tui::{
-    backend::{AtspiBackend, InspectOptions},
+    backend::{AtspiBackend, BackendError, InspectOptions},
     tui::{
         app::TuiApplication,
         input::{key_to_intent, mouse_to_intent},
+        selector::{ApplicationSelector, SelectorIntent, key_to_selector_intent, mouse_click},
     },
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
@@ -25,7 +26,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 struct Cli {
     /// Accessible application name or an unambiguous substring.
     #[arg(long, value_name = "NAME")]
-    app: String,
+    app: Option<String>,
 
     /// Maximum accessibility-tree depth per snapshot.
     #[arg(long, default_value_t = 64)]
@@ -57,9 +58,31 @@ async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
+    enable_raw_mode()?;
+    let _guard = TerminalGuard;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+    let terminal_backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(terminal_backend)?;
+
+    let app_selector = match cli.app {
+        Some(name) => name,
+        None => {
+            let applications = backend.applications().await?;
+            if applications.is_empty() {
+                return Err(BackendError::NoApplications.into());
+            }
+            let names = applications.into_iter().map(|app| app.name).collect();
+            let Some(name) = run_selector(&mut terminal, ApplicationSelector::new(names))? else {
+                return Ok(());
+            };
+            name
+        }
+    };
+
     let mut app = TuiApplication::new(
         backend,
-        cli.app,
+        app_selector,
         InspectOptions {
             verbose: false,
             max_depth: cli.max_depth,
@@ -68,13 +91,6 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         Duration::from_millis(cli.settle_ms),
     )
     .await?;
-
-    enable_raw_mode()?;
-    let _guard = TerminalGuard;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
 
     loop {
         terminal.draw(|frame| app.render(frame))?;
@@ -95,6 +111,35 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+fn run_selector(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    mut selector: ApplicationSelector,
+) -> Result<Option<String>, io::Error> {
+    loop {
+        terminal.draw(|frame| selector.render(frame))?;
+        match event::read()? {
+            Event::Key(key) => {
+                if let Some(intent) = key_to_selector_intent(key) {
+                    if intent == SelectorIntent::Quit {
+                        return Ok(None);
+                    }
+                    if let Some(name) = selector.handle(intent) {
+                        return Ok(Some(name));
+                    }
+                }
+            }
+            Event::Mouse(mouse) => {
+                if let Some((x, y)) = mouse_click(mouse)
+                    && let Some(name) = selector.click(x, y)
+                {
+                    return Ok(Some(name));
+                }
+            }
+            Event::Resize(_, _) | Event::FocusGained | Event::FocusLost | Event::Paste(_) => {}
+        }
+    }
 }
 
 struct TerminalGuard;
