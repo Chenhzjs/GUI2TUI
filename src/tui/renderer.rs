@@ -192,4 +192,19 @@ mod tests {
             vec!["  [x] Enabled"]
         );
     }
+
+    #[test]
+    fn marks_non_actionable_controls_as_read_only_without_relying_on_color() {
+        let mut checkbox = element(TuiElementKind::CheckBox {
+            label: "Enabled".to_owned(),
+            checked: false,
+        });
+        checkbox.capability = InteractionCapability::None;
+        checkbox.semantic_role = crate::semantic::SemanticRole::CheckBox;
+
+        assert_eq!(
+            element_lines(&checkbox, true),
+            vec!["> [ ] Enabled  (read-only)"]
+        );
+    }
 }

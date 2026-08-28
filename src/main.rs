@@ -30,7 +30,7 @@ struct Cli {
     #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "activate", "action", "action_name"])]
     actions: Option<String>,
 
-    /// Invoke press/click/activate/open (or the first available action) on NODE_ID.
+    /// Invoke a safe convenience click/press/activate action on NODE_ID.
     #[arg(long, value_name = "NODE_ID", conflicts_with_all = ["list", "app", "app_id", "actions", "action", "action_name"])]
     activate: Option<String>,
 

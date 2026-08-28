@@ -87,7 +87,8 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::CheckBox, UiIntent::Activate | UiIntent::Toggle) => {
             &["toggle", "click", "press"]
         }
-        (SemanticRole::ListItem, UiIntent::Activate) => &["select", "activate", "click"],
+        // Qt 6 QListWidgetItem exposes Toggle, which selects the item.
+        (SemanticRole::ListItem, UiIntent::Activate) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
         _ => &[],
     }
@@ -162,6 +163,10 @@ mod tests {
         assert_eq!(
             interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"])),
             InteractionCapability::None
+        );
+        assert_eq!(
+            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"])),
+            InteractionCapability::Activate
         );
     }
 }

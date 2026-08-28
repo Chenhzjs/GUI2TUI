@@ -4,7 +4,7 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
-This repository contains the validated Phase 0 inspector and a **Phase 1 interactive semantic TUI prototype**:
+This repository contains the validated Phase 0 inspector, Phase 1 interactive prototype, and the **Phase 2A cross-toolkit semantic contract** validated with GTK4 and Qt6:
 
 ```text
 GUI application
@@ -24,12 +24,13 @@ AT-SPI action → original GUI
 
 It does not reconstruct GUI pixels or map GUI screen coordinates into terminal coordinates. It also does not contain raster capture, a Wayland compositor, or SSH session plumbing.
 
-## Phase 1 prototype
+## Interactive prototype
 
-Run the semantic TUI against one accessible application:
+Run the semantic TUI against one accessible application, or omit `--app` to use the application selector:
 
 ```bash
 gui2tui --app gui2tui-live-fixture
+gui2tui
 ```
 
 The first prototype provides:
@@ -40,8 +41,10 @@ The first prototype provides:
 - terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
 - arrow, PageUp/PageDown, and mouse-wheel scrolling with focus auto-scroll;
 - manual `r` refresh and automatic snapshot refresh after successful actions;
-- non-fatal stale-object/application-gone status messages; and
-- password redaction before data reaches the TUI renderer.
+- non-fatal stale-object/application-gone status messages;
+- password redaction before data reaches the TUI renderer;
+- role-aware action resolution with no implicit first-action fallback; and
+- explicit `(read-only)` presentation for focusable controls without a compatible advertised action.
 
 Text input editing and AT-SPI event subscriptions are deliberately not implemented.
 
@@ -92,9 +95,10 @@ The AT-SPI implementation is pure Rust and uses D-Bus through `zbus`; it does no
 
 ### Interactive TUI
 
-The Phase 1 prototype currently requires `--app`:
+Open a named application directly or select one interactively:
 
 ```bash
+gui2tui
 gui2tui --app gui2tui-live-fixture
 gui2tui --app gtk4-demo --max-depth 20 --max-nodes 2000
 ```
@@ -156,7 +160,7 @@ gui2tui-inspect --action 'atspi1_...' --index 0
 gui2tui-inspect --action-name 'atspi1_...' click
 ```
 
-`--action-name` first uses an exact action-name match, then an ASCII case-insensitive match. Duplicate matches are rejected. `--activate` prefers actions named `press`, `click`, `activate`, or `open`, in that order, and otherwise invokes the first advertised action.
+`--action-name` first uses an exact action-name match, then an ASCII case-insensitive match. Duplicate matches are rejected. `--activate` accepts only advertised actions named `click`, `press`, or `activate`, in that order. It reports an error and the available actions when none is compatible; it never invokes an arbitrary first action.
 
 `--activate` is a convenience heuristic. For deterministic automation use `--action` or `--action-name`; both operate directly on AT-SPI's advertised actions and do not infer behavior from the semantic role.
 
@@ -244,6 +248,16 @@ gui2tui --app gui2tui-live-fixture
 
 The fixture intentionally contains a normal entry with value `alice`, a password entry with a sentinel secret that must never appear in inspector or TUI output, a checkbox, and a button that changes both a status label and checkbox state. Tab to `Activate safely` and press Enter, or click its terminal hit region; the refreshed TUI should show a checked checkbox and `Status: activated`.
 
+A corresponding Qt6 fixture is provided for cross-toolkit validation (Ubuntu package: `python3-pyqt6`):
+
+```bash
+QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1 python3 tests/fixtures/qt6_live_fixture.py
+gui2tui-inspect --app gui2tui-qt-fixture --verbose
+gui2tui --app gui2tui-qt-fixture
+```
+
+The validated headless session set `org.a11y.Status.IsEnabled` and `ScreenReaderEnabled` before restarting Qt. See [the compatibility matrix](docs/compatibility.md) and [semantic contract](docs/semantic-contract.md) for the exact observed GTK4/Qt6 data.
+
 ## Current limitations
 
 - This is a synchronous snapshot traversal, not an event-driven cache. The UI can change while it is being read.
@@ -251,25 +265,26 @@ The fixture intentionally contains a normal entry with value `alice`, a password
 - Role mapping is intentionally conservative; known but unmapped AT-SPI roles become `Unknown(original-role)`.
 - Text values are read only for ordinary entry-like roles, capped at 256 characters. Password text is intentionally not read.
 - Numeric values are read for sliders, progress/level bars, and spin buttons.
-- `--activate` is a heuristic convenience; use an explicit action index when correctness matters.
-- The basic GTK4 tree/action path and the bundled fixture have been exercised manually on Linux. Broad GTK3, Qt, Firefox, Chromium, and Electron compatibility is still unverified.
+- `--activate` is a conservative heuristic convenience; use explicit `--action-name` or `--action --index` when correctness matters.
+- GTK4 and Qt6 fixture tree/action/TUI paths have been exercised on Linux/Xvfb. Broad GTK3, Firefox, Chromium, and Electron compatibility is still unverified.
 - TextInput editing, selection, cursor synchronization, IME, and clipboard integration are not implemented.
 - There is no AT-SPI event cache, runtime identity reconciliation, raster fallback, compositor, or SSH integration yet.
-- The first version requires `gui2tui --app NAME`; an in-TUI application selector is not implemented.
+- Menu roles remain read-only summaries and AT-SPI Selection is not implemented.
 
 ## Roadmap
 
 ```text
 Phase 0  AT-SPI inspector                         ✓ validated
-Phase 1  Interactive semantic TUI prototype       ← current
-Phase 2  Event cache + richer semantic controls
-Phase 3  GTK + Qt compatibility
+Phase 1  Interactive semantic TUI prototype       ✓ validated
+Phase 2A GTK + Qt semantic contract               ✓ validated
+Phase 2B Selection/menu/editing/event research    next
+Phase 3  Event cache + richer semantic controls
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration
 ```
 
-Qt and browser compatibility remain separate coverage gates for Phases 3 and 4. The Phase 1 renderer remains semantic-first and does not consume AT-SPI geometry for layout.
+Browser compatibility remains a later coverage gate. The renderer remains semantic-first and does not consume AT-SPI geometry for layout.
 
 ## License
 
