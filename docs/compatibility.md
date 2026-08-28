@@ -24,6 +24,11 @@ Validated on 2026-08-28 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5
 | Keyboard TUI loop | PASS | PASS | N/A |
 | Mouse TUI loop | PASS (automated SGR input) | PASS (automated SGR input) | N/A |
 | Application-gone handling | PASS | PASS | NOT TESTED |
+| Raw event watcher | PASS | PASS (including Qt-compatible property body) | PASS |
+| Incremental button update | PASS: 13 nodes / 31 ms | PASS: 2 nodes / 3 ms | PASS: 5 nodes / 212 ms on 5,158-node tree |
+| Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED |
+| Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected |
+| ComboBox semantic role | NOT TESTED | NOT TESTED | PASS read-only mapping |
 
 ## Qt accessibility activation
 
@@ -52,11 +57,14 @@ After restarting the Qt fixture, `GetAll org.a11y.Status` returned both properti
 | Chrome large fixture, 250 generated rows | 2,002 | 2.152 / 2.238 / 2.263 s |
 | Chrome large fixture, 700 generated rows | 5,152 | 5.925 / 5.929 / 5.941 s |
 
-The GTK/Qt entries are single observations, while every Chrome scale row is three complete
+The GTK/Qt snapshot entries are single observations, while every Chrome scale row is three complete
 inspector traversals. These are development measurements rather than a benchmark. No transient
 object error was printed during the recorded scale runs. Chrome's roughly linear multi-second
 cost above 2,000 nodes and verified locator churn are evidence for opening the event-cache design
-gate; no event cache is implemented in this phase.
+gate. Phase 2C subsequently validated the common event cache. A repeat run of the 700-row fixture
+printed 5,158 nodes in 5.595 s; its local checkbox/status mutation then refreshed only five backend
+nodes in 212 ms with zero additional full snapshots. Add/remove 100 controls refreshed 103/3 nodes
+in 161/21 ms respectively.
 
 ## Browser environment and caveat
 

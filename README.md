@@ -4,7 +4,8 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
-This repository contains the validated Phase 0 inspector, Phase 1 interactive prototype, Phase 2A cross-toolkit contract, and the **Phase 2B container-semantics prototype** validated with GTK4, Qt6, and a Chrome scale probe:
+This repository contains the validated inspector, cross-toolkit semantic TUI, container operations,
+and the **Phase 2C event-driven semantic cache** validated with GTK4, Qt6, and Chrome:
 
 ```text
 GUI application
@@ -13,7 +14,7 @@ GUI application
       ↓
 Accessibility tree
       ↓
-Semantic snapshot
+Initial semantic snapshot / live semantic cache
       ↓
 Terminal-native view model
       ↓
@@ -40,7 +41,7 @@ The first prototype provides:
 - Enter/Space dispatch through semantic Activate, Toggle, Select, and OpenMenu operations;
 - terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
 - arrow, PageUp/PageDown, and mouse-wheel scrolling with focus auto-scroll;
-- manual `r` refresh and automatic snapshot refresh after successful actions;
+- event-driven incremental node/subtree refresh, with manual `r` full-snapshot fallback;
 - non-fatal stale-object/application-gone status messages;
 - password redaction before data reaches the TUI renderer;
 - role-aware action resolution with no implicit first-action fallback; and
@@ -48,7 +49,8 @@ The first prototype provides:
 - terminal-native Menu/MenuItem presentation with distinct OpenMenu and leaf Activate intents;
 - explicit `(read-only)` presentation for focusable controls without a compatible advertised action.
 
-Text input editing and AT-SPI event subscriptions are deliberately not implemented.
+Text input editing is deliberately not implemented. The raw normalized stream can be inspected with
+`gui2tui-inspect --watch-events --app NAME`.
 
 ## Phase 0 capabilities
 
@@ -64,7 +66,13 @@ Text input editing and AT-SPI event subscriptions are deliberately not implement
 ## Architecture
 
 ```text
-src/backend/atspi.rs       AT-SPI connection, traversal, and action calls
+src/backend/atspi.rs       AT-SPI traversal, event subscription, and operations
+           │
+           ▼
+src/events.rs              normalized events + dirty-scope coalescing
+           │
+           ▼
+src/semantic/cache.rs      single-owner live tree + identity reconciliation
            │
            ▼
 src/semantic/              SemanticNode + BackendLocator + RuntimeNodeId
@@ -81,10 +89,12 @@ Inspector formatter                    │
                          SelectionStrategy / action resolver
                                        ▼
                              BackendOperation dispatch
-                                       └──→ backend action → refreshed snapshot
+                                       └──→ GUI event → incremental cache update
 ```
 
-Neither frontend holds AT-SPI proxies. `BackendLocator` retains the ephemeral D-Bus identity needed to reach the original GUI object; compact `RuntimeNodeId` values are regenerated for each snapshot and are used only for focus, widget identity, and terminal hit testing.
+Neither frontend holds AT-SPI proxies. `BackendLocator` retains the ephemeral D-Bus identity needed
+to reach the original GUI object; compact `RuntimeNodeId` values remain stable for the current
+`SemanticCache` session and are used for focus, widget identity, and terminal hit testing.
 
 ## Build
 
@@ -147,6 +157,7 @@ Inspect an application:
 gui2tui-inspect --app firefox
 gui2tui-inspect --app-id 1
 gui2tui-inspect --app firefox --verbose
+gui2tui-inspect --watch-events --app firefox
 ```
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
@@ -196,7 +207,8 @@ Set `RUST_LOG=debug` for backend diagnostics. Warnings caused by objects disappe
 The semantic IR uses two identities:
 
 - `BackendLocator`: the versioned locator encoded as `atspi1_...`; it contains the AT-SPI unique bus name and object path and can relocate a live GUI object.
-- `RuntimeNodeId`: a compact `u64` allocated while building one snapshot; it is used by focus, renderer state, and mouse hit testing.
+- `RuntimeNodeId`: a compact `u64` owned by one live semantic-cache session; it is used by focus,
+  renderer state, and mouse hit testing.
 
 The backend locator is a URL-safe Base64 encoding of:
 
@@ -204,7 +216,11 @@ The backend locator is a URL-safe Base64 encoding of:
 AT-SPI unique D-Bus bus name NUL D-Bus object path
 ```
 
-The locator is stable across separate processes while the original object remains alive, but does **not** survive application restarts. `RuntimeNodeId` is intentionally snapshot-local and may be reassigned after every refresh. The locator encoding is reversible, not secret or cryptographic.
+The locator is stable across separate processes while the original object remains alive, but does
+**not** survive application restarts. Exact locators retain their runtime ID during incremental
+updates. A changed locator is reconciled only by an unambiguous sibling-local fingerprint; an
+ambiguous replacement receives a new ID. Application restart always starts a new identity session.
+The locator encoding is reversible, not secret or cryptographic.
 
 ## Environment requirements
 
@@ -258,7 +274,9 @@ gui2tui-inspect --app gui2tui-live-fixture --verbose
 gui2tui --app gui2tui-live-fixture
 ```
 
-The fixture intentionally contains a normal entry with value `alice`, a password entry with a sentinel secret that must never appear in inspector or TUI output, a checkbox, and a button that changes both a status label and checkbox state. Tab to `Activate safely` and press Enter, or click its terminal hit region; the refreshed TUI should show a checked checkbox and `Status: activated`.
+The fixture intentionally contains a normal entry, a password sentinel that must never appear in
+output, a checkbox, a safe activation button, and a selectable list. Actions update the original
+GUI; emitted events incrementally update the terminal view.
 
 A corresponding Qt6 fixture is provided for cross-toolkit validation (Ubuntu package: `python3-pyqt6`):
 
@@ -280,11 +298,15 @@ AT-SPI, and both fixtures, then checks discovery, password redaction, and safe b
 It requires the GTK4/PyGObject and PyQt6 fixture dependencies and is intentionally not part of
 the default CI. Browser probing is also optional because it installs a large external package;
 the exact Chrome 152 observations are recorded in [browser-probe.md](docs/browser-probe.md).
+The raw-to-normalized event contract and measured incremental results are in
+[events.md](docs/events.md).
 
 ## Current limitations
 
-- This is a synchronous snapshot traversal, not an event-driven cache. The UI can change while it is being read.
-- Backend locators remain valid only for the lifetime of their backing accessible object; runtime IDs last only for one snapshot.
+- Initial loading still performs a synchronous full traversal; Chrome's 5,158-node fixture takes
+  several seconds before the event-driven cache becomes available.
+- Backend locators remain valid only for their accessible object's lifetime. Conservative runtime
+  reconciliation intentionally drops identity when sibling fingerprints are ambiguous.
 - Role mapping is intentionally conservative; known but unmapped AT-SPI roles become `Unknown(original-role)`.
 - Text values are read only for ordinary entry-like roles, capped at 256 characters. Password text is intentionally not read.
 - Numeric values are read for sliders, progress/level bars, and spin buttons.
@@ -293,10 +315,10 @@ the exact Chrome 152 observations are recorded in [browser-probe.md](docs/browse
   password, explicit action, scaling, and locator churn were probed; Firefox/Electron and broad
   browser interaction remain unverified.
 - TextInput editing, selection, cursor synchronization, IME, and clipboard integration are not implemented.
-- There is no AT-SPI event cache, runtime identity reconciliation, raster fallback, compositor, or SSH integration yet.
+- There is no EditableText implementation, virtualized collection backend, raster fallback,
+  compositor, or SSH integration yet.
 - List selection currently supports a compatible item action or direct-child selection through a
-  parent Selection interface. Multi-selection/deselection and the AT-SPI Selection event stream
-  are not implemented.
+  parent Selection interface. Multi-selection/deselection is not implemented.
 - Menu OpenMenu/leaf Activate are separated, but hierarchy navigation, Escape/back, and focus
   trapping are not implemented.
 - Some Chrome 152 web controls advertise only anonymous AT-SPI actions. Explicit inspector index
@@ -309,16 +331,16 @@ Phase 0  AT-SPI inspector                         ✓ validated
 Phase 1  Interactive semantic TUI prototype       ✓ validated
 Phase 2A GTK + Qt semantic contract               ✓ validated
 Phase 2B Container selection/menu + browser probe ✓ validated
-Phase 2C Event architecture + identity research  next
-Phase 3  Event cache + richer semantic controls
+Phase 2C Event stream + incremental semantic cache ✓ validated
+Phase 3  EditableText + richer semantic controls
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration
 ```
 
-The Phase 2B browser scale/churn data opens the design gate for an event-driven cache; the cache
-itself remains unimplemented. The renderer remains semantic-first and does not consume AT-SPI
-geometry for layout.
+The renderer remains semantic-first and does not consume AT-SPI geometry for layout. Full snapshot
+refresh remains a correctness escape hatch when an event cannot be resolved or a cache invariant
+fails.
 
 ## License
 

@@ -2,11 +2,13 @@
 
 This document records behavior observed in the Ubuntu 24.04 arm64 Xvfb test session on 2026-08-28. It is a compatibility record, not a list of assumed toolkit behavior.
 
-## Identity and snapshots
+## Identity and live cache
 
 - `BackendLocator` is the encoded AT-SPI unique bus name plus object path. It can relocate an object only while that object and application bus name remain alive.
-- `RuntimeNodeId(u64)` is unique inside one semantic snapshot and is regenerated on refresh.
-- Focus recovery after refresh matches the previous `BackendLocator`; cross-refresh runtime identity reconciliation is not implemented.
+- `RuntimeNodeId(u64)` is unique and stable inside one `SemanticCache` session.
+- Exact `BackendLocator` matches preserve runtime identity during node/subtree refresh.
+- Locator churn reconciles only a unique sibling-local `(role, name, TextInputKind)` fingerprint.
+  Ambiguous replacements receive new IDs. Application restart always creates a new session.
 
 ## Input secrecy
 
@@ -27,6 +29,7 @@ Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` 
 | Label | role `label`; GTK exposes text-oriented actions on some labels | role `label`; no advertised actions in fixture | non-focusable text; label actions are ignored by the TUI |
 | List | GTK4 demo: role `list`, `Selection` interface | Qt6: role `list`, `Table` interface, no Action interface | group heading; container capability is retained outside the renderer |
 | ListItem | GTK4 demo: role `list item`, action `listitem.scroll-to`; selected through the parent | Qt6: role `list item`, action `Toggle`; Toggle set `selected` | focusable/selectable; selected `*` and keyboard focus `>` are independent |
+| ComboBox | NOT TESTED | NOT TESTED | mapped from `combo box`; focusable read-only `[ label ▼ ]` unless a future verified operation exists |
 | MenuBar | not tested in bundled GTK fixture | role `menu bar`, Action interface, no advertised action | `Menu:` heading |
 | Menu | not tested in bundled GTK fixture | popup role `popup menu` mapped to Menu | terminal-native menu heading |
 | MenuItem | not tested in bundled GTK fixture | top item `ShowMenu`; leaf `Press` changed the fixture label to `Status: menu activated` | `ShowMenu` becomes OpenMenu; leaf `Press` becomes Activate |
@@ -81,8 +84,16 @@ container capabilities. The renderer does not know about AT-SPI Selection.
 - `MenuItem + ShowMenu` resolves only as `OpenMenu`.
 - `MenuItem + Press` resolves only as `Activate`.
 - `ShowMenu` is never accepted as an Activate fallback, and no first action is invoked.
-- After OpenMenu or Activate, GUI2TUI waits for the GUI event loop and reads a new snapshot;
-  popup visibility and contents always come from the application.
+- After OpenMenu or Activate, GUI2TUI primarily consumes GUI events and refreshes their dirty
+  node/subtree. Popup visibility and contents always come from the application; timeout or
+  inconsistency falls back to a full snapshot.
+
+## Event contract
+
+Raw AT-SPI event types normalize without toolkit names. State/property/text changes dirty one node;
+selection/children/active-descendant changes dirty a container subtree; lifecycle and unresolved
+events use the application fallback. A 40 ms window coalesces each burst. The single cache owner is
+the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome sequences.
 
 ## Known semantic gaps
 
@@ -92,4 +103,5 @@ container capabilities. The renderer does not know about AT-SPI Selection.
 - Menu keyboard hierarchy, Escape/back behavior, and popup focus trapping are not implemented; the current model opens the real menu and refreshes its semantic snapshot.
 - Chrome 152 on Linux arm64 returned two completely unnamed AT-SPI actions for web controls. Explicit `--action --index 0` worked on the controlled fixture, but the semantic resolver correctly refuses an anonymous action.
 - Text inputs are presentation/focus-only. `EditableText` operations are not implemented.
-- Event subscriptions and incremental cache mutation are not implemented.
+- `manages-descendants` and ActiveDescendant events are retained, but virtualized collection
+  traversal is LIMITED SUPPORT.

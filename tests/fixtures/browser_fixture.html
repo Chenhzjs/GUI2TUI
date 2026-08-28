@@ -41,6 +41,14 @@
     </div>
   </section>
 
+  <section aria-label="Ambiguous identity controls">
+    <button id="replace-duplicates">Replace duplicate subtree</button>
+    <div id="duplicates">
+      <button>Duplicate</button>
+      <button>Duplicate</button>
+    </div>
+  </section>
+
   <section aria-label="Dynamic tree controls">
     <button id="add-items">Add 100 items</button>
     <button id="remove-items">Remove 100 items</button>
@@ -64,6 +72,14 @@
       replacement.setAttribute('aria-label', 'Churn target');
       replacement.textContent = 'Churn target';
       document.querySelector('#replaceable').replaceChildren(replacement);
+    };
+
+    document.querySelector('#replace-duplicates').onclick = () => {
+      const first = document.createElement('button');
+      const second = document.createElement('button');
+      first.textContent = 'Duplicate';
+      second.textContent = 'Duplicate';
+      document.querySelector('#duplicates').replaceChildren(first, second);
     };
 
     document.querySelector('#add-items').onclick = () => {

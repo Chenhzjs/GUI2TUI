@@ -7,12 +7,19 @@
 <body>
   <h1>GUI2TUI Browser Large Fixture</h1>
   <p id="summary"></p>
+  <label><input id="feature" type="checkbox" aria-label="Large feature"> Large feature</label>
+  <button id="mutate">Mutate local state</button>
+  <div id="status" role="status">Large status: idle</div>
   <main id="content"></main>
   <script>
     const requested = Number(new URLSearchParams(location.search).get('count') || 25);
     const count = Number.isFinite(requested) ? Math.max(0, Math.min(requested, 2000)) : 25;
     document.querySelector('#summary').textContent = `Generated rows: ${count}`;
     const content = document.querySelector('#content');
+    document.querySelector('#mutate').onclick = () => {
+      document.querySelector('#feature').checked = true;
+      document.querySelector('#status').textContent = 'Large status: activated';
+    };
     const fragment = document.createDocumentFragment();
     for (let index = 0; index < count; index += 1) {
       const section = document.createElement('section');

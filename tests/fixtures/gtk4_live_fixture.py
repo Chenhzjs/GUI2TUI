@@ -55,6 +55,23 @@ class LiveFixture(Gtk.Application):
         activate.connect("clicked", on_activate)
         content.append(activate)
 
+        items = Gtk.StringList.new(["Alpha", "Beta", "Gamma"])
+        selection = Gtk.SingleSelection.new(items)
+        factory = Gtk.SignalListItemFactory()
+        factory.connect(
+            "setup",
+            lambda _factory, list_item: list_item.set_child(Gtk.Label()),
+        )
+        factory.connect(
+            "bind",
+            lambda _factory, list_item: list_item.get_child().set_label(
+                list_item.get_item().get_string()
+            ),
+        )
+        item_list = Gtk.ListView.new(selection, factory)
+        item_list.update_property([Gtk.AccessibleProperty.LABEL], ["Demo items"])
+        content.append(item_list)
+
         window.set_child(content)
         window.present()
 
