@@ -25,29 +25,71 @@ Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` 
 | TextInput (password) | role `password text`, value suppressed | role `password text`, value suppressed | focusable, `[password]`, no activation capability |
 | CheckBox | role `check box`, no actions in the fixture | role `check box`, actions `Toggle`, `SetFocus` | checked state comes from snapshot; Toggle only when `toggle`, `click`, or `press` is advertised |
 | Label | role `label`; GTK exposes text-oriented actions on some labels | role `label`; no advertised actions in fixture | non-focusable text; label actions are ignored by the TUI |
-| List | GTK4 demo: role `list`, `Selection` interface, list-level select actions | Qt6: role `list`, `Table` interface, no Action interface | read-only group heading |
-| ListItem | GTK4 demo: role `list item`, action `listitem.scroll-to` | Qt6: role `list item`, action `Toggle`; Toggle set `selected` | focusable; accepts `select`, `toggle`, `activate`, `click`; other actions remain unavailable |
-| MenuBar | not tested in bundled GTK fixture | role `menu bar`, Action interface, no advertised action | read-only unsupported summary |
-| Menu | not tested in bundled GTK fixture | popup role `popup menu` mapped to Menu | read-only unsupported summary |
-| MenuItem | not tested in bundled GTK fixture | top item action `ShowMenu`; leaf `Press` changed the fixture label to `Status: menu activated` | currently read-only; full menu navigation is not implemented |
+| List | GTK4 demo: role `list`, `Selection` interface | Qt6: role `list`, `Table` interface, no Action interface | group heading; container capability is retained outside the renderer |
+| ListItem | GTK4 demo: role `list item`, action `listitem.scroll-to`; selected through the parent | Qt6: role `list item`, action `Toggle`; Toggle set `selected` | focusable/selectable; selected `*` and keyboard focus `>` are independent |
+| MenuBar | not tested in bundled GTK fixture | role `menu bar`, Action interface, no advertised action | `Menu:` heading |
+| Menu | not tested in bundled GTK fixture | popup role `popup menu` mapped to Menu | terminal-native menu heading |
+| MenuItem | not tested in bundled GTK fixture | top item `ShowMenu`; leaf `Press` changed the fixture label to `Status: menu activated` | `ShowMenu` becomes OpenMenu; leaf `Press` becomes Activate |
 
 Action-name comparisons in the TUI are ASCII case-insensitive because GTK and Qt expose different capitalization. The selected action must still be in the role-specific compatibility list.
 
 ## Interaction capability
 
-`InteractionCapability` is derived from both the semantic role and the actions advertised in the current snapshot:
+`InteractionCapability` is derived from the semantic role, advertised node actions, parent
+capabilities, and the node's relationship to its parent:
 
 - `None`: focus may still be allowed, but Enter/Space and mouse activation report `No compatible semantic action for "…"`.
 - `Activate`: a compatible activation action is available.
 - `Toggle`: a compatible toggle action is available.
+- `Select`: either a compatible list-item action exists or its direct parent can select children.
+- `OpenMenu`: the menu item advertises a compatible show-menu action.
 
 The TUI never invokes `actions[0]` as a fallback and never mutates checked/selected state locally. Explicit inspector commands `--action-name` and `--action --index` remain available as low-level APIs.
 
+## Container selection contract
+
+Selection establishes an explicit boundary between user meaning and backend mechanics:
+
+```text
+UiIntent::Select
+        ↓
+SemanticOperation::SelectNode(RuntimeNodeId)
+        ↓
+SelectionStrategy
+   ┌────┴──────────────────────────┐
+   │                               │
+node advertises compatible     parent advertises
+action                         SelectChildren
+   │                               │
+InvokeAction(locator, name)    SelectChild(parent locator,
+                              original direct-child index)
+```
+
+The Ubuntu live tests exercised both branches without inspecting toolkit names:
+
+- GTK4 demo: a ListItem's own `listitem.scroll-to` action was rejected as a selection action;
+  the parent List's AT-SPI `Selection.select_child(index)` selected the item.
+- Qt6 fixture: the ListItem's own `Toggle` action selected it. The semantic operation remained
+  `Select`; the toolkit action name did not turn the item into a toggle control.
+
+`SemanticNode.index_in_parent` preserves the index from the backend's original direct-child
+array. `TuiViewModel` indexes `RuntimeNodeId` to parent ID, child index, backend locator, and
+container capabilities. The renderer does not know about AT-SPI Selection.
+
+## Menu intent contract
+
+- `MenuItem + ShowMenu` resolves only as `OpenMenu`.
+- `MenuItem + Press` resolves only as `Activate`.
+- `ShowMenu` is never accepted as an Activate fallback, and no first action is invoked.
+- After OpenMenu or Activate, GUI2TUI waits for the GUI event loop and reads a new snapshot;
+  popup visibility and contents always come from the application.
+
 ## Known semantic gaps
 
-- GTK4 list selection is exposed primarily through the `Selection` interface; no Selection backend exists yet.
-- GTK4 demo list-item actions such as `listitem.scroll-to` and nested expansion actions are intentionally not treated as generic activation.
-- Qt6 `QListWidgetItem.Toggle` selects an item, but this name may represent different toolkit-specific behavior elsewhere and must continue to be role-scoped.
-- Qt6 menus expose enough structure for inspection, but popup navigation and menu visibility state need a dedicated TUI model.
+- Multi-selection, deselection, Selection child enumeration, and SelectionChanged events are not implemented.
+- GTK4 demo list-item actions such as `listitem.scroll-to` and nested expansion actions remain intentionally excluded from generic activation.
+- Qt6 `QListWidgetItem.Toggle` is accepted only for the ListItem Select operation; it is not a global alias.
+- Menu keyboard hierarchy, Escape/back behavior, and popup focus trapping are not implemented; the current model opens the real menu and refreshes its semantic snapshot.
+- Chrome 152 on Linux arm64 returned two completely unnamed AT-SPI actions for web controls. Explicit `--action --index 0` worked on the controlled fixture, but the semantic resolver correctly refuses an anonymous action.
 - Text inputs are presentation/focus-only. `EditableText` operations are not implemented.
 - Event subscriptions and incremental cache mutation are not implemented.

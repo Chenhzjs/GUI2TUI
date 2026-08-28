@@ -4,7 +4,7 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
-This repository contains the validated Phase 0 inspector, Phase 1 interactive prototype, and the **Phase 2A cross-toolkit semantic contract** validated with GTK4 and Qt6:
+This repository contains the validated Phase 0 inspector, Phase 1 interactive prototype, Phase 2A cross-toolkit contract, and the **Phase 2B container-semantics prototype** validated with GTK4, Qt6, and a Chrome scale probe:
 
 ```text
 GUI application
@@ -37,13 +37,15 @@ The first prototype provides:
 
 - terminal-native representations for labels, text, buttons, toggle buttons, checkboxes, read-only text inputs, lists, and list items;
 - visible keyboard focus with Tab and Shift-Tab wrapping;
-- Enter/Space action dispatch through the node's advertised semantic actions;
+- Enter/Space dispatch through semantic Activate, Toggle, Select, and OpenMenu operations;
 - terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
 - arrow, PageUp/PageDown, and mouse-wheel scrolling with focus auto-scroll;
 - manual `r` refresh and automatic snapshot refresh after successful actions;
 - non-fatal stale-object/application-gone status messages;
 - password redaction before data reaches the TUI renderer;
 - role-aware action resolution with no implicit first-action fallback; and
+- list selection through either a node action or its parent's AT-SPI Selection interface;
+- terminal-native Menu/MenuItem presentation with distinct OpenMenu and leaf Activate intents;
 - explicit `(read-only)` presentation for focusable controls without a compatible advertised action.
 
 Text input editing and AT-SPI event subscriptions are deliberately not implemented.
@@ -71,10 +73,15 @@ src/semantic/              SemanticNode + BackendLocator + RuntimeNodeId
 src/inspect.rs             src/tui/view_model.rs
 Inspector formatter                    │
                                        ▼
-                             focus / action / hit test
+                            Ratatui renderer + input
                                        │
                                        ▼
-                             Ratatui renderer + input
+                         UiIntent → SemanticOperation
+                                       │
+                         SelectionStrategy / action resolver
+                                       ▼
+                             BackendOperation dispatch
+                                       └──→ backend action → refreshed snapshot
 ```
 
 Neither frontend holds AT-SPI proxies. `BackendLocator` retains the ephemeral D-Bus identity needed to reach the original GUI object; compact `RuntimeNodeId` values are regenerated for each snapshot and are used only for focus, widget identity, and terminal hit testing.
@@ -107,7 +114,7 @@ Keys:
 
 ```text
 Tab / Shift-Tab  focus next / previous
-Enter / Space    activate or toggle the focused control
+Enter / Space    activate, toggle, select, or open the focused control
 ↑ / ↓            scroll one line
 PageUp/PageDown  scroll one page
 r                 refresh the semantic snapshot
@@ -158,11 +165,16 @@ gui2tui-inspect --actions 'atspi1_...'
 gui2tui-inspect --activate 'atspi1_...'
 gui2tui-inspect --action 'atspi1_...' --index 0
 gui2tui-inspect --action-name 'atspi1_...' click
+gui2tui-inspect --select-child 'PARENT_NODE_ID' --child-index 1
 ```
 
 `--action-name` first uses an exact action-name match, then an ASCII case-insensitive match. Duplicate matches are rejected. `--activate` accepts only advertised actions named `click`, `press`, or `activate`, in that order. It reports an error and the available actions when none is compatible; it never invokes an arbitrary first action.
 
 `--activate` is a convenience heuristic. For deterministic automation use `--action` or `--action-name`; both operate directly on AT-SPI's advertised actions and do not infer behavior from the semantic role.
+
+`--select-child` is an explicit container-level diagnostic API. It invokes the parent's AT-SPI
+Selection interface for exactly one zero-based direct-child index. Normal TUI list selection uses
+the same backend operation only after semantic relationship/capability resolution.
 
 Traversal can be bounded for very large applications:
 
@@ -258,6 +270,17 @@ gui2tui --app gui2tui-qt-fixture
 
 The validated headless session set `org.a11y.Status.IsEnabled` and `ScreenReaderEnabled` before restarting Qt. See [the compatibility matrix](docs/compatibility.md) and [semantic contract](docs/semantic-contract.md) for the exact observed GTK4/Qt6 data.
 
+The repeatable Linux smoke harness builds the project, starts a private D-Bus session, Xvfb,
+AT-SPI, and both fixtures, then checks discovery, password redaction, and safe button actions:
+
+```bash
+./scripts/live-test-linux.sh
+```
+
+It requires the GTK4/PyGObject and PyQt6 fixture dependencies and is intentionally not part of
+the default CI. Browser probing is also optional because it installs a large external package;
+the exact Chrome 152 observations are recorded in [browser-probe.md](docs/browser-probe.md).
+
 ## Current limitations
 
 - This is a synchronous snapshot traversal, not an event-driven cache. The UI can change while it is being read.
@@ -266,10 +289,18 @@ The validated headless session set `org.a11y.Status.IsEnabled` and `ScreenReader
 - Text values are read only for ordinary entry-like roles, capped at 256 characters. Password text is intentionally not read.
 - Numeric values are read for sliders, progress/level bars, and spin buttons.
 - `--activate` is a conservative heuristic convenience; use explicit `--action-name` or `--action --index` when correctness matters.
-- GTK4 and Qt6 fixture tree/action/TUI paths have been exercised on Linux/Xvfb. Broad GTK3, Firefox, Chromium, and Electron compatibility is still unverified.
+- GTK4 and Qt6 fixture tree/action/TUI paths have been exercised on Linux/Xvfb. Chrome 152 tree,
+  password, explicit action, scaling, and locator churn were probed; Firefox/Electron and broad
+  browser interaction remain unverified.
 - TextInput editing, selection, cursor synchronization, IME, and clipboard integration are not implemented.
 - There is no AT-SPI event cache, runtime identity reconciliation, raster fallback, compositor, or SSH integration yet.
-- Menu roles remain read-only summaries and AT-SPI Selection is not implemented.
+- List selection currently supports a compatible item action or direct-child selection through a
+  parent Selection interface. Multi-selection/deselection and the AT-SPI Selection event stream
+  are not implemented.
+- Menu OpenMenu/leaf Activate are separated, but hierarchy navigation, Escape/back, and focus
+  trapping are not implemented.
+- Some Chrome 152 web controls advertise only anonymous AT-SPI actions. Explicit inspector index
+  invocation works on the test fixture; the semantic TUI intentionally refuses to guess index 0.
 
 ## Roadmap
 
@@ -277,14 +308,17 @@ The validated headless session set `org.a11y.Status.IsEnabled` and `ScreenReader
 Phase 0  AT-SPI inspector                         ✓ validated
 Phase 1  Interactive semantic TUI prototype       ✓ validated
 Phase 2A GTK + Qt semantic contract               ✓ validated
-Phase 2B Selection/menu/editing/event research    next
+Phase 2B Container selection/menu + browser probe ✓ validated
+Phase 2C Event architecture + identity research  next
 Phase 3  Event cache + richer semantic controls
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration
 ```
 
-Browser compatibility remains a later coverage gate. The renderer remains semantic-first and does not consume AT-SPI geometry for layout.
+The Phase 2B browser scale/churn data opens the design gate for an event-driven cache; the cache
+itself remains unimplemented. The renderer remains semantic-first and does not consume AT-SPI
+geometry for layout.
 
 ## License
 

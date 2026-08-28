@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GUI2TUI Browser Large Fixture</title>
+</head>
+<body>
+  <h1>GUI2TUI Browser Large Fixture</h1>
+  <p id="summary"></p>
+  <main id="content"></main>
+  <script>
+    const requested = Number(new URLSearchParams(location.search).get('count') || 25);
+    const count = Number.isFinite(requested) ? Math.max(0, Math.min(requested, 2000)) : 25;
+    document.querySelector('#summary').textContent = `Generated rows: ${count}`;
+    const content = document.querySelector('#content');
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < count; index += 1) {
+      const section = document.createElement('section');
+      section.setAttribute('aria-label', `Row ${index}`);
+
+      const button = document.createElement('button');
+      button.textContent = `Button ${index}`;
+      section.append(button);
+
+      const input = document.createElement('input');
+      input.setAttribute('aria-label', `Input ${index}`);
+      input.value = `value-${index}`;
+      section.append(input);
+
+      const list = document.createElement('ul');
+      const item = document.createElement('li');
+      item.textContent = `List item ${index}`;
+      list.append(item);
+      section.append(list);
+
+      fragment.append(section);
+    }
+    content.append(fragment);
+  </script>
+</body>
+</html>
