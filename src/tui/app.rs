@@ -916,10 +916,14 @@ fn event_targets(event: &NormalizedEvent, target: &crate::semantic::BackendLocat
 }
 
 fn event_is_text_value_change(event: &NormalizedEvent) -> bool {
-    matches!(
-        event,
-        NormalizedEvent::TextChanged { .. } | NormalizedEvent::NodePropertyChanged { .. }
-    )
+    match event {
+        NormalizedEvent::TextChanged { .. } => true,
+        NormalizedEvent::NodePropertyChanged { property, .. } => {
+            let property = property.to_ascii_lowercase();
+            property.contains("value") || property.contains("text")
+        }
+        _ => false,
+    }
 }
 
 fn discard_target_echoes(
@@ -1103,6 +1107,23 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         assert!(event_targets(&events[0], &other));
+    }
+
+    #[test]
+    fn unrelated_property_change_is_not_an_edit_conflict() {
+        let locator = BackendLocator::new(":1.2", "/input");
+        assert!(!event_is_text_value_change(
+            &NormalizedEvent::NodePropertyChanged {
+                locator: locator.clone(),
+                property: "accessible-name".to_owned(),
+            }
+        ));
+        assert!(event_is_text_value_change(
+            &NormalizedEvent::NodePropertyChanged {
+                locator,
+                property: "accessible-value".to_owned(),
+            }
+        ));
     }
 
     #[test]
