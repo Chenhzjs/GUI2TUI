@@ -38,7 +38,7 @@ gui2tui
 
 The first prototype provides:
 
-- terminal-native representations for labels, text, buttons, toggle buttons, checkboxes, read-only text inputs, lists, and list items;
+- terminal-native representations for labels, text, buttons, toggle buttons, checkboxes, plain/password text inputs, lists, and list items;
 - visible keyboard focus with Tab and Shift-Tab wrapping;
 - Enter/Space dispatch through semantic Activate, Toggle, Select, and OpenMenu operations;
 - terminal-rectangle mouse hit testing for buttons and checkboxes, plus focusable text inputs/list items;
@@ -50,9 +50,12 @@ The first prototype provides:
 - role-aware action resolution with no implicit first-action fallback; and
 - list selection through either a node action or its parent's AT-SPI Selection interface;
 - terminal-native Menu/MenuItem presentation with distinct OpenMenu and leaf Activate intents;
-- explicit `(read-only)` presentation for focusable controls without a compatible advertised action.
+- explicit `(read-only)` presentation for focusable controls without a compatible advertised action; and
+- local single-line plain-text edit sessions committed atomically through AT-SPI EditableText,
+  with authoritative GUI read-back and conflict/replacement protection.
 
-Text input editing is deliberately not implemented. The raw normalized stream can be inspected with
+Password, multiline/rich-text, remote caret/selection, IME, and clipboard editing are deliberately
+not implemented. The raw normalized stream can be inspected with
 `gui2tui-inspect --watch-events --app NAME`.
 
 ## Phase 0 capabilities
@@ -130,7 +133,8 @@ Keys:
 
 ```text
 Tab / Shift-Tab  focus next / previous
-Enter / Space    activate, toggle, select, or open the focused control
+Enter            activate/select/open, or begin/commit plain-text editing
+Space            activate, toggle, or select a non-text control
 ↑ / ↓            scroll one line
 PageUp/PageDown  scroll one page
 r                 refresh the semantic snapshot
@@ -139,7 +143,10 @@ Mouse wheel       scroll
 Left click        focus; buttons/toggles/checkboxes also activate
 ```
 
-Text inputs are display/focus-only. Editing is not implemented.
+In an editable plain single-line TextInput, Enter starts a local session. Character keys,
+Left/Right, Home/End, Backspace, and Delete edit the local buffer; Enter commits and Esc cancels.
+Tab is blocked until the edit is committed or cancelled. Password and unsupported inputs remain
+read-only.
 
 ### Inspector
 
@@ -324,10 +331,13 @@ The raw-to-normalized event contract and measured incremental results are in
 - Numeric values are read for sliders, progress/level bars, and spin buttons.
 - `--activate` is a conservative heuristic convenience; use explicit `--action-name` or `--action --index` when correctness matters.
 - GTK4 and Qt6 fixture tree/action/TUI paths have been exercised on Linux/Xvfb. Chrome 152 tree,
-  password, explicit action, scaling, and locator churn were probed; Firefox/Electron and broad
-  browser interaction remain unverified.
-- TextInput editing, selection, cursor synchronization, IME, and clipboard integration are not implemented.
-- There is no EditableText implementation, virtualized collection backend, raster fallback,
+  password, explicit action, scaling, and locator churn were probed. Firefox 154 discovery, tree,
+  cache/event behavior, password safety, and EditableText rejection/read-back were also probed;
+  Electron and broad browser interaction remain unverified.
+- Plain single-line TextInput supports explicit local edit sessions and atomic AT-SPI
+  `EditableText.SetTextContents`. Remote caret/selection synchronization, IME, clipboard,
+  multiline, rich-text, and password editing are not implemented.
+- There is no virtualized collection backend, raster fallback,
   compositor, or SSH integration yet.
 - List selection currently supports a compatible item action or direct-child selection through a
   parent Selection interface. Multi-selection/deselection is not implemented.

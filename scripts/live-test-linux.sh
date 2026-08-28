@@ -112,4 +112,56 @@ PROJECT_ROOT="$project_root" TARGET_DIR="$target_dir" dbus-run-session -- bash -
     "$inspect" --app gui2tui-live-fixture | grep -q "Status: activated"
     "$inspect" --app gui2tui-qt-fixture | grep -q "Status: activated"
     echo "GTK/Qt live inspector action checks passed"
+
+    if [[ "${EDITABLE_TEXT_TEST:-0}" == 1 ]]; then
+        python3 -c "import pexpect" 2>/dev/null || {
+            echo "EDITABLE_TEXT_TEST requires python3-pexpect" >&2
+            exit 1
+        }
+        APP=gui2tui-live-fixture TABS=0 SUFFIX=-harness-gtk \
+            GUI2TUI="$TARGET_DIR/debug/gui2tui" python3 - <<"PY"
+import os
+import time
+import pexpect
+
+child = pexpect.spawn(
+    os.environ["GUI2TUI"],
+    ["--app", os.environ["APP"], "--settle-ms", "500"],
+    env=os.environ.copy(),
+    encoding=None,
+    dimensions=(34, 120),
+)
+time.sleep(1.5)
+child.send(b"\t" * int(os.environ["TABS"]) + b"\r")
+child.send(os.environ["SUFFIX"].encode())
+child.send(b"\r")
+time.sleep(1)
+child.send(b"q")
+child.expect(pexpect.EOF, timeout=5)
+PY
+        APP=gui2tui-qt-fixture TABS=2 SUFFIX=-harness-qt \
+            GUI2TUI="$TARGET_DIR/debug/gui2tui" python3 - <<"PY"
+import os
+import time
+import pexpect
+
+child = pexpect.spawn(
+    os.environ["GUI2TUI"],
+    ["--app", os.environ["APP"], "--settle-ms", "500"],
+    env=os.environ.copy(),
+    encoding=None,
+    dimensions=(34, 120),
+)
+time.sleep(1.5)
+child.send(b"\t" * int(os.environ["TABS"]) + b"\r")
+child.send(os.environ["SUFFIX"].encode())
+child.send(b"\r")
+time.sleep(1)
+child.send(b"q")
+child.expect(pexpect.EOF, timeout=5)
+PY
+        "$inspect" --app gui2tui-live-fixture | grep -q "alice-harness-gtk"
+        "$inspect" --app gui2tui-qt-fixture | grep -q "alice-harness-qt"
+        echo "GTK/Qt TUI EditableText checks passed"
+    fi
 '

@@ -9,6 +9,7 @@ use crate::semantic::RuntimeNodeId;
 
 use super::{
     action::InteractionCapability,
+    edit::EditSession,
     hit_test::{HitInteraction, HitRegion},
     view_model::{TuiElement, TuiElementKind, TuiViewModel},
 };
@@ -19,6 +20,7 @@ pub struct RenderContext<'a> {
     pub scroll_offset: u16,
     pub status: &'a str,
     pub application_available: bool,
+    pub edit_session: Option<&'a EditSession>,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
@@ -64,7 +66,7 @@ fn render_elements(
 
     for element in &context.view.elements {
         let focused = context.focused == Some(element.runtime_id);
-        let lines = element_lines(element, focused);
+        let lines = element_lines_for_width(element, focused, context.edit_session, area.width);
         let mut first_y = None;
         let mut visible_height = 0_u16;
 
@@ -121,6 +123,15 @@ fn interaction(element: &TuiElement) -> Option<HitInteraction> {
 }
 
 pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
+    element_lines_for_width(element, focused, None, u16::MAX)
+}
+
+fn element_lines_for_width(
+    element: &TuiElement,
+    focused: bool,
+    edit_session: Option<&EditSession>,
+    width: u16,
+) -> Vec<String> {
     let marker = if focused { "> " } else { "  " };
     let unavailable = if element.capability == InteractionCapability::None {
         "  (read-only)"
@@ -139,11 +150,18 @@ pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
             "{marker}[{}] {label}{unavailable}",
             if *checked { "x" } else { " " },
         )],
-        TuiElementKind::TextInput { label, display } => {
-            vec![
-                format!("{marker}{label}{unavailable}"),
-                format!("    > {display}"),
-            ]
+        TuiElementKind::TextInput { label, display, .. } => {
+            if let Some(session) = edit_session.filter(|edit| edit.target == element.runtime_id) {
+                vec![
+                    format!("{marker}{label}  [editing]"),
+                    format!("    > {}", edit_buffer_window(session, width)),
+                ]
+            } else {
+                vec![
+                    format!("{marker}{label}{unavailable}"),
+                    format!("    > {display}"),
+                ]
+            }
         }
         TuiElementKind::ComboBox { label } => {
             vec![format!("{marker}[ {label} ▼ ]{unavailable}")]
@@ -164,6 +182,22 @@ pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
             None => format!("  <Unsupported: {role}>"),
         }],
     }
+}
+
+fn edit_buffer_window(session: &EditSession, width: u16) -> String {
+    let available = usize::from(width.saturating_sub(7)).max(1);
+    let characters: Vec<char> = session.buffer.text().chars().collect();
+    let cursor = session.buffer.cursor().min(characters.len());
+    let start = cursor.saturating_sub(available / 2);
+    let end = (start + available.saturating_sub(1)).min(characters.len());
+    let mut rendered: String = characters[start..end].iter().collect();
+    let local_cursor = cursor.saturating_sub(start).min(rendered.chars().count());
+    let byte = rendered
+        .char_indices()
+        .nth(local_cursor)
+        .map_or(rendered.len(), |(index, _)| index);
+    rendered.insert(byte, '|');
+    rendered
 }
 
 #[cfg(test)]
@@ -243,5 +277,26 @@ mod tests {
             element_lines(&checkbox, true),
             vec!["> [ ] Enabled  (read-only)"]
         );
+    }
+
+    #[test]
+    fn edit_buffer_renders_a_non_color_cursor_and_horizontal_window() {
+        let mut input = element(TuiElementKind::TextInput {
+            label: "Username".to_owned(),
+            display: "alice".to_owned(),
+            input_kind: crate::semantic::TextInputKind::Plain,
+        });
+        input.semantic_role = crate::semantic::SemanticRole::TextInput;
+        input.capability = InteractionCapability::EditText;
+        let session = EditSession::new(
+            input.runtime_id,
+            input.backend_locator.clone(),
+            "abcdefghijklmnopqrstuvwxyz".to_owned(),
+            1,
+        );
+        let lines = element_lines_for_width(&input, true, Some(&session), 18);
+        assert_eq!(lines[0], "> Username  [editing]");
+        assert!(lines[1].contains('|'));
+        assert!(lines[1].len() < 24);
     }
 }

@@ -7,12 +7,13 @@ use super::{
     view_model::TuiViewModel,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SemanticOperation {
     ActivateNode(RuntimeNodeId),
     ToggleNode(RuntimeNodeId),
     SelectNode(RuntimeNodeId),
     OpenMenu(RuntimeNodeId),
+    ReplaceText { target: RuntimeNodeId, text: String },
 }
 
 impl SemanticOperation {
@@ -26,21 +27,23 @@ impl SemanticOperation {
         }
     }
 
-    fn runtime_id(self) -> RuntimeNodeId {
+    fn runtime_id(&self) -> RuntimeNodeId {
         match self {
             Self::ActivateNode(id)
             | Self::ToggleNode(id)
             | Self::SelectNode(id)
-            | Self::OpenMenu(id) => id,
+            | Self::OpenMenu(id) => *id,
+            Self::ReplaceText { target, .. } => *target,
         }
     }
 
-    fn intent(self) -> UiIntent {
+    fn intent(&self) -> UiIntent {
         match self {
             Self::ActivateNode(_) => UiIntent::Activate,
             Self::ToggleNode(_) => UiIntent::Toggle,
             Self::SelectNode(_) => UiIntent::Select,
             Self::OpenMenu(_) => UiIntent::OpenMenu,
+            Self::ReplaceText { .. } => UiIntent::CommitEdit,
         }
     }
 }
@@ -54,6 +57,10 @@ pub enum BackendOperation {
     SelectChild {
         container_locator: BackendLocator,
         child_index: usize,
+    },
+    SetTextContents {
+        locator: BackendLocator,
+        text: String,
     },
 }
 
@@ -85,6 +92,18 @@ pub fn resolve_backend_operation(
     let element = view
         .element(runtime_id)
         .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+
+    if let SemanticOperation::ReplaceText { text, .. } = &operation {
+        if element.capability != super::action::InteractionCapability::EditText {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "the text input is not a plain editable AT-SPI control".to_owned(),
+            ));
+        }
+        return Ok(BackendOperation::SetTextContents {
+            locator: element.backend_locator.clone(),
+            text: text.clone(),
+        });
+    }
 
     if matches!(operation, SemanticOperation::SelectNode(_)) {
         return match resolve_selection_strategy(view, runtime_id) {
@@ -245,5 +264,27 @@ mod tests {
             ),
             Err(OperationResolutionError::NoCompatibleOperation(_))
         ));
+    }
+
+    #[test]
+    fn replace_text_maps_to_an_explicit_backend_operation() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut input = node(1, SemanticRole::TextInput, "Username");
+        input.capabilities.push(SemanticCapability::EditText);
+        root.children.push(input);
+        let view = TuiViewModel::from_snapshot(&root);
+        assert_eq!(
+            resolve_backend_operation(
+                &view,
+                SemanticOperation::ReplaceText {
+                    target: RuntimeNodeId::new(1),
+                    text: "updated".to_owned(),
+                }
+            ),
+            Ok(BackendOperation::SetTextContents {
+                locator: BackendLocator::new(":1.2", "/node/1"),
+                text: "updated".to_owned(),
+            })
+        );
     }
 }

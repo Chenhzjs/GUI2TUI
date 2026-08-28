@@ -131,6 +131,12 @@ pub enum BackendError {
     SelectionIndexOutOfRange { node_id: String, index: usize },
     #[error("selection of child {index} was rejected by AT-SPI container {node_id}")]
     SelectionRejected { node_id: String, index: usize },
+    #[error("AT-SPI object {0} is not a supported editable plain-text input")]
+    TextEditUnsupported(String),
+    #[error("password editing is disabled by GUI2TUI for AT-SPI object {0}")]
+    PasswordEditDisabled(String),
+    #[error("application rejected text update for AT-SPI object {0}")]
+    TextUpdateRejected(String),
     #[error(
         "no safe convenience action was found on {node_id}\nAvailable actions:\n{available}\nUse --action-name or --action --index for explicit low-level invocation"
     )]
@@ -632,6 +638,133 @@ impl AtspiBackend {
             .await?;
         node.truncations.clear();
         Ok(node)
+    }
+
+    /// Read the complete authoritative value used to seed a local edit buffer.
+    /// Password nodes are rejected before the Text interface is accessed.
+    pub async fn read_full_editable_text(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<String, BackendError> {
+        let (encoded_id, object) = self.validate_plain_editable_text(locator).await?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for text read",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let text = atspi_operation(
+            self.operation_timeout,
+            "create Text proxy for complete edit value",
+            &encoded_id,
+            proxies.text(),
+        )
+        .await?;
+        let count = dbus_operation(
+            self.operation_timeout,
+            "read complete editable character count",
+            &encoded_id,
+            text.character_count(),
+        )
+        .await?;
+        dbus_operation(
+            self.operation_timeout,
+            "read complete editable text",
+            &encoded_id,
+            text.get_text(0, count.max(0)),
+        )
+        .await
+    }
+
+    /// Atomically replace a plain editable text control through AT-SPI.
+    pub async fn set_text_contents(
+        &self,
+        locator: &BackendLocator,
+        new_text: &str,
+    ) -> Result<(), BackendError> {
+        let (encoded_id, object) = self.validate_plain_editable_text(locator).await?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for text update",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let editable = atspi_operation(
+            self.operation_timeout,
+            "create EditableText proxy",
+            &encoded_id,
+            proxies.editable_text(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "replace editable text contents",
+            &encoded_id,
+            editable.set_text_contents(new_text),
+        )
+        .await?;
+        if accepted {
+            Ok(())
+        } else {
+            Err(BackendError::TextUpdateRejected(encoded_id))
+        }
+    }
+
+    async fn validate_plain_editable_text(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(String, ObjectRefOwned), BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "validate editable text role",
+            &encoded_id,
+            proxy.get_role(),
+        )
+        .await?;
+        if role == Role::PasswordText {
+            return Err(BackendError::PasswordEditDisabled(encoded_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "validate EditableText interfaces",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        let states = dbus_operation(
+            self.operation_timeout,
+            "validate editable state",
+            &encoded_id,
+            proxy.get_state(),
+        )
+        .await?;
+        let semantic_role =
+            SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText));
+        if semantic_role != SemanticRole::TextInput
+            || !interfaces.contains(Interface::EditableText)
+            || !interfaces.contains(Interface::Text)
+            || !states.contains(State::Editable)
+        {
+            return Err(BackendError::TextEditUnsupported(encoded_id));
+        }
+        drop(proxy);
+        Ok((encoded_id, object))
     }
 
     pub async fn refresh_subtree(
@@ -1188,7 +1321,8 @@ impl AtspiBackend {
             }
 
             let (semantic_role, text_input_kind) = semantic_role_and_input_kind(role, interfaces);
-            let capabilities = semantic_capabilities(interfaces);
+            let capabilities =
+                semantic_capabilities(interfaces, &states, semantic_role.clone(), text_input_kind);
 
             Ok(SemanticNode {
                 runtime_id,
@@ -1655,12 +1789,25 @@ fn semantic_role_and_input_kind(
     (semantic_role, input_kind)
 }
 
-fn semantic_capabilities(interfaces: atspi::InterfaceSet) -> Vec<SemanticCapability> {
+fn semantic_capabilities(
+    interfaces: atspi::InterfaceSet,
+    states: &[SemanticState],
+    role: SemanticRole,
+    input_kind: Option<TextInputKind>,
+) -> Vec<SemanticCapability> {
+    let mut capabilities = Vec::new();
     if interfaces.contains(Interface::Selection) {
-        vec![SemanticCapability::SelectChildren]
-    } else {
-        Vec::new()
+        capabilities.push(SemanticCapability::SelectChildren);
     }
+    if role == SemanticRole::TextInput
+        && input_kind == Some(TextInputKind::Plain)
+        && interfaces.contains(Interface::EditableText)
+        && interfaces.contains(Interface::Text)
+        && states.contains(&SemanticState::Editable)
+    {
+        capabilities.push(SemanticCapability::EditText);
+    }
+    capabilities
 }
 
 async fn read_geometry(
@@ -1864,10 +2011,46 @@ mod tests {
     #[test]
     fn selection_interface_maps_to_container_selection_capability() {
         assert_eq!(
-            semantic_capabilities(Interface::Selection.into()),
+            semantic_capabilities(Interface::Selection.into(), &[], SemanticRole::List, None),
             vec![SemanticCapability::SelectChildren]
         );
-        assert!(semantic_capabilities(Interface::Action.into()).is_empty());
+        assert!(
+            semantic_capabilities(Interface::Action.into(), &[], SemanticRole::Button, None)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn editable_capability_requires_plain_text_interface_and_editable_state() {
+        let mut interfaces = atspi::InterfaceSet::new(Interface::EditableText);
+        interfaces.insert(Interface::Text);
+        assert_eq!(
+            semantic_capabilities(
+                interfaces,
+                &[SemanticState::Editable],
+                SemanticRole::TextInput,
+                Some(TextInputKind::Plain)
+            ),
+            vec![SemanticCapability::EditText]
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &[SemanticState::Editable],
+                SemanticRole::TextInput,
+                Some(TextInputKind::Password)
+            )
+            .is_empty()
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &[],
+                SemanticRole::TextInput,
+                Some(TextInputKind::Plain)
+            )
+            .is_empty()
+        );
     }
 
     #[test]

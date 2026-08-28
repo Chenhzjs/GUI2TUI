@@ -192,6 +192,7 @@ fn build_node(
     context.nodes += 1;
     let record = &context.by_locator[locator];
     let (role, input_kind) = semantic_role_and_input_kind(record);
+    let capabilities = semantic_capabilities(record, &role, input_kind);
     let mut truncations = Vec::new();
     let mut semantic_children = Vec::new();
     let child_locators = context.children.get(locator).cloned().unwrap_or_default();
@@ -226,11 +227,7 @@ fn build_node(
         text_input_kind: input_kind,
         states: record.states.iter().map(SemanticState::from).collect(),
         actions: record.actions.clone(),
-        capabilities: if record.interfaces.contains(atspi::Interface::Selection) {
-            vec![SemanticCapability::SelectChildren]
-        } else {
-            Vec::new()
-        },
+        capabilities,
         children: semantic_children,
         truncations,
         debug: DebugInfo {
@@ -261,6 +258,26 @@ fn semantic_role_and_input_kind(
             TextInputKind::Plain
         });
     (role, input_kind)
+}
+
+fn semantic_capabilities(
+    record: &BulkAccessibleRecord,
+    role: &SemanticRole,
+    input_kind: Option<TextInputKind>,
+) -> Vec<SemanticCapability> {
+    let mut capabilities = Vec::new();
+    if record.interfaces.contains(atspi::Interface::Selection) {
+        capabilities.push(SemanticCapability::SelectChildren);
+    }
+    if *role == SemanticRole::TextInput
+        && input_kind == Some(TextInputKind::Plain)
+        && record.interfaces.contains(atspi::Interface::EditableText)
+        && record.interfaces.contains(atspi::Interface::Text)
+        && record.states.contains(atspi::State::Editable)
+    {
+        capabilities.push(SemanticCapability::EditText);
+    }
+    capabilities
 }
 
 #[cfg(test)]

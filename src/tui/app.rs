@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use crossterm::event::KeyEvent;
 use ratatui::Frame;
 
 use crate::{
@@ -13,9 +14,10 @@ use crate::{
 
 use super::{
     action::{InteractionCapability, UiIntent},
+    edit::{EditCommand, EditSession, key_to_edit_command},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
-    input::MouseIntent,
+    input::{MouseIntent, key_to_intent},
     operation::{BackendOperation, SemanticOperation, resolve_backend_operation},
     renderer::{RenderContext, render},
     view_model::{TuiElement, TuiElementKind, TuiViewModel},
@@ -24,6 +26,7 @@ use super::{
 pub struct TuiApplication {
     backend: AtspiBackend,
     app_selector: String,
+    application_locator: crate::semantic::BackendLocator,
     inspect_options: InspectOptions,
     bootstrap_strategy: BootstrapStrategy,
     settle_delay: Duration,
@@ -37,6 +40,7 @@ pub struct TuiApplication {
     hit_map: HitMap,
     status: String,
     application_available: bool,
+    edit_session: Option<EditSession>,
 }
 
 impl TuiApplication {
@@ -52,6 +56,7 @@ impl TuiApplication {
         let applications = backend.applications().await?;
         let application =
             AtspiBackend::select_application(&applications, Some(&app_selector), None)?.clone();
+        let application_locator = application.backend_locator.clone();
         let mut event_subscription = backend
             .subscribe_events(&application, event_buffer_capacity)
             .await?;
@@ -75,6 +80,7 @@ impl TuiApplication {
         let mut application = Self {
             backend,
             app_selector,
+            application_locator,
             inspect_options,
             bootstrap_strategy,
             settle_delay,
@@ -87,10 +93,11 @@ impl TuiApplication {
             viewport_height: 1,
             hit_map: HitMap::default(),
             status: format!(
-                "Loaded {} semantic nodes via {} in {snapshot_ms} ms; text input read-only",
+                "Loaded {} semantic nodes via {} in {snapshot_ms} ms",
                 bootstrap.metrics.node_count, bootstrap.metrics.strategy
             ),
             application_available: true,
+            edit_session: None,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -120,6 +127,7 @@ impl TuiApplication {
                 scroll_offset: self.viewport.offset,
                 status: &self.status,
                 application_available: self.application_available,
+                edit_session: self.edit_session.as_ref(),
             },
         );
         self.hit_map.replace(regions);
@@ -139,6 +147,9 @@ impl TuiApplication {
             UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
                 self.execute_focused(intent).await
             }
+            UiIntent::BeginEdit => self.begin_edit().await,
+            UiIntent::CommitEdit => self.commit_edit().await,
+            UiIntent::CancelEdit => self.cancel_edit(),
             UiIntent::Refresh => {
                 self.full_reload(Some("Forced full semantic snapshot".to_owned()))
                     .await;
@@ -153,6 +164,63 @@ impl TuiApplication {
             }
         }
         false
+    }
+
+    pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        if self.edit_session.is_some() {
+            return match key_to_edit_command(key) {
+                EditCommand::Insert(character) => {
+                    self.edit_session.as_mut().unwrap().buffer.insert(character);
+                    false
+                }
+                EditCommand::Left => {
+                    self.edit_session.as_mut().unwrap().buffer.move_left();
+                    false
+                }
+                EditCommand::Right => {
+                    self.edit_session.as_mut().unwrap().buffer.move_right();
+                    false
+                }
+                EditCommand::Home => {
+                    self.edit_session.as_mut().unwrap().buffer.home();
+                    false
+                }
+                EditCommand::End => {
+                    self.edit_session.as_mut().unwrap().buffer.end();
+                    false
+                }
+                EditCommand::Backspace => {
+                    self.edit_session.as_mut().unwrap().buffer.backspace();
+                    false
+                }
+                EditCommand::Delete => {
+                    self.edit_session.as_mut().unwrap().buffer.delete();
+                    false
+                }
+                EditCommand::Commit => self.handle_intent(UiIntent::CommitEdit).await,
+                EditCommand::Cancel => self.handle_intent(UiIntent::CancelEdit).await,
+                EditCommand::BlockedTab => {
+                    self.status = "Commit or cancel editing first".to_owned();
+                    false
+                }
+                EditCommand::Quit => true,
+                EditCommand::Ignore => false,
+            };
+        }
+        if let Some(mut intent) = key_to_intent(key) {
+            if intent == UiIntent::Activate
+                && self
+                    .focus
+                    .current()
+                    .and_then(|id| self.view.element(id))
+                    .is_some_and(|element| matches!(element.kind, TuiElementKind::TextInput { .. }))
+            {
+                intent = UiIntent::BeginEdit;
+            }
+            self.handle_intent(intent).await
+        } else {
+            false
+        }
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
@@ -192,6 +260,10 @@ impl TuiApplication {
             self.status = "Focused control disappeared; press r to refresh".to_owned();
             return;
         };
+        if matches!(element.kind, TuiElementKind::TextInput { .. }) {
+            self.status = "Press Enter to edit the focused text input".to_owned();
+            return;
+        }
         if element.capability == InteractionCapability::None {
             self.status = format!(
                 "No compatible semantic action for \"{}\"",
@@ -225,6 +297,9 @@ impl TuiApplication {
                     .select_child(container_locator, *child_index)
                     .await
             }
+            BackendOperation::SetTextContents { .. } => {
+                unreachable!("text commits use commit_edit")
+            }
         };
         match result {
             Ok(_) => {
@@ -245,6 +320,204 @@ impl TuiApplication {
                 }
             }
         }
+    }
+
+    async fn begin_edit(&mut self) {
+        let Some(runtime_id) = self.focus.current() else {
+            self.status = "No focused text input".to_owned();
+            return;
+        };
+        let Some(element) = self.view.element(runtime_id) else {
+            self.status = "Focused control disappeared".to_owned();
+            return;
+        };
+        if matches!(
+            element.kind,
+            TuiElementKind::TextInput {
+                input_kind: crate::semantic::TextInputKind::Password,
+                ..
+            }
+        ) {
+            self.status = "Password editing is disabled by GUI2TUI".to_owned();
+            return;
+        }
+        if element.capability != InteractionCapability::EditText {
+            self.status = format!("Text input \"{}\" is read-only", element_label(element));
+            return;
+        }
+        let locator = element.backend_locator.clone();
+        let label = element_label(element).to_owned();
+        match self.backend.read_full_editable_text(&locator).await {
+            Ok(value) => {
+                self.edit_session = Some(EditSession::new(
+                    runtime_id,
+                    locator,
+                    value,
+                    self.cache.generation(),
+                ));
+                self.status = format!(
+                    "Editing \"{label}\" — Enter Commit | Esc Cancel | ←/→ Move | Backspace/Delete Edit"
+                );
+            }
+            Err(error) => self.status = format!("Cannot edit \"{label}\": {error}"),
+        }
+    }
+
+    fn cancel_edit(&mut self) {
+        if self.edit_session.take().is_some() {
+            self.status = "Edit cancelled; GUI value unchanged".to_owned();
+        }
+    }
+
+    async fn commit_edit(&mut self) {
+        let Some(session) = self.edit_session.as_ref() else {
+            return;
+        };
+        let target = session.target;
+        if !session.can_commit() {
+            self.status =
+                "Input changed externally; cancel or reload before editing again".to_owned();
+            return;
+        }
+        let Some(current) = self.cache.node(session.target) else {
+            self.status = "Edited control disappeared; edit cancelled".to_owned();
+            self.edit_session = None;
+            return;
+        };
+        if current.backend_locator != session.backend_locator
+            || current.role != crate::semantic::SemanticRole::TextInput
+            || current.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
+            || !current
+                .capabilities
+                .contains(&crate::semantic::SemanticCapability::EditText)
+        {
+            self.status = "Edited control was replaced; edit cancelled".to_owned();
+            self.edit_session = None;
+            return;
+        }
+        let operation = SemanticOperation::ReplaceText {
+            target: session.target,
+            text: session.buffer.text().to_owned(),
+        };
+        let operation = match resolve_backend_operation(&self.view, operation) {
+            Ok(operation) => operation,
+            Err(error) => {
+                self.status = format!("Cannot commit text edit: {error}");
+                return;
+            }
+        };
+        let BackendOperation::SetTextContents { locator, text } = operation else {
+            unreachable!("ReplaceText must resolve to SetTextContents")
+        };
+        if let Some(session) = self.edit_session.as_mut() {
+            session.commit_pending = true;
+        }
+        tracing::debug!(target = %locator, chars = text.chars().count(), "replacing editable text");
+        if let Err(error) = self.backend.set_text_contents(&locator, &text).await {
+            if let Some(session) = self.edit_session.as_mut() {
+                session.commit_pending = false;
+            }
+            if matches!(error, BackendError::ObjectUnavailable(_, _)) {
+                self.edit_session = None;
+                self.status = "Edited control was replaced; edit cancelled".to_owned();
+                return;
+            }
+            self.status = match error {
+                BackendError::TextUpdateRejected(_) => {
+                    "Application rejected text update; edit buffer retained".to_owned()
+                }
+                _ => format!("Text update failed: {error}"),
+            };
+            return;
+        }
+
+        let started = Instant::now();
+        let mut events = Vec::new();
+        let relevant_event = loop {
+            let remaining = self.settle_delay.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                break false;
+            }
+            match tokio::time::timeout(remaining, self.event_subscription.recv()).await {
+                Ok(Some(EventDelivery::Event(event))) => {
+                    let relevant =
+                        event_targets(&event, &locator) && event_is_text_value_change(&event);
+                    events.push(event);
+                    if relevant {
+                        break true;
+                    }
+                }
+                Ok(Some(EventDelivery::ResyncRequired { dropped })) => {
+                    self.edit_session = None;
+                    self.resynchronize_after_overflow(dropped).await;
+                    return;
+                }
+                _ => break false,
+            }
+        };
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        while let Ok(event) = self.event_subscription.try_recv() {
+            events.push(event);
+        }
+        // The target is always refreshed explicitly below from the GUI's
+        // authoritative Text/EditableText interfaces.  Do not feed echoed
+        // target events through the generic dirty-scope path: older Qt emits
+        // a legacy PropertyChange body alongside TextChanged, and treating an
+        // otherwise-unparsed echo as Unknown would unnecessarily promote this
+        // local commit to a full-application refresh.
+        discard_target_echoes(&mut events, &locator);
+        if !events.is_empty() {
+            self.apply_event_batch(events, None).await;
+        }
+
+        let current_locator_matches = self
+            .cache
+            .node(target)
+            .is_some_and(|node| node.backend_locator == locator);
+        if !current_locator_matches {
+            self.status = "Edited control was replaced; edit cancelled".to_owned();
+            self.edit_session = None;
+            return;
+        }
+        let confirmed = match self.backend.read_full_editable_text(&locator).await {
+            Ok(value) => value,
+            Err(error) => {
+                self.status = format!("Text was submitted but confirmation failed: {error}");
+                self.edit_session = None;
+                return;
+            }
+        };
+        match self.backend.refresh_node(&locator, false).await {
+            Ok(mut node) => {
+                node.value = Some(confirmed.clone());
+                if let Err(error) = self.cache.refresh_node(node) {
+                    self.status = format!("Text confirmation cache update failed: {error}");
+                    self.edit_session = None;
+                    return;
+                }
+                self.rebuild_view_preserving_focus();
+            }
+            Err(error) => {
+                self.status = format!("Text was submitted but node refresh failed: {error}");
+                self.edit_session = None;
+                return;
+            }
+        }
+        self.edit_session = None;
+        self.status = if confirmed == text {
+            format!(
+                "Text update confirmed — chars={} event={} node_refresh=1 full_snapshots={}",
+                confirmed.chars().count(),
+                relevant_event,
+                self.cache.full_snapshot_count()
+            )
+        } else {
+            format!(
+                "Application normalized or rejected submitted text; showing GUI value — event={} node_refresh=1 full_snapshots={}",
+                relevant_event,
+                self.cache.full_snapshot_count()
+            )
+        };
     }
 
     async fn full_reload(&mut self, success_status: Option<String>) {
@@ -289,7 +562,13 @@ impl TuiApplication {
             }
             Err(error) if application_is_gone(&error) => {
                 self.application_available = false;
-                self.status = "Application is no longer available. Press q to quit.".to_owned();
+                let editing = self.edit_session.take().is_some();
+                self.status = if editing {
+                    "Application is no longer available. Edit discarded. Press q to quit."
+                        .to_owned()
+                } else {
+                    "Application is no longer available. Press q to quit.".to_owned()
+                };
             }
             Err(error) => {
                 self.status = format!("Refresh failed: {error}");
@@ -343,6 +622,35 @@ impl TuiApplication {
             "Full refresh fallback: AT-SPI event stream closed".to_owned(),
         ))
         .await;
+    }
+
+    /// Cheap lifecycle check used by the terminal loop. It never walks an
+    /// application tree; it only verifies that the selected AT-SPI root still
+    /// exists in the desktop registry.
+    pub async fn check_application_available(&mut self) {
+        if !self.application_available {
+            return;
+        }
+        let alive = match self.backend.applications().await {
+            Ok(applications) => applications
+                .iter()
+                .any(|application| application.backend_locator == self.application_locator),
+            // A transient registry failure is not evidence that the GUI has
+            // exited.  The event stream and subsequent polls can still recover.
+            Err(error) => {
+                tracing::debug!(%error, "application liveness probe failed");
+                return;
+            }
+        };
+        if !alive {
+            self.application_available = false;
+            let editing = self.edit_session.take().is_some();
+            self.status = if editing {
+                "Application is no longer available. Edit discarded. Press q to quit.".to_owned()
+            } else {
+                "Application is no longer available. Press q to quit.".to_owned()
+            };
+        }
     }
 
     pub async fn apply_external_delivery(&mut self, delivery: EventDelivery) {
@@ -408,6 +716,14 @@ impl TuiApplication {
         success_status: Option<String>,
     ) {
         let started = Instant::now();
+        if let Some(session) = self.edit_session.as_mut()
+            && !session.commit_pending
+            && events.iter().any(|event| {
+                event_targets(event, &session.backend_locator) && event_is_text_value_change(event)
+            })
+        {
+            session.mark_external_change();
+        }
         let raw_count = events.len();
         // Cache Add/Remove reports cache residency. A bootstrap (especially a
         // recursive walk) can itself populate the toolkit cache, so replaying
@@ -512,6 +828,14 @@ impl TuiApplication {
             }
         };
         self.view = TuiViewModel::from_snapshot(&projected);
+        if self.edit_session.as_ref().is_some_and(|session| {
+            self.cache
+                .node(session.target)
+                .is_none_or(|node| node.backend_locator != session.backend_locator)
+        }) {
+            self.edit_session = None;
+            self.status = "Edited control was replaced; edit cancelled".to_owned();
+        }
         tracing::debug!(
             cache_nodes = self.cache.node_count(),
             materialization_ms = materialization_started.elapsed().as_secs_f64() * 1000.0,
@@ -572,6 +896,39 @@ fn event_requires_refresh(cache: &SemanticCache, event: &NormalizedEvent) -> boo
     }
 }
 
+fn event_targets(event: &NormalizedEvent, target: &crate::semantic::BackendLocator) -> bool {
+    match event {
+        NormalizedEvent::NodeStateChanged { locator, .. }
+        | NormalizedEvent::NodePropertyChanged { locator, .. }
+        | NormalizedEvent::TextChanged { locator, .. }
+        | NormalizedEvent::WindowCreated { locator }
+        | NormalizedEvent::WindowDestroyed { locator }
+        | NormalizedEvent::CacheAdded { locator }
+        | NormalizedEvent::CacheRemoved { locator }
+        | NormalizedEvent::Unknown { locator, .. } => locator == target,
+        NormalizedEvent::ChildrenChanged { parent, .. } => parent == target,
+        NormalizedEvent::SelectionChanged { container }
+        | NormalizedEvent::ActiveDescendantChanged {
+            container,
+            descendant: _,
+        } => container == target,
+    }
+}
+
+fn event_is_text_value_change(event: &NormalizedEvent) -> bool {
+    matches!(
+        event,
+        NormalizedEvent::TextChanged { .. } | NormalizedEvent::NodePropertyChanged { .. }
+    )
+}
+
+fn discard_target_echoes(
+    events: &mut Vec<NormalizedEvent>,
+    target: &crate::semantic::BackendLocator,
+) {
+    events.retain(|event| !event_targets(event, target));
+}
+
 fn application_is_gone(error: &BackendError) -> bool {
     matches!(
         error,
@@ -586,6 +943,7 @@ fn intent_for_element(element: &TuiElement) -> UiIntent {
         InteractionCapability::Toggle => UiIntent::Toggle,
         InteractionCapability::Select => UiIntent::Select,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
+        InteractionCapability::EditText => UiIntent::BeginEdit,
         InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
     }
 }
@@ -595,6 +953,7 @@ fn operation_verb(intent: UiIntent) -> &'static str {
         UiIntent::Select => "Selected",
         UiIntent::OpenMenu => "Opened menu",
         UiIntent::Toggle => "Toggled",
+        UiIntent::BeginEdit | UiIntent::CommitEdit | UiIntent::CancelEdit => "Edited",
         _ => "Activated",
     }
 }
@@ -606,6 +965,7 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             debug_assert_eq!(intent, UiIntent::Select);
             format!("parent Selection child {child_index}")
         }
+        BackendOperation::SetTextContents { .. } => "EditableText.SetTextContents".to_owned(),
     }
 }
 
@@ -691,6 +1051,18 @@ mod tests {
             )),
             UiIntent::Activate
         );
+        assert_eq!(
+            intent_for_element(&element(
+                SemanticRole::TextInput,
+                TuiElementKind::TextInput {
+                    label: "Username".to_owned(),
+                    display: "alice".to_owned(),
+                    input_kind: crate::semantic::TextInputKind::Plain,
+                },
+                InteractionCapability::EditText,
+            )),
+            UiIntent::BeginEdit
+        );
     }
 
     #[test]
@@ -703,6 +1075,34 @@ mod tests {
             operation_error_status(&error),
             ("Selection was rejected by application".to_owned(), false)
         );
+    }
+
+    #[test]
+    fn text_commit_discards_target_echoes_including_unknown_legacy_signals() {
+        let target = BackendLocator::new(":1.2", "/input");
+        let other = BackendLocator::new(":1.2", "/status");
+        let mut events = vec![
+            NormalizedEvent::TextChanged {
+                locator: target.clone(),
+                change: "insert".to_owned(),
+                start: 0,
+                length: 4,
+            },
+            NormalizedEvent::Unknown {
+                locator: target.clone(),
+                interface: "org.a11y.atspi.Event.Object".to_owned(),
+                member: "PropertyChange".to_owned(),
+            },
+            NormalizedEvent::NodePropertyChanged {
+                locator: other.clone(),
+                property: "accessible-name".to_owned(),
+            },
+        ];
+
+        discard_target_echoes(&mut events, &target);
+
+        assert_eq!(events.len(), 1);
+        assert!(event_targets(&events[0], &other));
     }
 
     #[test]

@@ -10,6 +10,9 @@ pub enum UiIntent {
     Toggle,
     Select,
     OpenMenu,
+    BeginEdit,
+    CommitEdit,
+    CancelEdit,
     Refresh,
     ScrollLines(i16),
     ScrollPages(i16),
@@ -23,6 +26,7 @@ pub enum InteractionCapability {
     Toggle,
     Select,
     OpenMenu,
+    EditText,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -63,8 +67,12 @@ pub fn resolve_action<'a>(
 pub fn interaction_capability(
     role: &SemanticRole,
     actions: &[SemanticAction],
+    capabilities: &[SemanticCapability],
     parent_capabilities: &[SemanticCapability],
 ) -> InteractionCapability {
+    if *role == SemanticRole::TextInput && capabilities.contains(&SemanticCapability::EditText) {
+        return InteractionCapability::EditText;
+    }
     let intent = match role {
         SemanticRole::ToggleButton | SemanticRole::CheckBox => UiIntent::Toggle,
         SemanticRole::Button => UiIntent::Activate,
@@ -171,19 +179,19 @@ mod tests {
     #[test]
     fn capability_requires_a_role_compatible_advertised_action() {
         assert_eq!(
-            interaction_capability(&SemanticRole::Button, &actions(&["Click"]), &[]),
+            interaction_capability(&SemanticRole::Button, &actions(&["Click"]), &[], &[]),
             InteractionCapability::Activate
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::CheckBox, &[], &[]),
+            interaction_capability(&SemanticRole::CheckBox, &[], &[], &[]),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[]),
+            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[], &[]),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"]), &[]),
+            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"]), &[], &[]),
             InteractionCapability::Select
         );
     }
@@ -215,9 +223,27 @@ mod tests {
             interaction_capability(
                 &SemanticRole::ListItem,
                 &actions(&["listitem.scroll-to"]),
+                &[],
                 &[SemanticCapability::SelectChildren]
             ),
             InteractionCapability::Select
+        );
+    }
+
+    #[test]
+    fn text_edit_capability_is_explicit_and_independent_of_actions() {
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::TextInput,
+                &[],
+                &[SemanticCapability::EditText],
+                &[]
+            ),
+            InteractionCapability::EditText
+        );
+        assert_eq!(
+            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[], &[]),
+            InteractionCapability::None
         );
     }
 }

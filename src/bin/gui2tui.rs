@@ -15,7 +15,7 @@ use gui2tui::{
     },
     tui::{
         app::TuiApplication,
-        input::{key_to_intent, mouse_to_intent},
+        input::mouse_to_intent,
         selector::{ApplicationSelector, SelectorIntent, key_to_selector_intent, mouse_click},
     },
 };
@@ -108,6 +108,8 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 
     let terminal_events = EventStream::new();
     futures_lite::pin!(terminal_events);
+    let mut liveness = tokio::time::interval(Duration::from_millis(500));
+    liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         terminal.draw(|frame| app.render(frame))?;
         tokio::select! {
@@ -115,9 +117,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 let Some(terminal_event) = terminal_event else { break };
                 match terminal_event? {
                     Event::Key(key) => {
-                        if let Some(intent) = key_to_intent(key)
-                            && app.handle_intent(intent).await
-                        {
+                        if app.handle_key_event(key).await {
                             break;
                         }
                     }
@@ -135,6 +135,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 } else {
                     app.handle_event_stream_closed().await;
                 }
+            },
+            _ = liveness.tick() => {
+                app.check_application_available().await;
             }
         }
     }

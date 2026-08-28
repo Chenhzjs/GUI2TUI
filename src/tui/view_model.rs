@@ -9,19 +9,50 @@ use super::action::{InteractionCapability, interaction_capability};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiElementKind {
-    Label { text: String },
-    Group { label: String },
-    Button { label: String },
-    ToggleButton { label: String, pressed: bool },
-    CheckBox { label: String, checked: bool },
-    TextInput { label: String, display: String },
-    ComboBox { label: String },
-    List { label: String },
-    ListItem { label: String, selected: bool },
+    Label {
+        text: String,
+    },
+    Group {
+        label: String,
+    },
+    Button {
+        label: String,
+    },
+    ToggleButton {
+        label: String,
+        pressed: bool,
+    },
+    CheckBox {
+        label: String,
+        checked: bool,
+    },
+    TextInput {
+        label: String,
+        display: String,
+        input_kind: TextInputKind,
+    },
+    ComboBox {
+        label: String,
+    },
+    List {
+        label: String,
+    },
+    ListItem {
+        label: String,
+        selected: bool,
+    },
     MenuBar,
-    Menu { label: String },
-    MenuItem { label: String, opens_menu: bool },
-    Unsupported { role: String, label: Option<String> },
+    Menu {
+        label: String,
+    },
+    MenuItem {
+        label: String,
+        opens_menu: bool,
+    },
+    Unsupported {
+        role: String,
+        label: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -221,6 +252,7 @@ fn map_node(
             } else {
                 node.value.clone().unwrap_or_else(|| "[empty]".to_owned())
             },
+            input_kind: node.text_input_kind.unwrap_or(TextInputKind::Plain),
         }),
         SemanticRole::ComboBox => Some(TuiElementKind::ComboBox {
             label: node.name.clone().unwrap_or_else(|| "Combo box".to_owned()),
@@ -241,7 +273,12 @@ fn map_node(
             label: node.name.clone().unwrap_or_else(|| "Menu".to_owned()),
         }),
         SemanticRole::MenuItem => {
-            let capability = interaction_capability(&node.role, &node.actions, parent_capabilities);
+            let capability = interaction_capability(
+                &node.role,
+                &node.actions,
+                &node.capabilities,
+                parent_capabilities,
+            );
             Some(TuiElementKind::MenuItem {
                 label: node.name.clone().unwrap_or_else(|| "Menu item".to_owned()),
                 opens_menu: capability == InteractionCapability::OpenMenu,
@@ -254,7 +291,12 @@ fn map_node(
     };
 
     if let Some(kind) = kind {
-        let capability = interaction_capability(&node.role, &node.actions, parent_capabilities);
+        let capability = interaction_capability(
+            &node.role,
+            &node.actions,
+            &node.capabilities,
+            parent_capabilities,
+        );
         output.push(TuiElement {
             runtime_id: node.runtime_id,
             backend_locator: node.backend_locator.clone(),
@@ -425,6 +467,7 @@ mod tests {
             TuiElementKind::TextInput {
                 label: "Password".to_owned(),
                 display: "[password]".to_owned(),
+                input_kind: TextInputKind::Password,
             }
         );
         assert!(!format!("{view:?}").contains("must-never-render"));
@@ -447,6 +490,7 @@ mod tests {
             TuiElementKind::TextInput {
                 label: "Username".to_owned(),
                 display: "alice".to_owned(),
+                input_kind: TextInputKind::Plain,
             }
         );
     }

@@ -13,6 +13,11 @@
   </label>
 
   <label>
+    Long input
+    <input id="long-input" aria-label="Long input">
+  </label>
+
+  <label>
     Password
     <input aria-label="Password" type="password" value="browser-phase-secret">
   </label>
@@ -23,6 +28,7 @@
   </label>
 
   <button id="activate">Activate safely</button>
+  <button id="external-change">Change username externally</button>
   <div id="status" role="status">Status: idle</div>
 
   <label>
@@ -62,9 +68,18 @@
   </section>
 
   <script>
+    document.querySelector('#long-input').value = 'L'.repeat(300) + '-browser-tail';
+
     document.querySelector('#activate').onclick = () => {
       document.querySelector('#feature').checked = true;
       document.querySelector('#status').textContent = 'Status: activated';
+    };
+
+    document.querySelector('#external-change').onclick = () => {
+      document.querySelector('input[aria-label="Username"]').value = 'external-browser';
+      document.querySelector('input[aria-label="Username"]').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
     };
 
     document.querySelector('#replace').onclick = () => {

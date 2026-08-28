@@ -26,13 +26,20 @@ class LiveFixture(Gtk.Application):
         content.set_margin_start(16)
         content.set_margin_end(16)
 
-        content.append(Gtk.Label(label="Phase 0 live validation"))
+        heading = Gtk.Label(label="Phase 0 live validation")
+        content.append(heading)
 
         username = Gtk.Entry()
         username.set_placeholder_text("Username")
         username.set_text("alice")
         username.update_property([Gtk.AccessibleProperty.LABEL], ["Username"])
         content.append(username)
+        username_ref = {"widget": username}
+
+        long_input = Gtk.Entry()
+        long_input.set_text("L" * 300 + "-gtk-tail")
+        long_input.update_property([Gtk.AccessibleProperty.LABEL], ["Long input"])
+        content.append(long_input)
 
         content.append(Gtk.Label(label="Password"))
         password = Gtk.PasswordEntry()
@@ -54,6 +61,27 @@ class LiveFixture(Gtk.Application):
 
         activate.connect("clicked", on_activate)
         content.append(activate)
+
+        external = Gtk.Button(label="Change username externally")
+        external.connect(
+            "clicked",
+            lambda _button: username_ref["widget"].set_text("external-gtk"),
+        )
+        content.append(external)
+
+        replace = Gtk.Button(label="Replace username control")
+
+        def replace_username(_button: Gtk.Button) -> None:
+            old = username_ref["widget"]
+            replacement = Gtk.Entry()
+            replacement.set_text("replacement-gtk")
+            replacement.update_property([Gtk.AccessibleProperty.LABEL], ["Username"])
+            content.remove(old)
+            content.insert_child_after(replacement, heading)
+            username_ref["widget"] = replacement
+
+        replace.connect("clicked", replace_username)
+        content.append(replace)
 
         items = Gtk.StringList.new(["Alpha", "Beta", "Gamma"])
         selection = Gtk.SingleSelection.new(items)

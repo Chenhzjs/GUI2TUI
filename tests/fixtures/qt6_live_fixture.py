@@ -31,10 +31,16 @@ class QtFixture(QMainWindow):
 
         layout.addWidget(QLabel("Phase 2 Qt compatibility"))
 
-        layout.addWidget(QLabel("Username"))
-        username = QLineEdit("alice")
-        username.setAccessibleName("Username")
-        layout.addWidget(username)
+        self.layout = layout
+        self.username_label = QLabel("Username")
+        layout.addWidget(self.username_label)
+        self.username = QLineEdit("alice")
+        self.username.setAccessibleName("Username")
+        layout.addWidget(self.username)
+
+        long_input = QLineEdit("L" * 300 + "-qt-tail")
+        long_input.setAccessibleName("Long input")
+        layout.addWidget(long_input)
 
         layout.addWidget(QLabel("Password"))
         password = QLineEdit("phase-two-secret")
@@ -52,6 +58,14 @@ class QtFixture(QMainWindow):
         activate.clicked.connect(self.activate_safely)
         layout.addWidget(activate)
 
+        external = QPushButton("Change username externally")
+        external.clicked.connect(lambda: self.username.setText("external-qt"))
+        layout.addWidget(external)
+
+        replace = QPushButton("Replace username control")
+        replace.clicked.connect(self.replace_username)
+        layout.addWidget(replace)
+
         items = QListWidget()
         items.setAccessibleName("Demo items")
         items.addItems(["Alpha", "Beta", "Gamma"])
@@ -66,6 +80,14 @@ class QtFixture(QMainWindow):
     def activate_safely(self) -> None:
         self.checkbox.setChecked(True)
         self.status.setText("Status: activated")
+
+    def replace_username(self) -> None:
+        old = self.username
+        replacement = QLineEdit("replacement-qt")
+        replacement.setAccessibleName("Username")
+        self.layout.replaceWidget(old, replacement)
+        old.deleteLater()
+        self.username = replacement
 
 
 def main() -> int:

@@ -296,6 +296,8 @@ pub struct SemanticAction {
 pub enum SemanticCapability {
     /// The container can select one of its direct children.
     SelectChildren,
+    /// A plain text input supports atomic replacement through AT-SPI.
+    EditText,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
