@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 )]
 struct Cli {
     /// List applications currently exposed by the AT-SPI desktop.
-    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child"])]
+    #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events"])]
     list: bool,
 
     /// Inspect an application by exact name or an unambiguous substring.
@@ -53,6 +53,10 @@ struct Cli {
     /// Zero-based direct-child index used with --select-child.
     #[arg(long, value_name = "INDEX", requires = "select_child")]
     child_index: Option<usize>,
+
+    /// Continuously print AT-SPI events emitted by the selected --app.
+    #[arg(long, requires = "app", conflicts_with_all = ["list", "app_id", "actions", "activate", "action", "action_name", "select_child"])]
+    watch_events: bool,
 
     /// Include AT-SPI role, full states, interfaces, object identity and geometry.
     #[arg(short, long)]
@@ -174,6 +178,13 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
 
     let application =
         AtspiBackend::select_application(&applications, cli.app.as_deref(), cli.app_id)?;
+    if cli.watch_events {
+        println!(
+            "Watching AT-SPI events for {} ({})",
+            application.name, application.backend_locator
+        );
+        return backend.watch_events(application).await;
+    }
     let tree = backend
         .inspect_application(
             application,

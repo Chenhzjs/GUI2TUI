@@ -2,14 +2,16 @@ use std::{collections::HashSet, future::Future, pin::Pin, time::Duration};
 
 use atspi::{
     AccessibilityConnection, CoordType, Interface, ObjectRef, ObjectRefOwned, Role,
+    events::{CacheEvents, Event, EventBodyQtOwned, ObjectEvents, WindowEvents},
     proxy::{
         accessible::ObjectRefExt, component::ComponentProxy, proxy_ext::ProxyExt, text::TextProxy,
         value::ValueProxy,
     },
 };
+use futures_lite::StreamExt;
 use thiserror::Error;
 use tracing::warn;
-use zbus::{names::UniqueName, zvariant::ObjectPath};
+use zbus::{MessageStream, message::Type as MessageType, names::UniqueName, zvariant::ObjectPath};
 
 use crate::semantic::{
     BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticCapability,
@@ -80,6 +82,10 @@ pub enum BackendError {
     },
     #[error("failed to enumerate applications from the AT-SPI registry: {0}")]
     EnumerateApplications(atspi::AtspiError),
+    #[error("failed to register or consume AT-SPI events: {0}")]
+    EventStream(atspi::AtspiError),
+    #[error("semantic cache error: {0}")]
+    SemanticCache(String),
     #[error("no accessible applications are currently exposed by AT-SPI")]
     NoApplications,
     #[error("application index {0} does not exist; run with --list to see current indices")]
@@ -288,6 +294,144 @@ impl AtspiBackend {
         };
         self.build_node(application.object.clone(), 0, None, &mut context)
             .await
+    }
+
+    pub async fn refresh_node(
+        &self,
+        locator: &BackendLocator,
+        verbose: bool,
+    ) -> Result<SemanticNode, BackendError> {
+        let mut node = self
+            .refresh_subtree(
+                locator,
+                InspectOptions {
+                    verbose,
+                    max_depth: 0,
+                    max_nodes: 1,
+                },
+            )
+            .await?;
+        node.truncations.clear();
+        Ok(node)
+    }
+
+    pub async fn refresh_subtree(
+        &self,
+        locator: &BackendLocator,
+        options: InspectOptions,
+    ) -> Result<SemanticNode, BackendError> {
+        let object = object_ref_from_id(locator)?;
+        let mut context = TraversalContext {
+            options,
+            visited: HashSet::new(),
+            nodes: 0,
+            runtime_ids: RuntimeIdAllocator::default(),
+        };
+        self.build_node(object, 0, None, &mut context).await
+    }
+
+    /// Print a normalized, read-only event stream for one selected application.
+    pub async fn watch_events(&self, application: &ApplicationRef) -> Result<(), BackendError> {
+        let mut events = self.subscribe_events(application).await?;
+        let mut sequence = 0_u64;
+        while let Some(event) = events.recv().await {
+            sequence = sequence.saturating_add(1);
+            println!("EVENT #{sequence}\n{event}\n");
+        }
+        Ok(())
+    }
+
+    pub async fn subscribe_events(
+        &self,
+        application: &ApplicationRef,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<crate::events::NormalizedEvent>, BackendError>
+    {
+        self.connection
+            .register_event::<ObjectEvents>()
+            .await
+            .map_err(BackendError::EventStream)?;
+        self.connection
+            .register_event::<WindowEvents>()
+            .await
+            .map_err(BackendError::EventStream)?;
+        self.connection
+            .register_event::<CacheEvents>()
+            .await
+            .map_err(BackendError::EventStream)?;
+
+        let selected_bus = application.backend_locator.bus_name().to_owned();
+        let application_locator = application.backend_locator.clone();
+        let connection = self.connection.connection().clone();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let events = MessageStream::from(&connection);
+            futures_lite::pin!(events);
+            while let Some(message) = events.next().await {
+                let message = match message {
+                    Ok(message) => message,
+                    Err(error) => {
+                        warn!(%error, "skipping unreadable D-Bus message on AT-SPI event stream");
+                        if sender
+                            .send(crate::events::NormalizedEvent::Unknown {
+                                locator: application_locator.clone(),
+                                interface: "event-stream".to_owned(),
+                                member: error.to_string(),
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+                if message.message_type() != MessageType::Signal {
+                    continue;
+                }
+                let header = message.header();
+                let Some(message_sender) = header.sender() else {
+                    continue;
+                };
+                if message_sender.as_str() != selected_bus {
+                    continue;
+                }
+
+                let normalized = match Event::try_from(&message) {
+                    Ok(event) => crate::events::NormalizedEvent::from_atspi(&event),
+                    Err(error) => match normalize_qt_property_event(&message) {
+                        Some(event) => {
+                            warn!(%error, "accepted Qt-compatible AT-SPI PropertyChange event body");
+                            event
+                        }
+                        None => {
+                            warn!(%error, "falling back for malformed or unsupported AT-SPI event");
+                            let interface = header
+                                .interface()
+                                .map(|value| value.as_str().to_owned())
+                                .unwrap_or_else(|| "<missing>".to_owned());
+                            let member = header
+                                .member()
+                                .map(|value| value.as_str().to_owned())
+                                .unwrap_or_else(|| "<missing>".to_owned());
+                            let Some(path) = header.path() else {
+                                continue;
+                            };
+                            crate::events::NormalizedEvent::Unknown {
+                                locator: BackendLocator::new(
+                                    message_sender.as_str(),
+                                    path.as_str(),
+                                ),
+                                interface,
+                                member,
+                            }
+                        }
+                    },
+                };
+                if sender.send(normalized).is_err() {
+                    break;
+                }
+            }
+        });
+        Ok(receiver)
     }
 
     pub async fn actions(&self, encoded_id: &str) -> Result<Vec<SemanticAction>, BackendError> {
@@ -700,6 +844,27 @@ impl AtspiBackend {
             })
         })
     }
+}
+
+/// Qt 6 emits the historical `siiv(so)` AT-SPI event body for some object
+/// property signals. `atspi::Event` normally handles this compatibility form,
+/// but Qt's `accessible-name` spelling is not accepted by the typed wrapper in
+/// atspi 0.30. Preserve the actual property name and source without inventing
+/// any semantic meaning.
+fn normalize_qt_property_event(message: &zbus::Message) -> Option<crate::events::NormalizedEvent> {
+    let header = message.header();
+    if header.interface()?.as_str() != "org.a11y.atspi.Event.Object"
+        || header.member()?.as_str() != "PropertyChange"
+    {
+        return None;
+    }
+    let sender = header.sender()?;
+    let path = header.path()?;
+    let body = message.body().deserialize::<EventBodyQtOwned>().ok()?;
+    Some(crate::events::NormalizedEvent::NodePropertyChanged {
+        locator: BackendLocator::new(sender.as_str(), path.as_str()),
+        property: body.kind,
+    })
 }
 
 struct TraversalContext {

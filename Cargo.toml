@@ -14,10 +14,11 @@ path = "src/main.rs"
 atspi = { version = "0.30", features = ["tracing", "zbus"] }
 base64 = "0.22"
 clap = { version = "4.6", features = ["derive"] }
-crossterm = "0.29"
+crossterm = { version = "0.29", features = ["event-stream"] }
+futures-lite = "2.6.1"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 thiserror = "2.0"
-tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus = "5.19"
