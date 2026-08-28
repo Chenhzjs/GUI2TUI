@@ -6,6 +6,7 @@ use crate::semantic::RuntimeNodeId;
 pub enum HitInteraction {
     Focus,
     Activate,
+    Unavailable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -109,7 +109,7 @@ mod tests {
             name: Some(format!("node {id}")),
             description: None,
             value: None,
-            sensitive: false,
+            text_input_kind: None,
             states: Vec::new(),
             actions: Vec::new(),
             children: Vec::new(),

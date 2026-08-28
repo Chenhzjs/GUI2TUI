@@ -8,6 +8,7 @@ use ratatui::{
 use crate::semantic::RuntimeNodeId;
 
 use super::{
+    action::InteractionCapability,
     hit_test::{HitInteraction, HitRegion},
     view_model::{TuiElement, TuiElementKind, TuiViewModel},
 };
@@ -103,33 +104,48 @@ fn interaction(element: &TuiElement) -> Option<HitInteraction> {
     match element.kind {
         TuiElementKind::Button { .. }
         | TuiElementKind::ToggleButton { .. }
-        | TuiElementKind::CheckBox { .. } => Some(HitInteraction::Activate),
-        TuiElementKind::TextInput { .. } | TuiElementKind::ListItem { .. } => {
-            Some(HitInteraction::Focus)
+        | TuiElementKind::CheckBox { .. }
+        | TuiElementKind::ListItem { .. } => {
+            Some(if element.capability == InteractionCapability::None {
+                HitInteraction::Unavailable
+            } else {
+                HitInteraction::Activate
+            })
         }
+        TuiElementKind::TextInput { .. } => Some(HitInteraction::Focus),
         _ => None,
     }
 }
 
 pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
     let marker = if focused { "> " } else { "  " };
+    let unavailable = if element.capability == InteractionCapability::None {
+        "  (read-only)"
+    } else {
+        ""
+    };
     match &element.kind {
         TuiElementKind::Label { text } => vec![format!("  {text}")],
         TuiElementKind::Group { label } => vec![format!("  {label}:")],
-        TuiElementKind::Button { label } => vec![format!("{marker}[ {label} ]")],
+        TuiElementKind::Button { label } => vec![format!("{marker}[ {label} ]{unavailable}")],
         TuiElementKind::ToggleButton { label, pressed } => vec![format!(
-            "{marker}[{} {label}]",
-            if *pressed { "*" } else { " " }
+            "{marker}[{} {label}]{unavailable}",
+            if *pressed { "*" } else { " " },
         )],
         TuiElementKind::CheckBox { label, checked } => vec![format!(
-            "{marker}[{}] {label}",
-            if *checked { "x" } else { " " }
+            "{marker}[{}] {label}{unavailable}",
+            if *checked { "x" } else { " " },
         )],
         TuiElementKind::TextInput { label, display } => {
-            vec![format!("{marker}{label}"), format!("    > {display}")]
+            vec![
+                format!("{marker}{label}{unavailable}"),
+                format!("    > {display}"),
+            ]
         }
         TuiElementKind::List { label } => vec![format!("  {label}:")],
-        TuiElementKind::ListItem { label } => vec![format!("{marker}• {label}")],
+        TuiElementKind::ListItem { label } => {
+            vec![format!("{marker}• {label}{unavailable}")]
+        }
         TuiElementKind::Unsupported { role, label } => vec![match label {
             Some(label) => format!("  <Unsupported: {role} \"{label}\">"),
             None => format!("  <Unsupported: {role}>"),
@@ -147,8 +163,10 @@ mod tests {
         TuiElement {
             runtime_id: RuntimeNodeId::new(1),
             backend_locator: BackendLocator::new(":1.2", "/node/1"),
+            semantic_role: crate::semantic::SemanticRole::Button,
             kind,
             actions: Vec::new(),
+            capability: InteractionCapability::Activate,
         }
     }
 

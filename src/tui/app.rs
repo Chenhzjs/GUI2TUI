@@ -5,7 +5,7 @@ use ratatui::Frame;
 use crate::backend::{AtspiBackend, BackendError, InspectOptions};
 
 use super::{
-    action::{UiIntent, resolve_action},
+    action::{InteractionCapability, UiIntent, resolve_action},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::MouseIntent,
@@ -109,13 +109,17 @@ impl TuiApplication {
                 };
                 self.focus.set(&self.view, region.runtime_id);
                 self.ensure_focus_visible();
-                if region.interaction == HitInteraction::Activate {
-                    let intent = self
-                        .view
-                        .element(region.runtime_id)
-                        .map(intent_for_element)
-                        .unwrap_or(UiIntent::Activate);
-                    self.activate_focused(intent).await;
+                match region.interaction {
+                    HitInteraction::Activate => {
+                        let intent = self
+                            .view
+                            .element(region.runtime_id)
+                            .map(intent_for_element)
+                            .unwrap_or(UiIntent::Activate);
+                        self.activate_focused(intent).await;
+                    }
+                    HitInteraction::Unavailable => self.report_unavailable(region.runtime_id),
+                    HitInteraction::Focus => {}
                 }
             }
         }
@@ -130,7 +134,14 @@ impl TuiApplication {
             self.status = "Focused control disappeared; press r to refresh".to_owned();
             return;
         };
-        let action = match resolve_action(&element.actions, intent) {
+        if element.capability == InteractionCapability::None {
+            self.status = format!(
+                "No compatible semantic action for \"{}\"",
+                element_label(&element)
+            );
+            return;
+        }
+        let action = match resolve_action(&element.semantic_role, &element.actions, intent) {
             Ok(action) => action.clone(),
             Err(error) => {
                 self.status = format!("Cannot activate {}: {error}", element_label(&element));
@@ -202,6 +213,15 @@ impl TuiApplication {
                 .ensure_visible(top, height, self.viewport_height);
         }
     }
+
+    fn report_unavailable(&mut self, runtime_id: crate::semantic::RuntimeNodeId) {
+        if let Some(element) = self.view.element(runtime_id) {
+            self.status = format!(
+                "No compatible semantic action for \"{}\"",
+                element_label(element)
+            );
+        }
+    }
 }
 
 async fn load_view(
@@ -225,13 +245,9 @@ fn application_is_gone(error: &BackendError) -> bool {
 }
 
 fn intent_for_element(element: &TuiElement) -> UiIntent {
-    if matches!(
-        element.kind,
-        TuiElementKind::CheckBox { .. } | TuiElementKind::ToggleButton { .. }
-    ) {
-        UiIntent::Toggle
-    } else {
-        UiIntent::Activate
+    match element.capability {
+        InteractionCapability::Toggle => UiIntent::Toggle,
+        InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
     }
 }
 
@@ -251,14 +267,19 @@ fn element_label(element: &TuiElement) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::{BackendLocator, RuntimeNodeId, SemanticAction};
+    use crate::semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticRole};
 
     use super::*;
 
-    fn element(kind: TuiElementKind) -> TuiElement {
+    fn element(
+        semantic_role: SemanticRole,
+        kind: TuiElementKind,
+        capability: InteractionCapability,
+    ) -> TuiElement {
         TuiElement {
             runtime_id: RuntimeNodeId::new(1),
             backend_locator: BackendLocator::new(":1.2", "/node"),
+            semantic_role,
             kind,
             actions: vec![SemanticAction {
                 index: 0,
@@ -266,22 +287,31 @@ mod tests {
                 description: None,
                 keybinding: None,
             }],
+            capability,
         }
     }
 
     #[test]
     fn mouse_activation_uses_toggle_intent_for_toggle_controls() {
         assert_eq!(
-            intent_for_element(&element(TuiElementKind::CheckBox {
-                label: "Enabled".to_owned(),
-                checked: false,
-            })),
+            intent_for_element(&element(
+                SemanticRole::CheckBox,
+                TuiElementKind::CheckBox {
+                    label: "Enabled".to_owned(),
+                    checked: false,
+                },
+                InteractionCapability::Toggle,
+            )),
             UiIntent::Toggle
         );
         assert_eq!(
-            intent_for_element(&element(TuiElementKind::Button {
-                label: "Apply".to_owned(),
-            })),
+            intent_for_element(&element(
+                SemanticRole::Button,
+                TuiElementKind::Button {
+                    label: "Apply".to_owned(),
+                },
+                InteractionCapability::Activate,
+            )),
             UiIntent::Activate
         );
     }

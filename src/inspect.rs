@@ -148,7 +148,7 @@ mod tests {
             name: name.map(str::to_owned),
             description: None,
             value: None,
-            sensitive: false,
+            text_input_kind: None,
             states: Vec::new(),
             actions: Vec::new(),
             children: Vec::new(),

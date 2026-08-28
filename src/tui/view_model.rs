@@ -1,6 +1,9 @@
 use crate::semantic::{
     BackendLocator, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole, SemanticState,
+    TextInputKind,
 };
+
+use super::action::{InteractionCapability, interaction_capability};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiElementKind {
@@ -19,8 +22,10 @@ pub enum TuiElementKind {
 pub struct TuiElement {
     pub runtime_id: RuntimeNodeId,
     pub backend_locator: BackendLocator,
+    pub semantic_role: SemanticRole,
     pub kind: TuiElementKind,
     pub actions: Vec<SemanticAction>,
+    pub capability: InteractionCapability,
 }
 
 impl TuiElement {
@@ -143,7 +148,7 @@ fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement
         }),
         SemanticRole::TextInput => Some(TuiElementKind::TextInput {
             label: node.name.clone().unwrap_or_else(|| "Text input".to_owned()),
-            display: if node.sensitive {
+            display: if node.text_input_kind == Some(TextInputKind::Password) {
                 "[password]".to_owned()
             } else {
                 node.value.clone().unwrap_or_else(|| "[empty]".to_owned())
@@ -166,11 +171,14 @@ fn map_node(node: &SemanticNode, title: &mut String, output: &mut Vec<TuiElement
     };
 
     if let Some(kind) = kind {
+        let capability = interaction_capability(&node.role, &node.actions);
         output.push(TuiElement {
             runtime_id: node.runtime_id,
             backend_locator: node.backend_locator.clone(),
+            semantic_role: node.role.clone(),
             kind,
             actions: node.actions.clone(),
+            capability,
         });
     }
 
@@ -227,7 +235,7 @@ mod tests {
             name: Some(name.to_owned()),
             description: None,
             value: None,
-            sensitive: false,
+            text_input_kind: None,
             states: Vec::new(),
             actions: Vec::new(),
             children: Vec::new(),
@@ -242,7 +250,13 @@ mod tests {
         let label = node(1, SemanticRole::Label, "Status: idle");
         let mut checkbox = node(2, SemanticRole::CheckBox, "Enable feature");
         checkbox.states.push(SemanticState::Checked);
-        let button = node(3, SemanticRole::Button, "Apply");
+        let mut button = node(3, SemanticRole::Button, "Apply");
+        button.actions.push(SemanticAction {
+            index: 0,
+            name: "Click".to_owned(),
+            description: None,
+            keybinding: None,
+        });
         root.children = vec![label, checkbox, button];
 
         let view = TuiViewModel::from_snapshot(&root);
@@ -258,13 +272,15 @@ mod tests {
         assert!(!view.elements[0].is_focusable());
         assert!(view.elements[1].is_focusable());
         assert!(view.elements[2].is_focusable());
+        assert_eq!(view.elements[1].capability, InteractionCapability::None);
+        assert_eq!(view.elements[2].capability, InteractionCapability::Activate);
     }
 
     #[test]
     fn password_is_redacted_before_reaching_renderer() {
         let mut root = node(0, SemanticRole::Window, "Login");
         let mut password = node(1, SemanticRole::TextInput, "Password");
-        password.sensitive = true;
+        password.text_input_kind = Some(TextInputKind::Password);
         password.value = Some("must-never-render".to_owned());
         root.children.push(password);
 
@@ -277,6 +293,27 @@ mod tests {
             }
         );
         assert!(!format!("{view:?}").contains("must-never-render"));
+    }
+
+    #[test]
+    fn plain_text_input_retains_value_without_using_atspi_sensitive_state() {
+        let mut root = node(0, SemanticRole::Window, "Login");
+        let mut input = node(1, SemanticRole::TextInput, "Username");
+        input.text_input_kind = Some(TextInputKind::Plain);
+        input.value = Some("alice".to_owned());
+        input
+            .states
+            .push(SemanticState::Other("sensitive".to_owned()));
+        root.children.push(input);
+
+        let view = TuiViewModel::from_snapshot(&root);
+        assert_eq!(
+            view.elements[0].kind,
+            TuiElementKind::TextInput {
+                label: "Username".to_owned(),
+                display: "alice".to_owned(),
+            }
+        );
     }
 
     #[test]

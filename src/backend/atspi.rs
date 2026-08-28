@@ -13,7 +13,7 @@ use zbus::{names::UniqueName, zvariant::ObjectPath};
 
 use crate::semantic::{
     BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction, SemanticNode,
-    SemanticRole, SemanticState, TreeTruncation,
+    SemanticRole, SemanticState, TextInputKind, TreeTruncation,
 };
 
 #[derive(Clone, Debug)]
@@ -96,6 +96,10 @@ pub enum BackendError {
     ActionUnsupported(String),
     #[error("AT-SPI object {0} exposes the Action interface but has no available actions")]
     NoActions(String),
+    #[error(
+        "no safe convenience action was found on {node_id}\nAvailable actions:\n{available}\nUse --action-name or --action --index for explicit low-level invocation"
+    )]
+    NoCompatibleAction { node_id: String, available: String },
     #[error("action index {index} does not exist on {node_id}; available actions: {count}")]
     ActionNotFound {
         node_id: String,
@@ -321,17 +325,7 @@ impl AtspiBackend {
 
     pub async fn activate(&self, encoded_id: &str) -> Result<SemanticAction, BackendError> {
         let actions = self.actions(encoded_id).await?;
-        let preferred = ["press", "click", "activate", "open"];
-        let selected = preferred
-            .iter()
-            .find_map(|name| {
-                actions
-                    .iter()
-                    .find(|action| action.name.eq_ignore_ascii_case(name))
-            })
-            .or_else(|| actions.first())
-            .ok_or_else(|| BackendError::NoActions(encoded_id.to_owned()))?
-            .clone();
+        let selected = select_convenience_action(encoded_id, &actions)?;
         self.do_action(encoded_id, selected.index).await?;
         Ok(selected)
     }
@@ -616,14 +610,16 @@ impl AtspiBackend {
                 }
             }
 
+            let (semantic_role, text_input_kind) = semantic_role_and_input_kind(role, interfaces);
+
             Ok(SemanticNode {
                 runtime_id,
                 backend_locator: id,
-                role: SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText)),
+                role: semantic_role,
                 name,
                 description,
                 value,
-                sensitive: role == Role::PasswordText,
+                text_input_kind,
                 states,
                 actions,
                 children,
@@ -790,6 +786,27 @@ fn select_action_by_name(
     }
 }
 
+fn select_convenience_action(
+    node_id: &str,
+    actions: &[SemanticAction],
+) -> Result<SemanticAction, BackendError> {
+    if actions.is_empty() {
+        return Err(BackendError::NoActions(node_id.to_owned()));
+    }
+    ["click", "press", "activate"]
+        .iter()
+        .find_map(|name| {
+            actions
+                .iter()
+                .find(|action| action.name.eq_ignore_ascii_case(name))
+        })
+        .cloned()
+        .ok_or_else(|| BackendError::NoCompatibleAction {
+            node_id: node_id.to_owned(),
+            available: format_available_actions(actions),
+        })
+}
+
 fn format_available_actions(actions: &[SemanticAction]) -> String {
     if actions.is_empty() {
         return "  <none>".to_owned();
@@ -876,6 +893,21 @@ fn role_allows_text_value(role: Role, interfaces: atspi::InterfaceSet) -> bool {
             role,
             Role::Text | Role::Entry | Role::DateEditor | Role::Editbar
         )
+}
+
+fn semantic_role_and_input_kind(
+    role: Role,
+    interfaces: atspi::InterfaceSet,
+) -> (SemanticRole, Option<TextInputKind>) {
+    let semantic_role =
+        SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText));
+    let input_kind =
+        (semantic_role == SemanticRole::TextInput).then_some(if role == Role::PasswordText {
+            TextInputKind::Password
+        } else {
+            TextInputKind::Plain
+        });
+    (semantic_role, input_kind)
 }
 
 async fn read_geometry(
@@ -1005,12 +1037,32 @@ mod tests {
     }
 
     #[test]
+    fn convenience_activate_never_falls_back_to_the_first_action() {
+        let error = select_convenience_action("node", &actions(&["delete", "open", "properties"]))
+            .unwrap_err();
+        assert!(matches!(error, BackendError::NoCompatibleAction { .. }));
+    }
+
+    #[test]
     fn password_role_never_allows_text_value_reads() {
         let editable_text = atspi::InterfaceSet::new(Interface::EditableText);
         assert!(role_allows_text_value(Role::Entry, editable_text));
         assert!(role_allows_text_value(Role::Text, editable_text));
         assert!(role_allows_text_value(Role::Editbar, editable_text));
         assert!(!role_allows_text_value(Role::PasswordText, editable_text));
+    }
+
+    #[test]
+    fn password_role_and_atspi_sensitive_state_are_independent() {
+        let editable_text = atspi::InterfaceSet::new(Interface::EditableText);
+        assert_eq!(
+            semantic_role_and_input_kind(Role::Text, editable_text),
+            (SemanticRole::TextInput, Some(TextInputKind::Plain))
+        );
+        assert_eq!(
+            semantic_role_and_input_kind(Role::PasswordText, editable_text),
+            (SemanticRole::TextInput, Some(TextInputKind::Password))
+        );
     }
 
     #[test]

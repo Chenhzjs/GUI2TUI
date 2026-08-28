@@ -130,6 +130,16 @@ pub enum SemanticRole {
     Unknown(String),
 }
 
+/// Semantic kind for editable text controls.
+///
+/// This is intentionally separate from AT-SPI's `sensitive` state, which means
+/// that a control can respond to user input and says nothing about secrecy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextInputKind {
+    Plain,
+    Password,
+}
+
 impl From<Role> for SemanticRole {
     fn from(role: Role) -> Self {
         match role {
@@ -329,8 +339,8 @@ pub struct SemanticNode {
     pub name: Option<String>,
     pub description: Option<String>,
     pub value: Option<String>,
-    /// Marks content that must never be copied into a frontend view model.
-    pub sensitive: bool,
+    /// Present only when `role` is `SemanticRole::TextInput`.
+    pub text_input_kind: Option<TextInputKind>,
     pub states: Vec<SemanticState>,
     pub actions: Vec<SemanticAction>,
     pub children: Vec<SemanticNode>,
@@ -398,6 +408,10 @@ mod tests {
         assert_eq!(
             SemanticState::from(State::Focusable),
             SemanticState::Other("focusable".to_owned())
+        );
+        assert_eq!(
+            SemanticState::from(State::Sensitive),
+            SemanticState::Other("sensitive".to_owned())
         );
     }
 }
