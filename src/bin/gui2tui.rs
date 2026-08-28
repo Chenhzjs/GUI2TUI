@@ -3,10 +3,11 @@ use std::{error::Error, io, process::ExitCode, time::Duration};
 use clap::Parser;
 use crossterm::{
     cursor::{Hide, Show},
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, EventStream},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use futures_lite::StreamExt;
 use gui2tui::{
     backend::{AtspiBackend, BackendError, InspectOptions},
     tui::{
@@ -92,22 +93,36 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
+    let terminal_events = EventStream::new();
+    futures_lite::pin!(terminal_events);
     loop {
         terminal.draw(|frame| app.render(frame))?;
-        match event::read()? {
-            Event::Key(key) => {
-                if let Some(intent) = key_to_intent(key)
-                    && app.handle_intent(intent).await
-                {
-                    break;
+        tokio::select! {
+            terminal_event = terminal_events.next() => {
+                let Some(terminal_event) = terminal_event else { break };
+                match terminal_event? {
+                    Event::Key(key) => {
+                        if let Some(intent) = key_to_intent(key)
+                            && app.handle_intent(intent).await
+                        {
+                            break;
+                        }
+                    }
+                    Event::Mouse(mouse) => {
+                        if let Some(intent) = mouse_to_intent(mouse) {
+                            app.handle_mouse(intent).await;
+                        }
+                    }
+                    Event::Resize(_, _) | Event::FocusGained | Event::FocusLost | Event::Paste(_) => {}
+                }
+            },
+            event = app.next_event() => {
+                if let Some(event) = event {
+                    app.apply_external_event(event).await;
+                } else {
+                    app.handle_event_stream_closed().await;
                 }
             }
-            Event::Mouse(mouse) => {
-                if let Some(intent) = mouse_to_intent(mouse) {
-                    app.handle_mouse(intent).await;
-                }
-            }
-            Event::Resize(_, _) | Event::FocusGained | Event::FocusLost | Event::Paste(_) => {}
         }
     }
     Ok(())

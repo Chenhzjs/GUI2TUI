@@ -15,6 +15,7 @@ pub enum TuiElementKind {
     ToggleButton { label: String, pressed: bool },
     CheckBox { label: String, checked: bool },
     TextInput { label: String, display: String },
+    ComboBox { label: String },
     List { label: String },
     ListItem { label: String, selected: bool },
     MenuBar,
@@ -53,6 +54,7 @@ impl TuiElement {
                 | TuiElementKind::ToggleButton { .. }
                 | TuiElementKind::CheckBox { .. }
                 | TuiElementKind::TextInput { .. }
+                | TuiElementKind::ComboBox { .. }
                 | TuiElementKind::ListItem { .. }
                 | TuiElementKind::MenuItem { .. }
         )
@@ -219,6 +221,9 @@ fn map_node(
             } else {
                 node.value.clone().unwrap_or_else(|| "[empty]".to_owned())
             },
+        }),
+        SemanticRole::ComboBox => Some(TuiElementKind::ComboBox {
+            label: node.name.clone().unwrap_or_else(|| "Combo box".to_owned()),
         }),
         SemanticRole::List => Some(TuiElementKind::List {
             label: node.name.clone().unwrap_or_else(|| "List".to_owned()),

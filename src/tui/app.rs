@@ -2,7 +2,11 @@ use std::time::{Duration, Instant};
 
 use ratatui::Frame;
 
-use crate::backend::{AtspiBackend, BackendError, InspectOptions};
+use crate::{
+    backend::{AtspiBackend, BackendError, InspectOptions},
+    events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
+    semantic::SemanticCache,
+};
 
 use super::{
     action::{InteractionCapability, UiIntent},
@@ -19,6 +23,9 @@ pub struct TuiApplication {
     app_selector: String,
     inspect_options: InspectOptions,
     settle_delay: Duration,
+    cache: SemanticCache,
+    event_receiver: tokio::sync::mpsc::UnboundedReceiver<NormalizedEvent>,
+    event_stream_available: bool,
     view: TuiViewModel,
     focus: FocusModel,
     viewport: Viewport,
@@ -36,7 +43,19 @@ impl TuiApplication {
         settle_delay: Duration,
     ) -> Result<Self, BackendError> {
         let started = Instant::now();
-        let view = load_view(&backend, &app_selector, inspect_options).await?;
+        let applications = backend.applications().await?;
+        let application =
+            AtspiBackend::select_application(&applications, Some(&app_selector), None)?.clone();
+        let mut event_receiver = backend.subscribe_events(&application).await?;
+        let snapshot = backend
+            .inspect_application(&application, inspect_options)
+            .await?;
+        let cache = SemanticCache::from_snapshot(snapshot)
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        // Registration/cache bootstrap signals describe state already captured above.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        while event_receiver.try_recv().is_ok() {}
+        let view = TuiViewModel::from_snapshot(cache.root());
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&view, None);
@@ -45,6 +64,9 @@ impl TuiApplication {
             app_selector,
             inspect_options,
             settle_delay,
+            cache,
+            event_receiver,
+            event_stream_available: true,
             view,
             focus,
             viewport: Viewport::default(),
@@ -85,7 +107,7 @@ impl TuiApplication {
                 self.execute_focused(intent).await
             }
             UiIntent::Refresh => {
-                self.reload(Some("Refreshed semantic snapshot".to_owned()))
+                self.full_reload(Some("Forced full semantic snapshot".to_owned()))
                     .await;
             }
             UiIntent::ScrollLines(delta) => {
@@ -179,31 +201,34 @@ impl TuiApplication {
                     element_label(&element),
                     operation_description
                 );
-                tokio::time::sleep(self.settle_delay).await;
-                self.reload(Some(status)).await;
+                self.update_from_action_events(status).await;
             }
             Err(error) => {
                 let (status, refresh) = operation_error_status(&error);
                 self.status = status;
                 if refresh {
                     let status = self.status.clone();
-                    self.reload(Some(status)).await;
+                    self.full_reload(Some(status)).await;
                 }
             }
         }
     }
 
-    async fn reload(&mut self, success_status: Option<String>) {
+    async fn full_reload(&mut self, success_status: Option<String>) {
         let previous_locator = self
             .focus
             .current()
             .and_then(|id| self.view.element(id))
             .map(|element| element.backend_locator.clone());
         let started = Instant::now();
-        match load_view(&self.backend, &self.app_selector, self.inspect_options).await {
-            Ok(view) => {
+        match load_snapshot(&self.backend, &self.app_selector, self.inspect_options).await {
+            Ok(snapshot) => {
                 let snapshot_ms = started.elapsed().as_millis();
-                self.view = view;
+                if let Err(error) = self.cache.full_refresh(snapshot) {
+                    self.status = format!("Full refresh fallback failed: {error}");
+                    return;
+                }
+                self.view = TuiViewModel::from_snapshot(self.cache.root());
                 self.focus.reconcile(&self.view, previous_locator.as_ref());
                 self.application_available = true;
                 self.status = format!(
@@ -220,6 +245,148 @@ impl TuiApplication {
                 self.status = format!("Refresh failed: {error}");
             }
         }
+    }
+
+    async fn update_from_action_events(&mut self, success_status: String) {
+        let first = match tokio::time::timeout(self.settle_delay, self.event_receiver.recv()).await
+        {
+            Ok(Some(event)) => event,
+            _ => {
+                self.full_reload(Some(format!(
+                    "Full refresh fallback: no related AT-SPI event after {success_status}"
+                )))
+                .await;
+                return;
+            }
+        };
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let mut events = vec![first];
+        while let Ok(event) = self.event_receiver.try_recv() {
+            events.push(event);
+        }
+        self.apply_event_batch(events, Some(success_status)).await;
+    }
+
+    pub async fn next_event(&mut self) -> Option<NormalizedEvent> {
+        if !self.event_stream_available {
+            return std::future::pending().await;
+        }
+        let event = self.event_receiver.recv().await;
+        if event.is_none() {
+            self.event_stream_available = false;
+        }
+        event
+    }
+
+    pub async fn handle_event_stream_closed(&mut self) {
+        self.full_reload(Some(
+            "Full refresh fallback: AT-SPI event stream closed".to_owned(),
+        ))
+        .await;
+    }
+
+    pub async fn apply_external_event(&mut self, first: NormalizedEvent) {
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let mut events = vec![first];
+        while let Ok(event) = self.event_receiver.try_recv() {
+            events.push(event);
+        }
+        self.apply_event_batch(events, None).await;
+    }
+
+    async fn apply_event_batch(
+        &mut self,
+        events: Vec<NormalizedEvent>,
+        success_status: Option<String>,
+    ) {
+        let started = Instant::now();
+        let raw_count = events.len();
+        let scopes = coalesce_dirty_scopes(&events);
+        let dirty_count = scopes.len();
+        let mut refreshed_nodes = 0_usize;
+        let mut reconciled = 0_usize;
+        let mut reconciled_ids = Vec::new();
+        let mut new_ids = 0_usize;
+        for scope in scopes {
+            let result = match scope {
+                DirtyScope::Node(locator) => match self.backend.refresh_node(&locator, false).await
+                {
+                    Ok(node) => {
+                        refreshed_nodes += 1;
+                        self.cache.refresh_node(node).map(|_| ())
+                    }
+                    Err(error) => {
+                        self.full_reload(Some(format!(
+                            "Full refresh fallback: node refresh failed: {error}"
+                        )))
+                        .await;
+                        return;
+                    }
+                },
+                DirtyScope::Subtree(locator) => {
+                    match self
+                        .backend
+                        .refresh_subtree(&locator, self.inspect_options)
+                        .await
+                    {
+                        Ok(node) => {
+                            refreshed_nodes += semantic_node_count(&node);
+                            self.cache.replace_subtree(&locator, node).map(|report| {
+                                reconciled += report.locator_reconciled;
+                                reconciled_ids.extend(report.reconciled_runtime_ids);
+                                new_ids += report.new_runtime_ids;
+                            })
+                        }
+                        Err(error) => {
+                            self.full_reload(Some(format!(
+                                "Full refresh fallback: subtree refresh failed: {error}"
+                            )))
+                            .await;
+                            return;
+                        }
+                    }
+                }
+                DirtyScope::Application => {
+                    self.full_reload(Some("Full refresh fallback: application dirty".to_owned()))
+                        .await;
+                    return;
+                }
+            };
+            if let Err(error) = result {
+                self.full_reload(Some(format!(
+                    "Full refresh fallback: cache invariant/update failed: {error}"
+                )))
+                .await;
+                return;
+            }
+        }
+        self.rebuild_view_preserving_focus();
+        let elapsed = started.elapsed().as_millis();
+        let reconciled_detail = reconciled_ids
+            .first()
+            .map(|id| format!(" first_reconciled={id}"))
+            .unwrap_or_default();
+        self.status = format!(
+            "{} — events={raw_count} dirty={dirty_count} refreshed={refreshed_nodes} nodes reconciled={reconciled}{reconciled_detail} new_ids={new_ids} update={elapsed} ms full_snapshots={}",
+            success_status.unwrap_or_else(|| "Live update".to_owned()),
+            self.cache.full_snapshot_count()
+        );
+    }
+
+    fn rebuild_view_preserving_focus(&mut self) {
+        let previous_id = self.focus.current();
+        let previous_locator = previous_id
+            .and_then(|id| self.view.element(id))
+            .map(|element| element.backend_locator.clone());
+        self.view = TuiViewModel::from_snapshot(self.cache.root());
+        if let Some(id) = previous_id
+            && self.view.element(id).is_some_and(TuiElement::is_focusable)
+        {
+            self.focus.set(&self.view, id);
+        } else {
+            self.focus.reconcile(&self.view, previous_locator.as_ref());
+        }
+        self.ensure_focus_visible();
     }
 
     fn ensure_focus_visible(&mut self) {
@@ -242,15 +409,18 @@ impl TuiApplication {
     }
 }
 
-async fn load_view(
+async fn load_snapshot(
     backend: &AtspiBackend,
     selector: &str,
     options: InspectOptions,
-) -> Result<TuiViewModel, BackendError> {
+) -> Result<crate::semantic::SemanticNode, BackendError> {
     let applications = backend.applications().await?;
     let application = AtspiBackend::select_application(&applications, Some(selector), None)?;
-    let snapshot = backend.inspect_application(application, options).await?;
-    Ok(TuiViewModel::from_snapshot(&snapshot))
+    backend.inspect_application(application, options).await
+}
+
+fn semantic_node_count(node: &crate::semantic::SemanticNode) -> usize {
+    1 + node.children.iter().map(semantic_node_count).sum::<usize>()
 }
 
 fn application_is_gone(error: &BackendError) -> bool {
@@ -311,6 +481,7 @@ fn element_label(element: &TuiElement) -> &str {
         | TuiElementKind::ToggleButton { label, .. }
         | TuiElementKind::CheckBox { label, .. }
         | TuiElementKind::TextInput { label, .. }
+        | TuiElementKind::ComboBox { label }
         | TuiElementKind::List { label }
         | TuiElementKind::ListItem { label, .. }
         | TuiElementKind::Menu { label }

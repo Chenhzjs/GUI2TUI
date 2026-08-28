@@ -112,6 +112,7 @@ pub enum SemanticRole {
     RadioButton,
     Text,
     TextInput,
+    ComboBox,
     MenuBar,
     Menu,
     MenuItem,
@@ -161,6 +162,7 @@ impl From<Role> for SemanticRole {
             Role::RadioButton | Role::RadioMenuItem => Self::RadioButton,
             Role::Text | Role::Paragraph | Role::Terminal => Self::Text,
             Role::Entry | Role::PasswordText | Role::DateEditor | Role::Editbar => Self::TextInput,
+            Role::ComboBox => Self::ComboBox,
             Role::MenuBar => Self::MenuBar,
             Role::Menu | Role::PopupMenu => Self::Menu,
             Role::MenuItem | Role::TearoffMenuItem => Self::MenuItem,
@@ -205,6 +207,7 @@ impl fmt::Display for SemanticRole {
             Self::RadioButton => f.write_str("RadioButton"),
             Self::Text => f.write_str("Text"),
             Self::TextInput => f.write_str("TextInput"),
+            Self::ComboBox => f.write_str("ComboBox"),
             Self::MenuBar => f.write_str("MenuBar"),
             Self::Menu => f.write_str("Menu"),
             Self::MenuItem => f.write_str("MenuItem"),
@@ -397,6 +400,7 @@ mod tests {
             SemanticRole::Application
         );
         assert_eq!(SemanticRole::from(Role::Entry), SemanticRole::TextInput);
+        assert_eq!(SemanticRole::from(Role::ComboBox), SemanticRole::ComboBox);
         assert_eq!(SemanticRole::from(Role::PageTab), SemanticRole::Tab);
         assert_eq!(
             SemanticRole::from_atspi(Role::Text, true),

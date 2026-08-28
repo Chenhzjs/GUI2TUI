@@ -113,7 +113,9 @@ fn interaction(element: &TuiElement) -> Option<HitInteraction> {
                 HitInteraction::Activate
             })
         }
-        TuiElementKind::TextInput { .. } => Some(HitInteraction::Focus),
+        TuiElementKind::TextInput { .. } | TuiElementKind::ComboBox { .. } => {
+            Some(HitInteraction::Focus)
+        }
         _ => None,
     }
 }
@@ -142,6 +144,9 @@ pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
                 format!("{marker}{label}{unavailable}"),
                 format!("    > {display}"),
             ]
+        }
+        TuiElementKind::ComboBox { label } => {
+            vec![format!("{marker}[ {label} ▼ ]{unavailable}")]
         }
         TuiElementKind::List { label } => vec![format!("  {label}:")],
         TuiElementKind::ListItem { label, selected } => {
