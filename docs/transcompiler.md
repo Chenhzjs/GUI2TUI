@@ -30,6 +30,7 @@ command, field, or hit region to the existing semantic operation resolver.
 | Swing fixture | 29 | 8 | 26 | 6 | 3 | 2 | 1 | 1 | 0 | 3 | 18 | palette command PASS |
 | Electron fixture | 31 | 0 | 16 | 2 | 3 | 4 | 1 | 0 | 0 | 0 | 8 | no named safe action |
 | Chrome fixture | 286 | 0 | 142 | 26 | 4 | 19 | 2 | 0 | 0 | 12 | 51 | regression/read-only |
+| Chrome large (700 rows) | 5,158 | 0 | 3,621 | 1,417 | 0 | 20 | 2 | 700 | 0 | 711 | 3,535 | scale probe |
 | Firefox fixture | 236 | 2 | 140 | 27 | 4 | 37 | 4 | 2 | 0 | 45 | 90 | regression/read-back guard |
 | GTK opaque fixture | 9 | 1 | 8 | 1 | 0 | 0 | 0 | 0 | 1 | 0 | 4 | surrounding button PASS |
 
@@ -69,6 +70,7 @@ opaque region; it never maps GUI pixels to terminal coordinates.
 | Swing fixture | 52.8 ms walk | 0.040 ms | 0.090 ms | 189.5 ms |
 | Electron fixture | 6.1 ms cache | 0.034 ms | 0.055 ms | 102.3 ms |
 | Chrome fixture | 29.1 ms cache | 0.203 ms | 0.412 ms | 103.2 ms |
+| Chrome large (5,158 nodes) | 199.7 ms cache | 3.126 ms | 8.110 ms | 387.7 ms |
 | Firefox fixture | 357.0 ms walk | 0.140 ms | 0.392 ms | 392.1 ms |
 | Opaque fixture | 1.6 ms cache | 0.012 ms | 0.020 ms | 107.5 ms |
 
