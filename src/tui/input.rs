@@ -20,6 +20,7 @@ pub fn key_to_intent(event: KeyEvent) -> Option<UiIntent> {
         }
         (KeyCode::Tab, _) => Some(UiIntent::FocusNext),
         (KeyCode::Enter, _) => Some(UiIntent::Activate),
+        (KeyCode::Char(':'), _) => Some(UiIntent::OpenCommandPalette),
         (KeyCode::Char(' '), _) => Some(UiIntent::Toggle),
         (KeyCode::Char('r'), _) => Some(UiIntent::Refresh),
         (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => Some(UiIntent::Quit),

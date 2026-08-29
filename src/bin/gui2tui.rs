@@ -13,6 +13,7 @@ use gui2tui::{
         AtspiBackend, BackendError, BootstrapStrategy, DEFAULT_EVENT_BUFFER_CAPACITY,
         InspectOptions,
     },
+    transcompile::PresentationMode,
     tui::{
         app::TuiApplication,
         input::mouse_to_intent,
@@ -55,6 +56,10 @@ struct Cli {
     /// Maximum buffered AT-SPI events before a correctness resync.
     #[arg(long, default_value_t = DEFAULT_EVENT_BUFFER_CAPACITY)]
     event_buffer_capacity: usize,
+
+    /// Frontend projection pipeline; legacy preserves the Phase 3B flat mapping.
+    #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled)]
+    presentation: PresentationMode,
 }
 
 #[tokio::main]
@@ -103,6 +108,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         Duration::from_millis(cli.settle_ms),
         cli.bootstrap,
         cli.event_buffer_capacity,
+        cli.presentation,
     )
     .await?;
 

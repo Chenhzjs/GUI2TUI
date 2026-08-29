@@ -1,19 +1,20 @@
-use crate::semantic::{BackendLocator, RuntimeNodeId};
-
-use super::view_model::TuiViewModel;
+use crate::{
+    semantic::BackendLocator,
+    transcompile::{SceneElementId, TuiScene},
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FocusModel {
-    current: Option<RuntimeNodeId>,
+    current: Option<SceneElementId>,
 }
 
 impl FocusModel {
-    pub fn current(&self) -> Option<RuntimeNodeId> {
+    pub fn current(&self) -> Option<SceneElementId> {
         self.current
     }
 
-    pub fn set(&mut self, view: &TuiViewModel, id: RuntimeNodeId) -> bool {
-        if view
+    pub fn set(&mut self, scene: &TuiScene, id: SceneElementId) -> bool {
+        if scene
             .element(id)
             .is_some_and(|element| element.is_focusable())
         {
@@ -24,29 +25,29 @@ impl FocusModel {
         }
     }
 
-    pub fn reconcile(&mut self, view: &TuiViewModel, preferred_locator: Option<&BackendLocator>) {
-        let focusable = view.focusable_ids();
+    pub fn reconcile(&mut self, scene: &TuiScene, preferred_locator: Option<&BackendLocator>) {
+        let focusable = scene.focusable_ids();
         self.current = preferred_locator
-            .and_then(|locator| view.runtime_id_for_locator(locator))
+            .and_then(|locator| scene.scene_id_for_locator(locator))
             .or_else(|| focusable.first().copied());
     }
 
-    pub fn next(&mut self, view: &TuiViewModel) {
-        let ids = view.focusable_ids();
+    pub fn next(&mut self, scene: &TuiScene) {
+        let ids = scene.focusable_ids();
         self.current = cycle(&ids, self.current, 1);
     }
 
-    pub fn previous(&mut self, view: &TuiViewModel) {
-        let ids = view.focusable_ids();
+    pub fn previous(&mut self, scene: &TuiScene) {
+        let ids = scene.focusable_ids();
         self.current = cycle(&ids, self.current, -1);
     }
 }
 
 fn cycle(
-    ids: &[RuntimeNodeId],
-    current: Option<RuntimeNodeId>,
+    ids: &[SceneElementId],
+    current: Option<SceneElementId>,
     direction: i8,
-) -> Option<RuntimeNodeId> {
+) -> Option<SceneElementId> {
     if ids.is_empty() {
         return None;
     }
@@ -95,8 +96,8 @@ impl Viewport {
 #[cfg(test)]
 mod tests {
     use crate::{
-        semantic::{BackendLocator, DebugInfo, SemanticNode, SemanticRole},
-        tui::view_model::TuiViewModel,
+        semantic::{BackendLocator, DebugInfo, RuntimeNodeId, SemanticNode, SemanticRole},
+        transcompile::compile_legacy_scene,
     };
 
     use super::*;
@@ -129,16 +130,18 @@ mod tests {
             node(3, SemanticRole::Label),
             node(4, SemanticRole::CheckBox),
         ];
-        let view = TuiViewModel::from_snapshot(&root);
+        let scene = compile_legacy_scene(&root);
+        let button = scene.scene_id_for_runtime(RuntimeNodeId::new(2)).unwrap();
+        let checkbox = scene.scene_id_for_runtime(RuntimeNodeId::new(4)).unwrap();
         let mut focus = FocusModel::default();
-        focus.reconcile(&view, None);
-        assert_eq!(focus.current(), Some(RuntimeNodeId::new(2)));
-        focus.next(&view);
-        assert_eq!(focus.current(), Some(RuntimeNodeId::new(4)));
-        focus.next(&view);
-        assert_eq!(focus.current(), Some(RuntimeNodeId::new(2)));
-        focus.previous(&view);
-        assert_eq!(focus.current(), Some(RuntimeNodeId::new(4)));
+        focus.reconcile(&scene, None);
+        assert_eq!(focus.current(), Some(button));
+        focus.next(&scene);
+        assert_eq!(focus.current(), Some(checkbox));
+        focus.next(&scene);
+        assert_eq!(focus.current(), Some(button));
+        focus.previous(&scene);
+        assert_eq!(focus.current(), Some(checkbox));
     }
 
     #[test]

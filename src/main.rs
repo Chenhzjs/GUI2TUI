@@ -1,4 +1,7 @@
-use std::{process::ExitCode, time::Duration};
+use std::{
+    process::ExitCode,
+    time::{Duration, Instant},
+};
 
 use clap::Parser;
 use gui2tui::{
@@ -92,6 +95,14 @@ struct Cli {
     /// Maximum buffered events used by --watch-events.
     #[arg(long, default_value_t = DEFAULT_EVENT_BUFFER_CAPACITY)]
     event_buffer_capacity: usize,
+
+    /// Print the toolkit-independent SemanticRegion analysis instead of the raw tree.
+    #[arg(long, requires = "app")]
+    dump_regions: bool,
+
+    /// Print the planned terminal TuiScene instead of the raw tree.
+    #[arg(long, requires = "app")]
+    dump_scene: bool,
 }
 
 #[tokio::main]
@@ -294,6 +305,31 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             .map(|reason| format!(" fallback={reason:?}"))
             .unwrap_or_default(),
     );
+    if cli.dump_regions || cli.dump_scene {
+        let analysis_started = Instant::now();
+        let analysis = gui2tui::transcompile::analyze_regions(&bootstrap.root);
+        let analysis_elapsed = analysis_started.elapsed();
+        if cli.dump_regions {
+            print!("{}", gui2tui::transcompile::format_regions(&analysis));
+        }
+        if cli.dump_scene {
+            let scene_started = Instant::now();
+            let scene = gui2tui::transcompile::compile_scene(&bootstrap.root, &analysis);
+            let scene_elapsed = scene_started.elapsed();
+            print!("{}", gui2tui::transcompile::format_scene(&scene));
+            eprintln!(
+                "Transcompiler: region analysis {:.3} ms; scene compile {:.3} ms",
+                analysis_elapsed.as_secs_f64() * 1000.0,
+                scene_elapsed.as_secs_f64() * 1000.0,
+            );
+        } else {
+            eprintln!(
+                "Transcompiler: region analysis {:.3} ms",
+                analysis_elapsed.as_secs_f64() * 1000.0,
+            );
+        }
+        return Ok(());
+    }
     print!(
         "{}",
         format_tree(

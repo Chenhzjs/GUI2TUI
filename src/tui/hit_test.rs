@@ -1,6 +1,6 @@
 use ratatui::layout::Rect;
 
-use crate::semantic::RuntimeNodeId;
+use crate::transcompile::SceneElementId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HitInteraction {
@@ -11,7 +11,7 @@ pub enum HitInteraction {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HitRegion {
-    pub runtime_id: RuntimeNodeId,
+    pub scene_id: SceneElementId,
     pub rect: Rect,
     pub interaction: HitInteraction,
 }
@@ -48,16 +48,16 @@ mod tests {
 
     #[test]
     fn hit_testing_uses_terminal_rectangles_and_runtime_ids() {
-        let expected = RuntimeNodeId::new(7);
+        let expected = SceneElementId::new(7);
         let mut map = HitMap::default();
         map.replace(vec![HitRegion {
-            runtime_id: expected,
+            scene_id: expected,
             rect: Rect::new(4, 3, 12, 2),
             interaction: HitInteraction::Activate,
         }]);
 
-        assert_eq!(map.hit(4, 3).unwrap().runtime_id, expected);
-        assert_eq!(map.hit(15, 4).unwrap().runtime_id, expected);
+        assert_eq!(map.hit(4, 3).unwrap().scene_id, expected);
+        assert_eq!(map.hit(15, 4).unwrap().scene_id, expected);
         assert!(map.hit(16, 4).is_none());
         assert!(map.hit(5, 5).is_none());
     }

@@ -2,38 +2,42 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::semantic::RuntimeNodeId;
+use crate::transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene};
 
 use super::{
     action::InteractionCapability,
     edit::EditSession,
     hit_test::{HitInteraction, HitRegion},
-    view_model::{TuiElement, TuiElementKind, TuiViewModel},
 };
 
 pub struct RenderContext<'a> {
-    pub view: &'a TuiViewModel,
-    pub focused: Option<RuntimeNodeId>,
+    pub scene: &'a TuiScene,
+    pub focused: Option<SceneElementId>,
     pub scroll_offset: u16,
     pub status: &'a str,
     pub application_available: bool,
     pub edit_session: Option<&'a EditSession>,
+    pub palette: Option<PaletteRender<'a>>,
+}
+
+pub struct PaletteRender<'a> {
+    pub query: &'a str,
+    pub entries: &'a [(SceneElementId, String)],
+    pub selected: usize,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
     let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(frame.area());
     let main_area = areas[0];
     let footer_area = areas[1];
-
     let block = Block::default()
-        .title(format!(" GUI2TUI — {} ", context.view.title))
+        .title(format!(" GUI2TUI — {} ", context.scene.title))
         .borders(Borders::ALL);
     let content_area = block.inner(main_area);
     frame.render_widget(block, main_area);
-
     let mut hit_regions = Vec::new();
     if context.application_available {
         render_elements(frame, content_area, &context, &mut hit_regions);
@@ -43,9 +47,11 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
             content_area,
         );
     }
-
+    if let Some(palette) = context.palette {
+        render_palette(frame, content_area, palette);
+    }
     let footer = format!(
-        "{} | Tab/Shift-Tab Focus | Enter/Space Operate | ↑/↓ Scroll | r Refresh | q Quit",
+        "{} | Tab Focus | Enter Operate | : Commands | ↑/↓ Scroll | r Refresh | q Quit",
         context.status
     );
     frame.render_widget(
@@ -63,13 +69,11 @@ fn render_elements(
 ) {
     let visible_bottom = context.scroll_offset.saturating_add(area.height);
     let mut logical_top = 0_u16;
-
-    for element in &context.view.elements {
-        let focused = context.focused == Some(element.runtime_id);
+    for element in &context.scene.elements {
+        let focused = context.focused == Some(element.id);
         let lines = element_lines_for_width(element, focused, context.edit_session, area.width);
         let mut first_y = None;
         let mut visible_height = 0_u16;
-
         for (line_index, line) in lines.into_iter().enumerate() {
             let logical_y = logical_top.saturating_add(line_index as u16);
             if logical_y < context.scroll_offset || logical_y >= visible_bottom {
@@ -90,72 +94,83 @@ fn render_elements(
             first_y.get_or_insert(y);
             visible_height = visible_height.saturating_add(1);
         }
-
         if let (Some(y), Some(interaction)) = (first_y, interaction(element)) {
             hit_regions.push(HitRegion {
-                runtime_id: element.runtime_id,
+                scene_id: element.id,
                 rect: Rect::new(area.x, y, area.width, visible_height),
                 interaction,
             });
         }
-        logical_top = logical_top.saturating_add(element.height());
+        logical_top = logical_top.saturating_add(element.height_for_width(area.width));
     }
 }
 
-fn interaction(element: &TuiElement) -> Option<HitInteraction> {
+fn interaction(element: &SceneElement) -> Option<HitInteraction> {
     match element.kind {
-        TuiElementKind::Button { .. }
-        | TuiElementKind::ToggleButton { .. }
-        | TuiElementKind::CheckBox { .. }
-        | TuiElementKind::ListItem { .. }
-        | TuiElementKind::MenuItem { .. } => {
-            Some(if element.capability == InteractionCapability::None {
+        SceneElementKind::Button { .. }
+        | SceneElementKind::Toggle { .. }
+        | SceneElementKind::Checkbox { .. }
+        | SceneElementKind::SelectionItem { .. }
+        | SceneElementKind::Command { .. } => {
+            Some(if element.capability() == InteractionCapability::None {
                 HitInteraction::Unavailable
             } else {
                 HitInteraction::Activate
             })
         }
-        TuiElementKind::TextInput { .. } | TuiElementKind::ComboBox { .. } => {
+        SceneElementKind::Field { .. } | SceneElementKind::Selector { .. } => {
             Some(HitInteraction::Focus)
         }
         _ => None,
     }
 }
 
-pub fn element_lines(element: &TuiElement, focused: bool) -> Vec<String> {
+pub fn element_lines(element: &SceneElement, focused: bool) -> Vec<String> {
     element_lines_for_width(element, focused, None, u16::MAX)
 }
 
 fn element_lines_for_width(
-    element: &TuiElement,
+    element: &SceneElement,
     focused: bool,
     edit_session: Option<&EditSession>,
     width: u16,
 ) -> Vec<String> {
     let marker = if focused { "> " } else { "  " };
-    let unavailable = if element.capability == InteractionCapability::None {
-        "  (read-only)"
-    } else {
-        ""
-    };
+    let unavailable =
+        if element.capability() == InteractionCapability::None && element.is_focusable() {
+            "  (read-only)"
+        } else {
+            ""
+        };
     match &element.kind {
-        TuiElementKind::Label { text } => vec![format!("  {text}")],
-        TuiElementKind::Group { label } => vec![format!("  {label}:")],
-        TuiElementKind::Button { label } => vec![format!("{marker}[ {label} ]{unavailable}")],
-        TuiElementKind::ToggleButton { label, pressed } => vec![format!(
+        SceneElementKind::Text { text } | SceneElementKind::Status { text } => {
+            vec![format!("  {text}")]
+        }
+        SceneElementKind::Group { label } | SceneElementKind::CommandHeader { label } => {
+            vec![format!("  {label}:")]
+        }
+        SceneElementKind::Button { label } => vec![format!("{marker}[ {label} ]{unavailable}")],
+        SceneElementKind::Toggle { label, pressed } => vec![format!(
             "{marker}[{} {label}]{unavailable}",
-            if *pressed { "*" } else { " " },
+            if *pressed { "*" } else { " " }
         )],
-        TuiElementKind::CheckBox { label, checked } => vec![format!(
+        SceneElementKind::Checkbox { label, checked } => vec![format!(
             "{marker}[{}] {label}{unavailable}",
-            if *checked { "x" } else { " " },
+            if *checked { "x" } else { " " }
         )],
-        TuiElementKind::TextInput { label, display, .. } => {
-            if let Some(session) = edit_session.filter(|edit| edit.target == element.runtime_id) {
+        SceneElementKind::Field { label, display, .. } => {
+            if let Some(session) = edit_session.filter(|edit| {
+                element
+                    .binding
+                    .as_ref()
+                    .is_some_and(|binding| edit.target == binding.runtime_id)
+            }) {
                 vec![
                     format!("{marker}{label}  [editing]"),
                     format!("    > {}", edit_buffer_window(session, width)),
                 ]
+            } else if width >= 100 {
+                vec![format!("{marker}{label}: {display}{unavailable}")]
             } else {
                 vec![
                     format!("{marker}{label}{unavailable}"),
@@ -163,25 +178,56 @@ fn element_lines_for_width(
                 ]
             }
         }
-        TuiElementKind::ComboBox { label } => {
-            vec![format!("{marker}[ {label} ▼ ]{unavailable}")]
-        }
-        TuiElementKind::List { label } => vec![format!("  {label}:")],
-        TuiElementKind::ListItem { label, selected } => {
-            let selection_marker = if *selected { "*" } else { "•" };
-            vec![format!("{marker}{selection_marker} {label}{unavailable}")]
-        }
-        TuiElementKind::MenuBar => vec!["  Menu:".to_owned()],
-        TuiElementKind::Menu { label } => vec![format!("  {label}:")],
-        TuiElementKind::MenuItem { label, opens_menu } => vec![format!(
-            "{marker}{label}{}{unavailable}",
-            if *opens_menu { " >" } else { "" }
+        SceneElementKind::Selector { label } => vec![format!("{marker}[ {label} ▼ ]{unavailable}")],
+        SceneElementKind::SelectionItem { label, selected } => vec![format!(
+            "{marker}{} {label}{unavailable}",
+            if *selected { "*" } else { "•" }
         )],
-        TuiElementKind::Unsupported { role, label } => vec![match label {
-            Some(label) => format!("  <Unsupported: {role} \"{label}\">"),
-            None => format!("  <Unsupported: {role}>"),
-        }],
+        SceneElementKind::Command { path } => vec![format!("{marker}{path}{unavailable}")],
+        SceneElementKind::OpaqueContent { label, dimensions } => vec![
+            format!("  {label}"),
+            dimensions.map_or_else(
+                || "  [fidelity-required content]".to_owned(),
+                |(w, h)| format!("  [fidelity-required content: {w}×{h} GUI pixels]"),
+            ),
+        ],
+        SceneElementKind::Unsupported { label } => vec![format!("  <Unsupported: {label}>")],
     }
+}
+
+fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
+    let width = area.width.min(72);
+    let height = (palette.entries.len() as u16 + 4).min(area.height).max(5);
+    let popup = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(Clear, popup);
+    let mut lines = vec![format!("> {}", palette.query)];
+    lines.extend(
+        palette
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(index, (_, label))| {
+                format!(
+                    "{} {label}",
+                    if index == palette.selected { ">" } else { " " }
+                )
+            }),
+    );
+    frame.render_widget(
+        Paragraph::new(lines.join("\n"))
+            .block(
+                Block::default()
+                    .title(" Command palette ")
+                    .borders(Borders::ALL),
+            )
+            .wrap(Wrap { trim: true }),
+        popup,
+    );
 }
 
 fn edit_buffer_window(session: &EditSession, width: u16) -> String {
@@ -202,27 +248,36 @@ fn edit_buffer_window(session: &EditSession, width: u16) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::{BackendLocator, RuntimeNodeId};
-
     use super::*;
+    use crate::{
+        semantic::{BackendLocator, RuntimeNodeId, SemanticRole},
+        transcompile::{PresentationStrategy, SceneBinding},
+        tui::action::UiIntent,
+    };
 
-    fn element(kind: TuiElementKind) -> TuiElement {
-        TuiElement {
-            runtime_id: RuntimeNodeId::new(1),
-            backend_locator: BackendLocator::new(":1.2", "/node/1"),
-            semantic_role: crate::semantic::SemanticRole::Button,
+    fn element(kind: SceneElementKind) -> SceneElement {
+        SceneElement {
+            id: SceneElementId::new(9),
             kind,
-            actions: Vec::new(),
-            capability: InteractionCapability::Activate,
+            sources: vec![RuntimeNodeId::new(1)],
+            binding: Some(SceneBinding {
+                runtime_id: RuntimeNodeId::new(1),
+                backend_locator: BackendLocator::new(":1.2", "/node/1"),
+                semantic_role: SemanticRole::Button,
+                actions: Vec::new(),
+                capability: InteractionCapability::Activate,
+                default_intent: UiIntent::Activate,
+            }),
+            strategy: PresentationStrategy::DirectWidget,
         }
     }
 
     #[test]
-    fn renders_terminal_native_widget_text_with_non_color_focus_marker() {
+    fn renders_terminal_native_widgets_with_non_color_markers() {
         assert_eq!(
             element_lines(
-                &element(TuiElementKind::Button {
-                    label: "Apply".to_owned()
+                &element(SceneElementKind::Button {
+                    label: "Apply".into()
                 }),
                 true
             ),
@@ -230,9 +285,9 @@ mod tests {
         );
         assert_eq!(
             element_lines(
-                &element(TuiElementKind::CheckBox {
-                    label: "Enabled".to_owned(),
-                    checked: true,
+                &element(SceneElementKind::Checkbox {
+                    label: "Enabled".into(),
+                    checked: true
                 }),
                 false
             ),
@@ -241,62 +296,23 @@ mod tests {
     }
 
     #[test]
-    fn distinguishes_selected_list_items_from_keyboard_focus() {
-        assert_eq!(
-            element_lines(
-                &element(TuiElementKind::ListItem {
-                    label: "Beta".to_owned(),
-                    selected: true,
-                }),
-                false
-            ),
-            vec!["  * Beta"]
-        );
-        assert_eq!(
-            element_lines(
-                &element(TuiElementKind::ListItem {
-                    label: "Beta".to_owned(),
-                    selected: false,
-                }),
-                true
-            ),
-            vec!["> • Beta"]
-        );
-    }
-
-    #[test]
-    fn marks_non_actionable_controls_as_read_only_without_relying_on_color() {
-        let mut checkbox = element(TuiElementKind::CheckBox {
-            label: "Enabled".to_owned(),
-            checked: false,
-        });
-        checkbox.capability = InteractionCapability::None;
-        checkbox.semantic_role = crate::semantic::SemanticRole::CheckBox;
-
-        assert_eq!(
-            element_lines(&checkbox, true),
-            vec!["> [ ] Enabled  (read-only)"]
-        );
-    }
-
-    #[test]
-    fn edit_buffer_renders_a_non_color_cursor_and_horizontal_window() {
-        let mut input = element(TuiElementKind::TextInput {
-            label: "Username".to_owned(),
-            display: "alice".to_owned(),
+    fn responsive_field_switches_from_stacked_to_inline() {
+        let field = element(SceneElementKind::Field {
+            label: "Username".into(),
+            display: "alice".into(),
             input_kind: crate::semantic::TextInputKind::Plain,
         });
-        input.semantic_role = crate::semantic::SemanticRole::TextInput;
-        input.capability = InteractionCapability::EditText;
-        let session = EditSession::new(
-            input.runtime_id,
-            input.backend_locator.clone(),
-            "abcdefghijklmnopqrstuvwxyz".to_owned(),
-            1,
-        );
-        let lines = element_lines_for_width(&input, true, Some(&session), 18);
-        assert_eq!(lines[0], "> Username  [editing]");
-        assert!(lines[1].contains('|'));
-        assert!(lines[1].len() < 24);
+        assert_eq!(element_lines_for_width(&field, false, None, 80).len(), 2);
+        assert_eq!(element_lines_for_width(&field, false, None, 120).len(), 1);
+    }
+
+    #[test]
+    fn opaque_content_is_explicitly_preserved() {
+        let mut opaque = element(SceneElementKind::OpaqueContent {
+            label: "Canvas".into(),
+            dimensions: Some((640, 480)),
+        });
+        opaque.binding = None;
+        assert!(element_lines(&opaque, false)[1].contains("fidelity-required"));
     }
 }

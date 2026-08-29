@@ -10,6 +10,7 @@ pub enum UiIntent {
     Toggle,
     Select,
     OpenMenu,
+    OpenCommandPalette,
     BeginEdit,
     CommitEdit,
     CancelEdit,

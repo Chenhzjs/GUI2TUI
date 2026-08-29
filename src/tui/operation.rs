@@ -1,11 +1,11 @@
 use thiserror::Error;
 
-use crate::semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability};
-
-use super::{
-    action::{ActionResolutionError, UiIntent, resolve_action},
-    view_model::TuiViewModel,
+use crate::{
+    semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability},
+    transcompile::TuiScene,
 };
+
+use super::action::{ActionResolutionError, UiIntent, resolve_action};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SemanticOperation {
@@ -85,30 +85,37 @@ pub enum OperationResolutionError {
 }
 
 pub fn resolve_backend_operation(
-    view: &TuiViewModel,
+    scene: &TuiScene,
     operation: SemanticOperation,
 ) -> Result<BackendOperation, OperationResolutionError> {
     let runtime_id = operation.runtime_id();
-    let element = view
-        .element(runtime_id)
+    let scene_id = scene
+        .scene_id_for_runtime(runtime_id)
+        .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+    let element = scene
+        .element(scene_id)
+        .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+    let binding = element
+        .binding
+        .as_ref()
         .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
 
     if let SemanticOperation::ReplaceText { text, .. } = &operation {
-        if element.capability != super::action::InteractionCapability::EditText {
+        if binding.capability != super::action::InteractionCapability::EditText {
             return Err(OperationResolutionError::NoCompatibleOperation(
                 "the text input is not a plain editable AT-SPI control".to_owned(),
             ));
         }
         return Ok(BackendOperation::SetTextContents {
-            locator: element.backend_locator.clone(),
+            locator: binding.backend_locator.clone(),
             text: text.clone(),
         });
     }
 
     if matches!(operation, SemanticOperation::SelectNode(_)) {
-        return match resolve_selection_strategy(view, runtime_id) {
+        return match resolve_selection_strategy(scene, runtime_id) {
             SelectionStrategy::NodeAction { action } => Ok(BackendOperation::InvokeAction {
-                locator: element.backend_locator.clone(),
+                locator: binding.backend_locator.clone(),
                 action,
             }),
             SelectionStrategy::ParentSelection {
@@ -124,36 +131,42 @@ pub fn resolve_backend_operation(
         };
     }
 
-    let action = resolve_action(&element.semantic_role, &element.actions, operation.intent())
+    let action = resolve_action(&binding.semantic_role, &binding.actions, operation.intent())
         .map_err(action_error)?
         .clone();
     Ok(BackendOperation::InvokeAction {
-        locator: element.backend_locator.clone(),
+        locator: binding.backend_locator.clone(),
         action,
     })
 }
 
 pub fn resolve_selection_strategy(
-    view: &TuiViewModel,
+    scene: &TuiScene,
     runtime_id: RuntimeNodeId,
 ) -> SelectionStrategy {
-    let Some(element) = view.element(runtime_id) else {
+    let Some(scene_id) = scene.scene_id_for_runtime(runtime_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+    let Some(element) = scene.element(scene_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+    let Some(binding) = element.binding.as_ref() else {
         return SelectionStrategy::Unsupported;
     };
 
-    if let Ok(action) = resolve_action(&element.semantic_role, &element.actions, UiIntent::Select) {
+    if let Ok(action) = resolve_action(&binding.semantic_role, &binding.actions, UiIntent::Select) {
         return SelectionStrategy::NodeAction {
             action: action.clone(),
         };
     }
 
-    let Some(context) = view.node_context(runtime_id) else {
+    let Some(context) = scene.node_context(runtime_id) else {
         return SelectionStrategy::Unsupported;
     };
     let (Some(parent_id), Some(child_index)) = (context.parent_id, context.index_in_parent) else {
         return SelectionStrategy::Unsupported;
     };
-    let Some(parent) = view.node_metadata(parent_id) else {
+    let Some(parent) = scene.node_metadata(parent_id) else {
         return SelectionStrategy::Unsupported;
     };
     if parent
@@ -180,6 +193,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::transcompile::compile_legacy_scene;
 
     fn node(id: u64, role: SemanticRole, name: &str) -> SemanticNode {
         SemanticNode {
@@ -220,9 +234,9 @@ mod tests {
         list.children.push(alpha);
         root.children.push(list);
 
-        let view = TuiViewModel::from_snapshot(&root);
+        let scene = compile_legacy_scene(&root);
         assert_eq!(
-            resolve_selection_strategy(&view, RuntimeNodeId::new(2)),
+            resolve_selection_strategy(&scene, RuntimeNodeId::new(2)),
             SelectionStrategy::ParentSelection {
                 container_locator: BackendLocator::new(":1.2", "/node/1"),
                 child_index: 7,
@@ -237,14 +251,14 @@ mod tests {
         item.index_in_parent = Some(1);
         item.actions.push(action("Toggle"));
         root.children.push(item);
-        let view = TuiViewModel::from_snapshot(&root);
+        let scene = compile_legacy_scene(&root);
 
         assert_eq!(
             SemanticOperation::from_intent(RuntimeNodeId::new(1), UiIntent::Select),
             Some(SemanticOperation::SelectNode(RuntimeNodeId::new(1)))
         );
         assert!(matches!(
-            resolve_selection_strategy(&view, RuntimeNodeId::new(1)),
+            resolve_selection_strategy(&scene, RuntimeNodeId::new(1)),
             SelectionStrategy::NodeAction { action } if action.name == "Toggle"
         ));
     }
@@ -255,11 +269,11 @@ mod tests {
         let mut button = node(1, SemanticRole::Button, "Danger");
         button.actions.push(action("delete"));
         root.children.push(button);
-        let view = TuiViewModel::from_snapshot(&root);
+        let scene = compile_legacy_scene(&root);
 
         assert!(matches!(
             resolve_backend_operation(
-                &view,
+                &scene,
                 SemanticOperation::ActivateNode(RuntimeNodeId::new(1))
             ),
             Err(OperationResolutionError::NoCompatibleOperation(_))
@@ -272,10 +286,10 @@ mod tests {
         let mut input = node(1, SemanticRole::TextInput, "Username");
         input.capabilities.push(SemanticCapability::EditText);
         root.children.push(input);
-        let view = TuiViewModel::from_snapshot(&root);
+        let scene = compile_legacy_scene(&root);
         assert_eq!(
             resolve_backend_operation(
-                &view,
+                &scene,
                 SemanticOperation::ReplaceText {
                     target: RuntimeNodeId::new(1),
                     text: "updated".to_owned(),

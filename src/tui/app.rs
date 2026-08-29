@@ -10,6 +10,10 @@ use crate::{
     },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::SemanticCache,
+    transcompile::{
+        PresentationMode, SceneElement, SceneElementId, SceneElementKind, TuiScene,
+        analyze_regions, compile_legacy_scene, compile_scene,
+    },
 };
 
 use super::{
@@ -19,8 +23,8 @@ use super::{
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
     operation::{BackendOperation, SemanticOperation, resolve_backend_operation},
-    renderer::{RenderContext, render},
-    view_model::{TuiElement, TuiElementKind, TuiViewModel},
+    palette::{CommandPalette, PaletteOutcome},
+    renderer::{PaletteRender, RenderContext, render},
 };
 
 pub struct TuiApplication {
@@ -33,14 +37,17 @@ pub struct TuiApplication {
     cache: SemanticCache,
     event_subscription: EventSubscription,
     event_stream_available: bool,
-    view: TuiViewModel,
+    presentation_mode: PresentationMode,
+    scene: TuiScene,
     focus: FocusModel,
     viewport: Viewport,
     viewport_height: u16,
+    viewport_width: u16,
     hit_map: HitMap,
     status: String,
     application_available: bool,
     edit_session: Option<EditSession>,
+    command_palette: Option<CommandPalette>,
 }
 
 impl TuiApplication {
@@ -51,6 +58,7 @@ impl TuiApplication {
         settle_delay: Duration,
         bootstrap_strategy: BootstrapStrategy,
         event_buffer_capacity: usize,
+        presentation_mode: PresentationMode,
     ) -> Result<Self, BackendError> {
         let started = Instant::now();
         let applications = backend.applications().await?;
@@ -73,10 +81,10 @@ impl TuiApplication {
         let projected = cache
             .materialize_tree()
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
-        let view = TuiViewModel::from_snapshot(&projected);
+        let scene = build_scene(&projected, presentation_mode);
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
-        focus.reconcile(&view, None);
+        focus.reconcile(&scene, None);
         let mut application = Self {
             backend,
             app_selector,
@@ -87,10 +95,12 @@ impl TuiApplication {
             cache,
             event_subscription,
             event_stream_available: true,
-            view,
+            presentation_mode,
+            scene,
             focus,
             viewport: Viewport::default(),
             viewport_height: 1,
+            viewport_width: 80,
             hit_map: HitMap::default(),
             status: format!(
                 "Loaded {} semantic nodes via {} in {snapshot_ms} ms",
@@ -98,6 +108,7 @@ impl TuiApplication {
             ),
             application_available: true,
             edit_session: None,
+            command_palette: None,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -119,15 +130,22 @@ impl TuiApplication {
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
         self.viewport_height = frame.area().height.saturating_sub(3).max(1);
+        self.viewport_width = frame.area().width.saturating_sub(2).max(1);
+        let palette = self.command_palette.as_ref().map(|palette| PaletteRender {
+            query: palette.query(),
+            entries: palette.entries(),
+            selected: palette.selected(),
+        });
         let regions = render(
             frame,
             RenderContext {
-                view: &self.view,
+                scene: &self.scene,
                 focused: self.focus.current(),
                 scroll_offset: self.viewport.offset,
                 status: &self.status,
                 application_available: self.application_available,
                 edit_session: self.edit_session.as_ref(),
+                palette,
             },
         );
         self.hit_map.replace(regions);
@@ -137,11 +155,11 @@ impl TuiApplication {
         match intent {
             UiIntent::Quit => return true,
             UiIntent::FocusNext => {
-                self.focus.next(&self.view);
+                self.focus.next(&self.scene);
                 self.ensure_focus_visible();
             }
             UiIntent::FocusPrevious => {
-                self.focus.previous(&self.view);
+                self.focus.previous(&self.scene);
                 self.ensure_focus_visible();
             }
             UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
@@ -150,23 +168,41 @@ impl TuiApplication {
             UiIntent::BeginEdit => self.begin_edit().await,
             UiIntent::CommitEdit => self.commit_edit().await,
             UiIntent::CancelEdit => self.cancel_edit(),
+            UiIntent::OpenCommandPalette => {
+                let palette = CommandPalette::from_scene(&self.scene);
+                self.status = format!("Command palette — {} commands", palette.entries().len());
+                self.command_palette = Some(palette);
+            }
             UiIntent::Refresh => {
                 self.full_reload(Some("Forced full semantic snapshot".to_owned()))
                     .await;
             }
-            UiIntent::ScrollLines(delta) => {
-                self.viewport
-                    .scroll_lines(delta, self.view.content_height(), self.viewport_height)
-            }
-            UiIntent::ScrollPages(pages) => {
-                self.viewport
-                    .scroll_pages(pages, self.view.content_height(), self.viewport_height)
-            }
+            UiIntent::ScrollLines(delta) => self.viewport.scroll_lines(
+                delta,
+                self.scene.content_height(self.viewport_width),
+                self.viewport_height,
+            ),
+            UiIntent::ScrollPages(pages) => self.viewport.scroll_pages(
+                pages,
+                self.scene.content_height(self.viewport_width),
+                self.viewport_height,
+            ),
         }
         false
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        if let Some(mut palette) = self.command_palette.take() {
+            match palette.handle_key(key, &self.scene) {
+                PaletteOutcome::Continue => self.command_palette = Some(palette),
+                PaletteOutcome::Close => self.status = "Command palette closed".to_owned(),
+                PaletteOutcome::Execute(scene_id) => {
+                    self.focus.set(&self.scene, scene_id);
+                    self.execute_focused(UiIntent::Activate).await;
+                }
+            }
+            return false;
+        }
         if self.edit_session.is_some() {
             return match key_to_edit_command(key) {
                 EditCommand::Insert(character) => {
@@ -212,8 +248,8 @@ impl TuiApplication {
                 && self
                     .focus
                     .current()
-                    .and_then(|id| self.view.element(id))
-                    .is_some_and(|element| matches!(element.kind, TuiElementKind::TextInput { .. }))
+                    .and_then(|id| self.scene.element(id))
+                    .is_some_and(|element| matches!(element.kind, SceneElementKind::Field { .. }))
             {
                 intent = UiIntent::BeginEdit;
             }
@@ -226,25 +262,28 @@ impl TuiApplication {
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
         match intent {
             MouseIntent::Scroll(delta) => {
-                self.viewport
-                    .scroll_lines(delta, self.view.content_height(), self.viewport_height);
+                self.viewport.scroll_lines(
+                    delta,
+                    self.scene.content_height(self.viewport_width),
+                    self.viewport_height,
+                );
             }
             MouseIntent::Click { x, y } => {
                 let Some(region) = self.hit_map.hit(x, y) else {
                     return;
                 };
-                self.focus.set(&self.view, region.runtime_id);
+                self.focus.set(&self.scene, region.scene_id);
                 self.ensure_focus_visible();
                 match region.interaction {
                     HitInteraction::Activate => {
                         let intent = self
-                            .view
-                            .element(region.runtime_id)
+                            .scene
+                            .element(region.scene_id)
                             .map(intent_for_element)
                             .unwrap_or(UiIntent::Activate);
                         self.execute_focused(intent).await;
                     }
-                    HitInteraction::Unavailable => self.report_unavailable(region.runtime_id),
+                    HitInteraction::Unavailable => self.report_unavailable(region.scene_id),
                     HitInteraction::Focus => {}
                 }
             }
@@ -252,19 +291,19 @@ impl TuiApplication {
     }
 
     async fn execute_focused(&mut self, _requested_intent: UiIntent) {
-        let Some(runtime_id) = self.focus.current() else {
+        let Some(scene_id) = self.focus.current() else {
             self.status = "No focusable control".to_owned();
             return;
         };
-        let Some(element) = self.view.element(runtime_id).cloned() else {
+        let Some(element) = self.scene.element(scene_id).cloned() else {
             self.status = "Focused control disappeared; press r to refresh".to_owned();
             return;
         };
-        if matches!(element.kind, TuiElementKind::TextInput { .. }) {
+        if matches!(element.kind, SceneElementKind::Field { .. }) {
             self.status = "Press Enter to edit the focused text input".to_owned();
             return;
         }
-        if element.capability == InteractionCapability::None {
+        if element.capability() == InteractionCapability::None {
             self.status = format!(
                 "No compatible semantic action for \"{}\"",
                 element_label(&element)
@@ -272,9 +311,13 @@ impl TuiApplication {
             return;
         }
         let intent = intent_for_element(&element);
+        let Some(runtime_id) = element.binding.as_ref().map(|binding| binding.runtime_id) else {
+            self.status = "Scene element has no semantic binding".to_owned();
+            return;
+        };
         let semantic_operation = SemanticOperation::from_intent(runtime_id, intent)
             .expect("interaction capabilities only produce operation intents");
-        let backend_operation = match resolve_backend_operation(&self.view, semantic_operation) {
+        let backend_operation = match resolve_backend_operation(&self.scene, semantic_operation) {
             Ok(operation) => operation,
             Err(error) => {
                 self.status = format!("Cannot operate {}: {error}", element_label(&element));
@@ -323,17 +366,17 @@ impl TuiApplication {
     }
 
     async fn begin_edit(&mut self) {
-        let Some(runtime_id) = self.focus.current() else {
+        let Some(scene_id) = self.focus.current() else {
             self.status = "No focused text input".to_owned();
             return;
         };
-        let Some(element) = self.view.element(runtime_id) else {
+        let Some(element) = self.scene.element(scene_id) else {
             self.status = "Focused control disappeared".to_owned();
             return;
         };
         if matches!(
             element.kind,
-            TuiElementKind::TextInput {
+            SceneElementKind::Field {
                 input_kind: crate::semantic::TextInputKind::Password,
                 ..
             }
@@ -341,11 +384,16 @@ impl TuiApplication {
             self.status = "Password editing is disabled by GUI2TUI".to_owned();
             return;
         }
-        if element.capability != InteractionCapability::EditText {
+        if element.capability() != InteractionCapability::EditText {
             self.status = format!("Text input \"{}\" is read-only", element_label(element));
             return;
         }
-        let locator = element.backend_locator.clone();
+        let Some(binding) = element.binding.as_ref() else {
+            self.status = "Text field has no semantic binding".to_owned();
+            return;
+        };
+        let runtime_id = binding.runtime_id;
+        let locator = binding.backend_locator.clone();
         let label = element_label(element).to_owned();
         match self.backend.read_full_editable_text(&locator).await {
             Ok(value) => {
@@ -399,7 +447,7 @@ impl TuiApplication {
             target: session.target,
             text: session.buffer.text().to_owned(),
         };
-        let operation = match resolve_backend_operation(&self.view, operation) {
+        let operation = match resolve_backend_operation(&self.scene, operation) {
             Ok(operation) => operation,
             Err(error) => {
                 self.status = format!("Cannot commit text edit: {error}");
@@ -524,8 +572,9 @@ impl TuiApplication {
         let previous_locator = self
             .focus
             .current()
-            .and_then(|id| self.view.element(id))
-            .map(|element| element.backend_locator.clone());
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .map(|binding| binding.backend_locator.clone());
         let started = Instant::now();
         match load_snapshot(
             &self.backend,
@@ -548,8 +597,8 @@ impl TuiApplication {
                         return;
                     }
                 };
-                self.view = TuiViewModel::from_snapshot(&projected);
-                self.focus.reconcile(&self.view, previous_locator.as_ref());
+                self.scene = build_scene(&projected, self.presentation_mode);
+                self.focus.reconcile(&self.scene, previous_locator.as_ref());
                 self.application_available = true;
                 self.status = format!(
                     "{} — {} nodes via {} in {snapshot_ms} ms full_snapshots={}",
@@ -818,8 +867,9 @@ impl TuiApplication {
         let materialization_started = Instant::now();
         let previous_id = self.focus.current();
         let previous_locator = previous_id
-            .and_then(|id| self.view.element(id))
-            .map(|element| element.backend_locator.clone());
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .map(|binding| binding.backend_locator.clone());
         let projected = match self.cache.materialize_tree() {
             Ok(projected) => projected,
             Err(error) => {
@@ -827,7 +877,7 @@ impl TuiApplication {
                 return;
             }
         };
-        self.view = TuiViewModel::from_snapshot(&projected);
+        self.scene = build_scene(&projected, self.presentation_mode);
         if self.edit_session.as_ref().is_some_and(|session| {
             self.cache
                 .node(session.target)
@@ -841,12 +891,16 @@ impl TuiApplication {
             materialization_ms = materialization_started.elapsed().as_secs_f64() * 1000.0,
             "materialized semantic arena for TUI view"
         );
-        if let Some(id) = previous_id
-            && self.view.element(id).is_some_and(TuiElement::is_focusable)
+        if let Some(locator) = previous_locator.as_ref()
+            && let Some(id) = self.scene.scene_id_for_locator(locator)
+            && self
+                .scene
+                .element(id)
+                .is_some_and(SceneElement::is_focusable)
         {
-            self.focus.set(&self.view, id);
+            self.focus.set(&self.scene, id);
         } else {
-            self.focus.reconcile(&self.view, previous_locator.as_ref());
+            self.focus.reconcile(&self.scene, previous_locator.as_ref());
         }
         self.ensure_focus_visible();
     }
@@ -855,14 +909,14 @@ impl TuiApplication {
         let Some(id) = self.focus.current() else {
             return;
         };
-        if let Some((top, height)) = self.view.row_span(id) {
+        if let Some((top, height)) = self.scene.row_span(id, self.viewport_width) {
             self.viewport
                 .ensure_visible(top, height, self.viewport_height);
         }
     }
 
-    fn report_unavailable(&mut self, runtime_id: crate::semantic::RuntimeNodeId) {
-        if let Some(element) = self.view.element(runtime_id) {
+    fn report_unavailable(&mut self, scene_id: SceneElementId) {
+        if let Some(element) = self.scene.element(scene_id) {
             self.status = format!(
                 "No compatible semantic action for \"{}\"",
                 element_label(element)
@@ -942,8 +996,11 @@ fn application_is_gone(error: &BackendError) -> bool {
     )
 }
 
-fn intent_for_element(element: &TuiElement) -> UiIntent {
-    match element.capability {
+fn intent_for_element(element: &SceneElement) -> UiIntent {
+    if let Some(binding) = &element.binding {
+        return binding.default_intent;
+    }
+    match element.capability() {
         InteractionCapability::Toggle => UiIntent::Toggle,
         InteractionCapability::Select => UiIntent::Select,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
@@ -986,21 +1043,17 @@ fn operation_error_status(error: &BackendError) -> (String, bool) {
     }
 }
 
-fn element_label(element: &TuiElement) -> &str {
-    match &element.kind {
-        TuiElementKind::Label { text } => text,
-        TuiElementKind::Group { label }
-        | TuiElementKind::Button { label }
-        | TuiElementKind::ToggleButton { label, .. }
-        | TuiElementKind::CheckBox { label, .. }
-        | TuiElementKind::TextInput { label, .. }
-        | TuiElementKind::ComboBox { label }
-        | TuiElementKind::List { label }
-        | TuiElementKind::ListItem { label, .. }
-        | TuiElementKind::Menu { label }
-        | TuiElementKind::MenuItem { label, .. } => label,
-        TuiElementKind::MenuBar => "Menu",
-        TuiElementKind::Unsupported { role, .. } => role,
+fn element_label(element: &SceneElement) -> &str {
+    element.label()
+}
+
+fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> TuiScene {
+    match mode {
+        PresentationMode::Legacy => compile_legacy_scene(root),
+        PresentationMode::Transcompiled => {
+            let analysis = analyze_regions(root);
+            compile_scene(root, &analysis)
+        }
     }
 }
 
@@ -1009,26 +1062,40 @@ mod tests {
     use crate::semantic::{
         BackendLocator, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole,
     };
+    use crate::transcompile::{PresentationStrategy, SceneBinding};
 
     use super::*;
 
     fn element(
         semantic_role: SemanticRole,
-        kind: TuiElementKind,
+        kind: SceneElementKind,
         capability: InteractionCapability,
-    ) -> TuiElement {
-        TuiElement {
-            runtime_id: RuntimeNodeId::new(1),
-            backend_locator: BackendLocator::new(":1.2", "/node"),
-            semantic_role,
+    ) -> SceneElement {
+        let default_intent = match capability {
+            InteractionCapability::Toggle => UiIntent::Toggle,
+            InteractionCapability::Select => UiIntent::Select,
+            InteractionCapability::OpenMenu => UiIntent::OpenMenu,
+            InteractionCapability::EditText => UiIntent::BeginEdit,
+            _ => UiIntent::Activate,
+        };
+        SceneElement {
+            id: SceneElementId::new(1),
             kind,
-            actions: vec![SemanticAction {
-                index: 0,
-                name: "Click".to_owned(),
-                description: None,
-                keybinding: None,
-            }],
-            capability,
+            sources: vec![RuntimeNodeId::new(1)],
+            binding: Some(SceneBinding {
+                runtime_id: RuntimeNodeId::new(1),
+                backend_locator: BackendLocator::new(":1.2", "/node"),
+                semantic_role,
+                actions: vec![SemanticAction {
+                    index: 0,
+                    name: "Click".to_owned(),
+                    description: None,
+                    keybinding: None,
+                }],
+                capability,
+                default_intent,
+            }),
+            strategy: PresentationStrategy::DirectWidget,
         }
     }
 
@@ -1037,7 +1104,7 @@ mod tests {
         assert_eq!(
             intent_for_element(&element(
                 SemanticRole::CheckBox,
-                TuiElementKind::CheckBox {
+                SceneElementKind::Checkbox {
                     label: "Enabled".to_owned(),
                     checked: false,
                 },
@@ -1048,7 +1115,7 @@ mod tests {
         assert_eq!(
             intent_for_element(&element(
                 SemanticRole::Button,
-                TuiElementKind::Button {
+                SceneElementKind::Button {
                     label: "Apply".to_owned(),
                 },
                 InteractionCapability::Activate,
@@ -1058,7 +1125,7 @@ mod tests {
         assert_eq!(
             intent_for_element(&element(
                 SemanticRole::TextInput,
-                TuiElementKind::TextInput {
+                SceneElementKind::Field {
                     label: "Username".to_owned(),
                     display: "alice".to_owned(),
                     input_kind: crate::semantic::TextInputKind::Plain,
