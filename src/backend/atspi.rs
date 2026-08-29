@@ -33,9 +33,9 @@ use crate::{
         },
     },
     semantic::{
-        BackendLocator, DebugInfo, Geometry, RuntimeIdAllocator, SemanticAction,
-        SemanticCapability, SemanticNode, SemanticRole, SemanticState, TextInputKind,
-        TreeTruncation,
+        BackendLocator, BackendRelation, DebugInfo, Geometry, RelationState, RuntimeIdAllocator,
+        RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability, SemanticNode,
+        SemanticRelationKind, SemanticRole, SemanticState, TextInputKind, TreeTruncation,
     },
 };
 
@@ -218,6 +218,16 @@ pub struct CollectionProbe {
     pub collection_nodes: usize,
     pub source: Option<BackendLocator>,
     pub queries: Vec<CollectionQueryProbe>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RelationEnrichmentMetrics {
+    pub candidate_nodes: usize,
+    pub rpc_count: usize,
+    pub relations_found: usize,
+    pub unresolved_targets: usize,
+    pub unavailable_nodes: usize,
+    pub duration: Duration,
 }
 
 impl EventSubscription {
@@ -638,6 +648,85 @@ impl AtspiBackend {
             .await?;
         node.truncations.clear();
         Ok(node)
+    }
+
+    /// Read one object's AT-SPI RelationSet without traversing its subtree.
+    pub async fn relations(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<Vec<BackendRelation>, BackendError> {
+        fetch_relation_set(
+            self.connection.connection(),
+            self.operation_timeout,
+            locator,
+        )
+        .await
+    }
+
+    /// Lazily enrich only requested arena nodes. The caller remains the sole
+    /// semantic-cache writer; spawned tasks perform remote reads only.
+    pub async fn enrich_relations(
+        &self,
+        cache: &mut SemanticCache,
+        candidates: &[RuntimeNodeId],
+    ) -> RelationEnrichmentMetrics {
+        let started = Instant::now();
+        let mut tasks = tokio::task::JoinSet::new();
+        let mut metrics = RelationEnrichmentMetrics {
+            candidate_nodes: candidates.len(),
+            ..Default::default()
+        };
+        for id in candidates {
+            if !matches!(cache.relation_state(*id), Some(RelationState::Unknown)) {
+                continue;
+            }
+            let Some(node) = cache.node(*id) else {
+                continue;
+            };
+            let id = *id;
+            let locator = node.backend_locator.clone();
+            let connection = self.connection.connection().clone();
+            let timeout = self.operation_timeout;
+            tasks.spawn(async move {
+                let result = fetch_relation_set(&connection, timeout, &locator).await;
+                (id, result)
+            });
+        }
+        while let Some(result) = tasks.join_next().await {
+            let Ok((id, result)) = result else {
+                metrics.unavailable_nodes += 1;
+                continue;
+            };
+            metrics.rpc_count += 1;
+            match result {
+                Ok(relations) => {
+                    metrics.relations_found += relations.len();
+                    let targets = relations
+                        .iter()
+                        .map(|relation| relation.targets.len())
+                        .sum::<usize>();
+                    if cache.set_relations(id, relations).is_err() {
+                        metrics.unavailable_nodes += 1;
+                        continue;
+                    }
+                    let resolved = match cache.relation_state(id) {
+                        Some(RelationState::Known(relations)) => relations
+                            .iter()
+                            .flat_map(|relation| &relation.targets)
+                            .filter(|target| target.runtime_id.is_some())
+                            .count(),
+                        _ => 0,
+                    };
+                    metrics.unresolved_targets += targets.saturating_sub(resolved);
+                }
+                Err(_) => {
+                    let _ = cache.mark_relations_unavailable(id);
+                    metrics.unavailable_nodes += 1;
+                }
+            }
+        }
+        metrics.duration = started.elapsed();
+        metrics
     }
 
     /// Read the complete authoritative value used to seed a local edit buffer.
@@ -1531,6 +1620,33 @@ fn object_ref_from_id(id: &BackendLocator) -> Result<ObjectRefOwned, BackendErro
         crate::semantic::BackendLocatorError::InvalidObjectPath(id.object_path().to_owned())
     })?;
     Ok(ObjectRef::new_owned(name, path))
+}
+
+async fn fetch_relation_set(
+    connection: &zbus::Connection,
+    timeout: Duration,
+    locator: &BackendLocator,
+) -> Result<Vec<BackendRelation>, BackendError> {
+    let encoded_id = locator.encode();
+    let object = object_ref_from_id(locator)?;
+    let proxy = object
+        .as_accessible_proxy(connection)
+        .await
+        .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+    let relation_set = dbus_operation(
+        timeout,
+        "read accessible relation set",
+        &encoded_id,
+        proxy.get_relation_set(),
+    )
+    .await?;
+    Ok(relation_set
+        .into_iter()
+        .map(|(kind, targets)| BackendRelation {
+            kind: SemanticRelationKind::from(kind),
+            targets: targets.iter().filter_map(node_id_from_ref).collect(),
+        })
+        .collect())
 }
 
 async fn dbus_operation<T, F>(

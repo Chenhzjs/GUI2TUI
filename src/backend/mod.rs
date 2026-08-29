@@ -5,7 +5,7 @@ pub mod protocol_compat;
 pub use atspi::{
     ApplicationRef, AtspiBackend, BackendError, CollectionProbe, CollectionQueryProbe,
     DEFAULT_EVENT_BUFFER_CAPACITY, EventDelivery, EventSubscription, InspectOptions,
-    SessionEnvironment,
+    RelationEnrichmentMetrics, SessionEnvironment,
 };
 pub use bootstrap::{BootstrapMetrics, BootstrapResult, BootstrapStrategy, BootstrapUsed};
 pub use protocol_compat::{BulkAccessibleRecord, CacheWireFormat};

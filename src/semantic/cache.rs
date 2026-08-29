@@ -6,8 +6,9 @@ use std::{
 use thiserror::Error;
 
 use super::{
-    BackendLocator, DebugInfo, RuntimeNodeId, SemanticAction, SemanticCapability, SemanticNode,
-    SemanticRole, SemanticState, TextInputKind, TreeTruncation,
+    BackendLocator, BackendRelation, DebugInfo, RelationState, RuntimeNodeId, SemanticAction,
+    SemanticCapability, SemanticNode, SemanticRelation, SemanticRelationTarget, SemanticRole,
+    SemanticState, TextInputKind, TreeTruncation,
 };
 
 static NEXT_CACHE_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
@@ -82,6 +83,7 @@ pub struct SemanticCache {
     root: RuntimeNodeId,
     nodes: HashMap<RuntimeNodeId, CachedSemanticNode>,
     by_locator: HashMap<BackendLocator, RuntimeNodeId>,
+    relations: HashMap<RuntimeNodeId, RelationState>,
     generation: u64,
     full_snapshot_count: u64,
 }
@@ -103,6 +105,7 @@ impl SemanticCache {
             root: root_id,
             nodes: HashMap::new(),
             by_locator: HashMap::new(),
+            relations: HashMap::new(),
             generation,
             full_snapshot_count,
         };
@@ -142,6 +145,54 @@ impl SemanticCache {
         self.nodes.len()
     }
 
+    pub fn nodes(&self) -> impl Iterator<Item = &CachedSemanticNode> {
+        self.nodes.values()
+    }
+
+    pub fn relation_state(&self, id: RuntimeNodeId) -> Option<&RelationState> {
+        self.relations.get(&id)
+    }
+
+    pub fn set_relations(
+        &mut self,
+        id: RuntimeNodeId,
+        relations: Vec<BackendRelation>,
+    ) -> Result<(), CacheError> {
+        if !self.nodes.contains_key(&id) {
+            return Err(CacheError::MissingRoot);
+        }
+        let resolved = relations
+            .into_iter()
+            .map(|relation| SemanticRelation {
+                kind: relation.kind,
+                targets: relation
+                    .targets
+                    .into_iter()
+                    .map(|locator| SemanticRelationTarget {
+                        runtime_id: self.runtime_id(&locator),
+                        locator,
+                    })
+                    .collect(),
+            })
+            .collect();
+        self.relations.insert(id, RelationState::Known(resolved));
+        Ok(())
+    }
+
+    pub fn mark_relations_unavailable(&mut self, id: RuntimeNodeId) -> Result<(), CacheError> {
+        if !self.nodes.contains_key(&id) {
+            return Err(CacheError::MissingRoot);
+        }
+        self.relations.insert(id, RelationState::Unavailable);
+        Ok(())
+    }
+
+    pub fn invalidate_relations(&mut self, id: RuntimeNodeId) {
+        if self.nodes.contains_key(&id) {
+            self.relations.insert(id, RelationState::Unknown);
+        }
+    }
+
     /// Materialize a recursive presentation tree. The returned tree is derived
     /// and never becomes runtime canonical storage.
     pub fn materialize_tree(&self) -> Result<SemanticNode, CacheError> {
@@ -168,6 +219,7 @@ impl SemanticCache {
                 ..replacement
             },
         );
+        self.relations.insert(id, RelationState::Unknown);
         self.generation = self.generation.saturating_add(1);
         self.validate()?;
         Ok(id)
@@ -183,16 +235,28 @@ impl SemanticCache {
             .runtime_id(locator)
             .ok_or_else(|| CacheError::LocatorNotFound(locator.clone()))?;
         let old = self.materialize_subtree(id)?;
+        let old_relations = self.relations.clone();
         let parent = self.nodes.get(&id).ok_or(CacheError::MissingRoot)?.parent;
         let old_by_id = self.subtree_locators(id)?;
         let reconciled = reconcile_subtree(&old, fresh);
 
-        for old_id in self.subtree_ids(id)? {
+        let old_subtree_ids = self.subtree_ids(id)?;
+        let dirty_ids: HashSet<_> = old_subtree_ids.iter().copied().collect();
+        for old_id in old_subtree_ids {
             if let Some(removed) = self.nodes.remove(&old_id) {
                 self.by_locator.remove(&removed.backend_locator);
             }
+            self.relations.remove(&old_id);
         }
         self.insert_tree(reconciled, parent)?;
+        for runtime_id in self.nodes.keys().copied().collect::<Vec<_>>() {
+            if !dirty_ids.contains(&runtime_id)
+                && let Some(state) = old_relations.get(&runtime_id)
+            {
+                self.relations.insert(runtime_id, state.clone());
+            }
+        }
+        self.resolve_relation_targets();
         self.generation = self.generation.saturating_add(1);
         self.validate()?;
 
@@ -238,6 +302,11 @@ impl SemanticCache {
         }
         if self.by_locator.len() != self.nodes.len() {
             return Err(CacheError::DuplicateLocator(root.backend_locator.clone()));
+        }
+        if self.relations.len() != self.nodes.len()
+            || self.relations.keys().any(|id| !self.nodes.contains_key(id))
+        {
+            return Err(CacheError::BrokenParent(self.root));
         }
         for (id, node) in &self.nodes {
             if self.by_locator.get(&node.backend_locator) != Some(id) {
@@ -314,6 +383,7 @@ impl SemanticCache {
         let cached = CachedSemanticNode::from_semantic(node, parent, child_ids);
         self.by_locator.insert(cached.backend_locator.clone(), id);
         self.nodes.insert(id, cached);
+        self.relations.entry(id).or_default();
         for child in children {
             self.insert_tree(child, Some(id))?;
         }
@@ -352,6 +422,28 @@ impl SemanticCache {
                     .ok_or(CacheError::MissingRoot)
             })
             .collect()
+    }
+
+    fn resolve_relation_targets(&mut self) {
+        let by_locator = &self.by_locator;
+        let nodes = &self.nodes;
+        for state in self.relations.values_mut() {
+            if let RelationState::Known(relations) = state {
+                for relation in relations {
+                    for target in &mut relation.targets {
+                        target.runtime_id = by_locator
+                            .get(&target.locator)
+                            .copied()
+                            .or_else(|| target.runtime_id.filter(|id| nodes.contains_key(id)));
+                        if let Some(id) = target.runtime_id
+                            && let Some(node) = nodes.get(&id)
+                        {
+                            target.locator = node.backend_locator.clone();
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -667,6 +759,9 @@ mod tests {
             .by_locator
             .insert(detached.backend_locator.clone(), unreachable_id);
         unreachable.nodes.insert(unreachable_id, detached);
+        unreachable
+            .relations
+            .insert(unreachable_id, RelationState::Unknown);
         assert!(matches!(
             unreachable.validate(),
             Err(CacheError::UnreachableNodes { count: 1 })
@@ -696,5 +791,74 @@ mod tests {
         let projected = cache.materialize_tree().unwrap();
         assert_eq!(projected.children.len(), 2);
         assert_eq!(projected.children[1].name.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn node_refresh_invalidates_relation_state() {
+        let mut cache = SemanticCache::from_snapshot(tree(&[("/a", "A")])).unwrap();
+        let id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/a"))
+            .unwrap();
+        cache.set_relations(id, vec![]).unwrap();
+        assert!(matches!(
+            cache.relation_state(id),
+            Some(RelationState::Known(_))
+        ));
+        cache
+            .refresh_node(node("/a", SemanticRole::Button, "A"))
+            .unwrap();
+        assert_eq!(cache.relation_state(id), Some(&RelationState::Unknown));
+    }
+
+    #[test]
+    fn external_relation_target_follows_unique_but_not_ambiguous_churn() {
+        let mut root = node("/root", SemanticRole::Application, "App");
+        let controller = node("/controller", SemanticRole::Button, "Controller");
+        let mut group = node("/group", SemanticRole::Container, "Group");
+        group
+            .children
+            .push(node("/old", SemanticRole::Button, "Target"));
+        root.children = vec![controller, group];
+        let mut cache = SemanticCache::from_snapshot(root).unwrap();
+        let controller_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/controller"))
+            .unwrap();
+        let target_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/old"))
+            .unwrap();
+        cache
+            .set_relations(
+                controller_id,
+                vec![BackendRelation {
+                    kind: crate::semantic::SemanticRelationKind::ControllerFor,
+                    targets: vec![BackendLocator::new(":1.2", "/old")],
+                }],
+            )
+            .unwrap();
+        let mut fresh_group = node("/group", SemanticRole::Container, "Group");
+        fresh_group
+            .children
+            .push(node("/new", SemanticRole::Button, "Target"));
+        cache
+            .replace_subtree(&BackendLocator::new(":1.2", "/group"), fresh_group)
+            .unwrap();
+        let RelationState::Known(relations) = cache.relation_state(controller_id).unwrap() else {
+            panic!("outside relation should remain known")
+        };
+        assert_eq!(relations[0].targets[0].runtime_id, Some(target_id));
+        assert_eq!(relations[0].targets[0].locator.object_path(), "/new");
+
+        let mut ambiguous = node("/group", SemanticRole::Container, "Group");
+        ambiguous.children = vec![
+            node("/new-a", SemanticRole::Button, "Target"),
+            node("/new-b", SemanticRole::Button, "Target"),
+        ];
+        cache
+            .replace_subtree(&BackendLocator::new(":1.2", "/group"), ambiguous)
+            .unwrap();
+        let RelationState::Known(relations) = cache.relation_state(controller_id).unwrap() else {
+            panic!("outside relation should remain known")
+        };
+        assert_eq!(relations[0].targets[0].runtime_id, None);
     }
 }
