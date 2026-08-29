@@ -10,6 +10,21 @@ This document records behavior observed in the Ubuntu 24.04 arm64 Xvfb test sess
 - Locator churn reconciles only a unique sibling-local `(role, name, TextInputKind)` fingerprint.
   Ambiguous replacements receive new IDs. Application restart always creates a new session.
 
+## Relations, scopes, and commands
+
+The semantic runtime stores lazy typed `SemanticRelation` edges separately from the canonical
+parent/children tree. `RelationalSemanticGraph` exposes label, description, error, membership,
+controller, popup-owner, parent-window, and logical-flow queries. Explicit relations override
+structural and adjacency heuristics; unresolved relation targets remain locator-only and are never
+guessed.
+
+`InteractionScopes` maps every runtime node into Application, Window, Dialog, ModalDialog, Popup,
+or MenuPopup context. A modal/popup boundary filters background interaction before focus traversal
+and before command ranking. `CommandHierarchy` is a real `CommandGroup` tree; its searchable flat
+projection is derived. Search/ranking never changes the canonical identity of commands and never
+makes anonymous actions safe. Live observations and measured relation cost are in
+[relations.md](relations.md).
+
 ## Input secrecy
 
 - `TextInputKind::Plain` permits the backend to retain a bounded plain value.
@@ -29,7 +44,7 @@ Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` 
 | Label | role `label`; GTK exposes text-oriented actions on some labels | role `label`; no advertised actions in fixture | non-focusable text; label actions are ignored by the TUI |
 | List | GTK4 demo: role `list`, `Selection` interface | Qt6: role `list`, `Table` interface, no Action interface | group heading; container capability is retained outside the renderer |
 | ListItem | GTK4 demo: role `list item`, action `listitem.scroll-to`; selected through the parent | Qt6: role `list item`, action `Toggle`; Toggle set `selected` | focusable/selectable; selected `*` and keyboard focus `>` are independent |
-| ComboBox | NOT TESTED | NOT TESTED | mapped from `combo box`; focusable read-only `[ label ▼ ]` unless a future verified operation exists |
+| ComboBox | descendant ToggleButton `Click` opened; popup options were unnamed/unavailable | actions `ShowMenu`,`Press`; popup ListItems expose `Toggle` | `[ label ▼ ]`; safe open only, selection requires semantic options; opening actions are not assumed to close |
 | MenuBar | not tested in bundled GTK fixture | role `menu bar`, Action interface, no advertised action | `Menu:` heading |
 | Menu | not tested in bundled GTK fixture | popup role `popup menu` mapped to Menu | terminal-native menu heading |
 | MenuItem | not tested in bundled GTK fixture | top item `ShowMenu`; leaf `Press` changed the fixture label to `Status: menu activated` | `ShowMenu` becomes OpenMenu; leaf `Press` becomes Activate |
@@ -140,3 +155,6 @@ the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome 
   explicitly committed or cancelled.
 - `manages-descendants` and ActiveDescendant events are retained, but virtualized collection
   traversal is LIMITED SUPPORT.
+- GTK4 `ComboBoxText` created a popup scope but did not expose option names/actions through the
+  observed AT-SPI tree. Qt selection worked, but no explicit close action was advertised. Neither
+  case uses key injection, index guessing, or an assumed reversible open action.

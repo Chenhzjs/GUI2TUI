@@ -7,11 +7,16 @@ from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QButtonGroup,
     QLabel,
     QLineEdit,
     QListWidget,
     QMainWindow,
     QPushButton,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
@@ -36,6 +41,8 @@ class QtFixture(QMainWindow):
         layout.addWidget(self.username_label)
         self.username = QLineEdit("alice")
         self.username.setAccessibleName("Username")
+        self.username.setAccessibleDescription("Account name used by the fixture")
+        self.username_label.setBuddy(self.username)
         layout.addWidget(self.username)
 
         long_input = QLineEdit("L" * 300 + "-qt-tail")
@@ -51,6 +58,21 @@ class QtFixture(QMainWindow):
         self.checkbox = QCheckBox("Enable feature")
         layout.addWidget(self.checkbox)
 
+        layout.addWidget(QLabel("Theme"))
+        group = QButtonGroup(self)
+        light = QRadioButton("Light")
+        dark = QRadioButton("Dark")
+        light.setChecked(True)
+        group.addButton(light)
+        group.addButton(dark)
+        layout.addWidget(light)
+        layout.addWidget(dark)
+
+        combo = QComboBox()
+        combo.setAccessibleName("Demo choice")
+        combo.addItems(["Alpha", "Beta", "Gamma"])
+        layout.addWidget(combo)
+
         self.status = QLabel("Status: idle")
         layout.addWidget(self.status)
 
@@ -65,6 +87,10 @@ class QtFixture(QMainWindow):
         replace = QPushButton("Replace username control")
         replace.clicked.connect(self.replace_username)
         layout.addWidget(replace)
+
+        dialog_button = QPushButton("Open modal dialog")
+        dialog_button.clicked.connect(self.open_dialog)
+        layout.addWidget(dialog_button)
 
         items = QListWidget()
         items.setAccessibleName("Demo items")
@@ -88,6 +114,17 @@ class QtFixture(QMainWindow):
         self.layout.replaceWidget(old, replacement)
         old.deleteLater()
         self.username = replacement
+
+    def open_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Qt Fixture Dialog")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Dialog content"))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec()
 
 
 def main() -> int:

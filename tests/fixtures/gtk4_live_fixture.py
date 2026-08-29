@@ -29,10 +29,13 @@ class LiveFixture(Gtk.Application):
         heading = Gtk.Label(label="Phase 0 live validation")
         content.append(heading)
 
+        username_label = Gtk.Label(label="_Username", use_underline=True)
+        content.append(username_label)
         username = Gtk.Entry()
         username.set_placeholder_text("Username")
         username.set_text("alice")
         username.update_property([Gtk.AccessibleProperty.LABEL], ["Username"])
+        username_label.set_mnemonic_widget(username)
         content.append(username)
         username_ref = {"widget": username}
 
@@ -49,6 +52,22 @@ class LiveFixture(Gtk.Application):
 
         checkbox = Gtk.CheckButton(label="Enable feature")
         content.append(checkbox)
+
+        theme_label = Gtk.Label(label="Theme")
+        content.append(theme_label)
+        light = Gtk.CheckButton(label="Light")
+        dark = Gtk.CheckButton(label="Dark")
+        dark.set_group(light)
+        light.set_active(True)
+        content.append(light)
+        content.append(dark)
+
+        combo = Gtk.ComboBoxText()
+        for item in ["Alpha", "Beta", "Gamma"]:
+            combo.append_text(item)
+        combo.set_active(0)
+        combo.update_property([Gtk.AccessibleProperty.LABEL], ["Demo choice"])
+        content.append(combo)
 
         status = Gtk.Label(label="Status: idle")
         content.append(status)
@@ -82,6 +101,21 @@ class LiveFixture(Gtk.Application):
 
         replace.connect("clicked", replace_username)
         content.append(replace)
+
+        open_dialog = Gtk.Button(label="Open modal dialog")
+
+        def show_dialog(_button: Gtk.Button) -> None:
+            dialog = Gtk.Window(title="GTK Fixture Dialog", transient_for=window, modal=True)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            box.append(Gtk.Label(label="Dialog content"))
+            close = Gtk.Button(label="Close dialog")
+            close.connect("clicked", lambda _close: dialog.close())
+            box.append(close)
+            dialog.set_child(box)
+            dialog.present()
+
+        open_dialog.connect("clicked", show_dialog)
+        content.append(open_dialog)
 
         items = Gtk.StringList.new(["Alpha", "Beta", "Gamma"])
         selection = Gtk.SingleSelection.new(items)

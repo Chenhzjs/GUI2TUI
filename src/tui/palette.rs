@@ -1,57 +1,122 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
-use crate::transcompile::{SceneElementId, TuiScene};
+use crate::{
+    semantic::RuntimeNodeId,
+    transcompile::{
+        CommandEntry, CommandGroup, CommandHierarchy, InteractionScopeId, SemanticCommand,
+    },
+    tui::action::UiIntent,
+};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+const DEFAULT_CONTEXT_LIMIT: usize = 15;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaletteEntry {
+    pub label: String,
+    pub group: bool,
+    target: Option<(RuntimeNodeId, UiIntent)>,
+    group_index: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandPalette {
+    hierarchy: CommandHierarchy,
+    active_scope: InteractionScopeId,
     query: String,
     selected: usize,
-    entries: Vec<(SceneElementId, String)>,
+    group_path: Vec<usize>,
+    entries: Vec<PaletteEntry>,
+    recent: HashMap<RuntimeNodeId, u32>,
+    search_all_scopes: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaletteOutcome {
     Continue,
     Close,
-    Execute(SceneElementId),
+    Execute(RuntimeNodeId, UiIntent),
 }
 
 impl CommandPalette {
-    pub fn from_scene(scene: &TuiScene) -> Self {
+    pub fn new(
+        hierarchy: CommandHierarchy,
+        active_scope: InteractionScopeId,
+        recent: HashMap<RuntimeNodeId, u32>,
+    ) -> Self {
         let mut palette = Self {
+            hierarchy,
+            active_scope,
             query: String::new(),
             selected: 0,
-            entries: scene
-                .commands()
-                .map(|element| (element.id, element.label().to_owned()))
-                .collect(),
+            group_path: Vec::new(),
+            entries: Vec::new(),
+            recent,
+            search_all_scopes: false,
         };
-        palette.sort();
+        palette.rebuild();
         palette
     }
 
     pub fn query(&self) -> &str {
         &self.query
     }
+
     pub fn selected(&self) -> usize {
         self.selected
     }
-    pub fn entries(&self) -> &[(SceneElementId, String)] {
+
+    pub fn entries(&self) -> &[PaletteEntry] {
         &self.entries
     }
 
-    pub fn handle_key(&mut self, event: KeyEvent, scene: &TuiScene) -> PaletteOutcome {
+    pub fn searches_all_scopes(&self) -> bool {
+        self.search_all_scopes
+    }
+
+    pub fn handle_key(&mut self, event: KeyEvent) -> PaletteOutcome {
         if event.kind == KeyEventKind::Release {
             return PaletteOutcome::Continue;
         }
         match event.code {
-            KeyCode::Esc => PaletteOutcome::Close,
-            KeyCode::Enter => self
-                .entries
-                .get(self.selected)
-                .map_or(PaletteOutcome::Continue, |entry| {
-                    PaletteOutcome::Execute(entry.0)
-                }),
+            KeyCode::F(2) => {
+                self.search_all_scopes = !self.search_all_scopes;
+                self.rebuild();
+                PaletteOutcome::Continue
+            }
+            KeyCode::Esc => {
+                if self.query.is_empty() && !self.group_path.is_empty() {
+                    self.group_path.pop();
+                    self.rebuild();
+                    PaletteOutcome::Continue
+                } else {
+                    PaletteOutcome::Close
+                }
+            }
+            KeyCode::Enter | KeyCode::Right => {
+                let Some(entry) = self.entries.get(self.selected).cloned() else {
+                    return PaletteOutcome::Continue;
+                };
+                if let Some(index) = entry.group_index {
+                    self.group_path.push(index);
+                    self.query.clear();
+                    self.rebuild();
+                    PaletteOutcome::Continue
+                } else {
+                    entry
+                        .target
+                        .map_or(PaletteOutcome::Continue, |(id, intent)| {
+                            PaletteOutcome::Execute(id, intent)
+                        })
+                }
+            }
+            KeyCode::Left => {
+                if self.query.is_empty() && self.group_path.pop().is_some() {
+                    self.rebuild();
+                }
+                PaletteOutcome::Continue
+            }
             KeyCode::Up => {
                 if !self.entries.is_empty() {
                     self.selected = self
@@ -68,84 +133,161 @@ impl CommandPalette {
                 PaletteOutcome::Continue
             }
             KeyCode::Backspace => {
-                self.query.pop();
-                self.rebuild(scene);
+                if self.query.pop().is_none() {
+                    self.group_path.pop();
+                }
+                self.rebuild();
                 PaletteOutcome::Continue
             }
             KeyCode::Char(character) => {
                 self.query.push(character);
-                self.rebuild(scene);
+                self.rebuild();
                 PaletteOutcome::Continue
             }
             _ => PaletteOutcome::Continue,
         }
     }
 
-    fn rebuild(&mut self, scene: &TuiScene) {
-        let query = self.query.to_lowercase();
-        self.entries = scene
-            .commands()
-            .filter_map(|element| {
-                let label = element.label();
-                label
-                    .to_lowercase()
-                    .contains(&query)
-                    .then(|| (element.id, label.to_owned()))
-            })
-            .collect();
-        self.sort();
+    fn rebuild(&mut self) {
+        self.entries = if self.query.is_empty() {
+            current_group(&self.hierarchy.root, &self.group_path)
+                .map(|group| browse_entries(group, self.active_scope))
+                .unwrap_or_default()
+        } else {
+            self.hierarchy
+                .search(
+                    &self.query,
+                    self.active_scope,
+                    self.search_all_scopes,
+                    &self.recent,
+                )
+                .into_iter()
+                .take(DEFAULT_CONTEXT_LIMIT)
+                .map(|ranked| PaletteEntry {
+                    label: format!("{} › {}", ranked.path.join(" › "), ranked.command.label),
+                    group: false,
+                    target: Some((ranked.command.source, ranked.command.intent)),
+                    group_index: None,
+                })
+                .collect()
+        };
         self.selected = self.selected.min(self.entries.len().saturating_sub(1));
     }
+}
 
-    fn sort(&mut self) {
-        self.entries.sort_by(|left, right| left.1.cmp(&right.1));
+fn current_group<'a>(root: &'a CommandGroup, path: &[usize]) -> Option<&'a CommandGroup> {
+    let mut group = root;
+    for index in path {
+        let CommandEntry::Group(next) = group.children.get(*index)? else {
+            return None;
+        };
+        group = next;
+    }
+    Some(group)
+}
+
+fn browse_entries(group: &CommandGroup, scope: InteractionScopeId) -> Vec<PaletteEntry> {
+    group
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| match entry {
+            CommandEntry::Group(group) if group_contains_scope(group, scope) => {
+                Some(PaletteEntry {
+                    label: format!("{} ›", group.label),
+                    group: true,
+                    target: None,
+                    group_index: Some(index),
+                })
+            }
+            CommandEntry::Command(command) if command.scope == scope => {
+                Some(command_entry(command))
+            }
+            _ => None,
+        })
+        .take(DEFAULT_CONTEXT_LIMIT)
+        .collect()
+}
+
+fn group_contains_scope(group: &CommandGroup, scope: InteractionScopeId) -> bool {
+    group.children.iter().any(|entry| match entry {
+        CommandEntry::Group(group) => group_contains_scope(group, scope),
+        CommandEntry::Command(command) => command.scope == scope,
+    })
+}
+
+fn command_entry(command: &SemanticCommand) -> PaletteEntry {
+    PaletteEntry {
+        label: command.label.clone(),
+        group: false,
+        target: Some((command.source, command.intent)),
+        group_index: None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        semantic::{
-            BackendLocator, DebugInfo, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole,
-        },
-        transcompile::{analyze_regions, compile_scene},
-    };
+    use crate::transcompile::{CommandEntry, CommandGroup, SemanticCommand};
 
-    fn node(id: u64, name: &str) -> SemanticNode {
-        SemanticNode {
-            runtime_id: RuntimeNodeId::new(id),
-            backend_locator: BackendLocator::new(":1.2", format!("/n/{id}")),
-            index_in_parent: None,
-            role: SemanticRole::MenuItem,
-            name: Some(name.into()),
-            description: None,
-            value: None,
-            text_input_kind: None,
-            states: vec![],
-            actions: vec![SemanticAction {
-                index: 0,
-                name: "Press".into(),
-                description: None,
-                keybinding: None,
-            }],
-            capabilities: vec![],
-            children: vec![],
-            truncations: vec![],
-            debug: DebugInfo::default(),
-        }
+    fn command(id: u64, scope: InteractionScopeId, label: &str) -> CommandEntry {
+        CommandEntry::Command(SemanticCommand {
+            source: RuntimeNodeId::new(id),
+            label: label.to_owned(),
+            scope,
+            intent: UiIntent::Activate,
+            enabled: true,
+            visible: true,
+            shortcut: None,
+        })
     }
 
     #[test]
-    fn filters_and_wraps_selection() {
-        let mut root = node(0, "Menu");
-        root.role = SemanticRole::MenuBar;
-        root.children = vec![node(1, "Open"), node(2, "Save")];
-        let scene = compile_scene(&root, &analyze_regions(&root));
-        let mut palette = CommandPalette::from_scene(&scene);
-        assert_eq!(palette.entries.len(), 2);
-        palette.handle_key(KeyEvent::from(KeyCode::Char('s')), &scene);
-        assert_eq!(palette.entries.len(), 1);
-        assert!(palette.entries[0].1.contains("Save"));
+    fn browses_true_groups_then_searches_flattened_projection() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let hierarchy = CommandHierarchy {
+            root: CommandGroup {
+                source: RuntimeNodeId::new(1),
+                label: "App".to_owned(),
+                scope,
+                children: vec![CommandEntry::Group(CommandGroup {
+                    source: RuntimeNodeId::new(2),
+                    label: "File".to_owned(),
+                    scope,
+                    children: vec![command(3, scope, "Open")],
+                })],
+            },
+        };
+        let mut palette = CommandPalette::new(hierarchy, scope, HashMap::new());
+        assert!(palette.entries()[0].group);
+        palette.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(palette.entries()[0].label, "Open");
+        palette.handle_key(KeyEvent::from(KeyCode::Char('o')));
+        assert!(palette.entries()[0].label.contains("Open"));
+    }
+
+    #[test]
+    fn search_stays_in_current_scope_until_explicitly_expanded() {
+        let current = InteractionScopeId(RuntimeNodeId::new(1));
+        let background = InteractionScopeId(RuntimeNodeId::new(2));
+        let hierarchy = CommandHierarchy {
+            root: CommandGroup {
+                source: RuntimeNodeId::new(1),
+                label: "App".to_owned(),
+                scope: current,
+                children: vec![
+                    command(3, current, "Close dialog"),
+                    command(4, background, "Close document"),
+                ],
+            },
+        };
+        let mut palette = CommandPalette::new(hierarchy, current, HashMap::new());
+        palette.handle_key(KeyEvent::from(KeyCode::Char('c')));
+        assert_eq!(palette.entries().len(), 1);
+        assert!(palette.entries()[0].label.contains("Close dialog"));
+
+        palette.handle_key(KeyEvent::from(KeyCode::F(2)));
+        assert!(palette.searches_all_scopes());
+        assert_eq!(palette.entries().len(), 2);
     }
 }

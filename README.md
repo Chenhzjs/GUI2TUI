@@ -19,9 +19,11 @@ AT-SPI Cache bulk bootstrap (recursive-walk fallback)
       ↓
 Arena-backed live semantic cache
       ↓
-Semantic region analysis
+Targeted relation enrichment + semantic graph
       ↓
-Presentation planning
+Region analysis + interaction scopes
+      ↓
+Hierarchical commands + presentation planning
       ↓
 Terminal-native TuiScene
       ↓
@@ -60,6 +62,8 @@ The first prototype provides:
   with authoritative GUI read-back and conflict/replacement protection; and
 - generic reconstruction of labeled fields, forms, command sets, selections, status/content
   summaries, and semantically sparse graphical regions without application-name branches.
+- targeted AT-SPI relations, modal/popup interaction scopes, and a true hierarchical command
+  browser/search model with scope filtering before explainable ranking.
 
 The transcompiled presentation is the default. `--presentation legacy` retains the former direct
 widget projection as a diagnostic comparison. Press `:` outside text-edit mode to open the command
@@ -159,6 +163,7 @@ Space            activate, toggle, or select a non-text control
 PageUp/PageDown  scroll one page
 r                 refresh the semantic snapshot
 :                 open semantic command palette
+F2                in command palette, toggle current-scope/all-command search
 q / Esc           quit
 Mouse wheel       scroll
 Left click        focus; buttons/toggles/checkboxes also activate
@@ -198,6 +203,12 @@ gui2tui-inspect --app firefox --bootstrap walk
 gui2tui-inspect --app firefox --probe-collection
 gui2tui-inspect --app firefox --dump-regions
 gui2tui-inspect --app firefox --dump-scene
+gui2tui-inspect --app firefox --dump-relations
+gui2tui-inspect --app firefox --relations NODE_ID
+gui2tui-inspect --app firefox --dump-scopes
+gui2tui-inspect --app firefox --dump-commands
+gui2tui-inspect --app firefox --command-query about
+gui2tui-inspect --app firefox --audit-scene-reachability
 ```
 
 `--dump-regions` exposes generic rewrite decisions, their confidence, source runtime IDs, and
@@ -207,7 +218,8 @@ region-analysis/scene-compilation timing on stderr.
 The cross-family live measurements and rule limits are recorded in
 [docs/transcompiler.md](docs/transcompiler.md); design and licensing boundaries are in
 [docs/design-principles.md](docs/design-principles.md), [docs/architecture.md](docs/architecture.md),
-and [docs/term-everything-study.md](docs/term-everything-study.md).
+and [docs/term-everything-study.md](docs/term-everything-study.md). Relation, scope, and command
+planning observations are in [docs/relations.md](docs/relations.md).
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
 

@@ -143,7 +143,7 @@ impl SceneCompiler<'_> {
 
     fn compile_region(&mut self, region: &SemanticRegion) {
         match region.kind {
-            SemanticRegionKind::Control => self.compile_control(region, false),
+            SemanticRegionKind::Control => self.compile_control(region),
             SemanticRegionKind::Field => self.compile_field(region),
             SemanticRegionKind::Form => {
                 if let Some(label) = &region.label {
@@ -182,18 +182,24 @@ impl SceneCompiler<'_> {
                 }
                 self.push(
                     SceneElementKind::CommandHeader {
-                        label: region
-                            .label
-                            .clone()
-                            .unwrap_or_else(|| "Commands".to_owned()),
+                        label: format!(
+                            "{} ({} available — press : to browse/search)",
+                            region
+                                .label
+                                .clone()
+                                .unwrap_or_else(|| "Commands".to_owned()),
+                            region.children.len()
+                        ),
                     },
                     region.source_nodes.clone(),
                     None,
                     PresentationStrategy::CommandList,
                 );
-                for child in &region.children {
-                    self.compile_control(child, true);
-                }
+                // CommandHierarchy is the canonical interactive presentation.
+                // Emitting every command into the document scene would flatten
+                // large applications (LibreOffice exposes hundreds) and defeat
+                // contextual browse/search. Safe leaf reachability is audited
+                // against CommandHierarchy, not duplicated here.
             }
             SemanticRegionKind::Status => {
                 self.push(
@@ -309,6 +315,26 @@ impl SceneCompiler<'_> {
             binding,
             PresentationStrategy::LabeledField,
         );
+        for description in &region.descriptions {
+            self.push(
+                SceneElementKind::Hint {
+                    text: description.clone(),
+                },
+                region.source_nodes.clone(),
+                None,
+                PresentationStrategy::StructuredSummary,
+            );
+        }
+        for error in &region.errors {
+            self.push(
+                SceneElementKind::Error {
+                    text: error.clone(),
+                },
+                region.source_nodes.clone(),
+                None,
+                PresentationStrategy::StructuredSummary,
+            );
+        }
     }
 
     fn compile_selection_control(&mut self, region: &SemanticRegion) {
@@ -331,7 +357,7 @@ impl SceneCompiler<'_> {
         );
     }
 
-    fn compile_control(&mut self, region: &SemanticRegion, command: bool) {
+    fn compile_control(&mut self, region: &SemanticRegion) {
         let Some(node) = region
             .source_nodes
             .first()
@@ -354,21 +380,6 @@ impl SceneCompiler<'_> {
                 region.source_nodes.clone(),
                 self.binding(node, region),
                 PresentationStrategy::DirectWidget,
-            );
-            return;
-        }
-        if command {
-            let mut path = region.command_path.clone();
-            if let Some(name) = &node.name {
-                path.push(name.clone());
-            }
-            self.push(
-                SceneElementKind::Command {
-                    path: path.join(" › "),
-                },
-                region.source_nodes.clone(),
-                self.binding(node, region),
-                PresentationStrategy::CommandList,
             );
             return;
         }
@@ -410,7 +421,11 @@ impl SceneCompiler<'_> {
         let interaction = region
             .interactions
             .iter()
-            .find(|interaction| interaction.source == node.runtime_id);
+            .find(|interaction| interaction.source == node.runtime_id)
+            .or_else(|| region.interactions.first());
+        let target = interaction
+            .and_then(|interaction| self.nodes.get(&interaction.source).copied())
+            .unwrap_or(node);
         let default_intent = interaction
             .map(|interaction| interaction.intent)
             .or_else(|| intent_for_role(&node.role))?;
@@ -418,10 +433,10 @@ impl SceneCompiler<'_> {
             capability_for_intent(interaction.intent)
         });
         Some(SceneBinding {
-            runtime_id: node.runtime_id,
-            backend_locator: node.backend_locator.clone(),
+            runtime_id: target.runtime_id,
+            backend_locator: target.backend_locator.clone(),
             semantic_role: node.role.clone(),
-            actions: node.actions.clone(),
+            actions: target.actions.clone(),
             capability,
             default_intent,
         })
@@ -608,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn command_set_compiles_to_palette_source_commands() {
+    fn command_set_is_summarized_in_scene_for_hierarchical_palette() {
         let mut root = node(0, SemanticRole::MenuBar, "Commands");
         let mut command = node(1, SemanticRole::MenuItem, "Save");
         command.actions.push(SemanticAction {
@@ -621,8 +636,12 @@ mod tests {
         let analysis = analyze_regions(&root);
         assert_eq!(analysis.root.kind, SemanticRegionKind::CommandSet);
         let scene = compile_scene(&root, &analysis);
-        assert_eq!(scene.metrics.commands, 1);
-        assert_eq!(scene.commands().count(), 1);
+        assert_eq!(scene.metrics.commands, 0);
+        assert_eq!(scene.commands().count(), 0);
+        assert!(matches!(
+            &scene.elements[0].kind,
+            SceneElementKind::CommandHeader { label } if label.contains("1 available")
+        ));
     }
 
     #[test]

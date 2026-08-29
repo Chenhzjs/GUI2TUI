@@ -88,6 +88,13 @@ pub fn coalesce_dirty_scopes(events: &[NormalizedEvent]) -> Vec<DirtyScope> {
     let has_structural_event = events
         .iter()
         .any(|event| matches!(event, NormalizedEvent::ChildrenChanged { .. }));
+    let structurally_added_or_removed: std::collections::HashSet<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            NormalizedEvent::ChildrenChanged { child, .. } => child.clone(),
+            _ => None,
+        })
+        .collect();
     let mut scopes = Vec::new();
     for event in events {
         if has_structural_event
@@ -99,6 +106,13 @@ pub fn coalesce_dirty_scopes(events: &[NormalizedEvent]) -> Vec<DirtyScope> {
             continue;
         }
         let scope = DirtyScope::from_event(event);
+        if matches!(&scope, DirtyScope::Node(locator) if structurally_added_or_removed.contains(locator))
+        {
+            // Refreshing the parent subtree materializes (or removes) the
+            // transient child. A state/property echo sourced by that child can
+            // otherwise race ahead and look like an impossible unknown node.
+            continue;
+        }
         if scope == DirtyScope::Application {
             return vec![DirtyScope::Application];
         }
@@ -390,5 +404,52 @@ mod tests {
             coalesce_dirty_scopes(&[window]),
             vec![DirtyScope::Application]
         );
+
+        let child = BackendLocator::new(":1.2", "/new-child");
+        assert_eq!(
+            coalesce_dirty_scopes(&[
+                NormalizedEvent::ChildrenChanged {
+                    parent: locator.clone(),
+                    change: "insert".to_owned(),
+                    index: 2,
+                    child: Some(child.clone()),
+                },
+                NormalizedEvent::NodeStateChanged {
+                    locator: child,
+                    state: "showing".to_owned(),
+                    enabled: true,
+                },
+            ]),
+            vec![DirtyScope::Subtree(locator)]
+        );
+    }
+
+    #[test]
+    fn coalesced_structural_scope_can_be_processed_before_transient_node_echoes() {
+        let parent = BackendLocator::new(":1.2", "/combo");
+        let unrelated_echo = BackendLocator::new(":1.2", "/old-popup/item");
+        let scopes = coalesce_dirty_scopes(&[
+            NormalizedEvent::NodeStateChanged {
+                locator: unrelated_echo.clone(),
+                state: "selected".to_owned(),
+                enabled: true,
+            },
+            NormalizedEvent::ChildrenChanged {
+                parent: parent.clone(),
+                change: "remove".to_owned(),
+                index: 0,
+                child: None,
+            },
+        ]);
+
+        assert_eq!(
+            scopes,
+            vec![
+                DirtyScope::Node(unrelated_echo),
+                DirtyScope::Subtree(parent)
+            ]
+        );
+        // The cache owner deliberately sorts this result so the structural
+        // refresh becomes the baseline before it interprets the stale echo.
     }
 }

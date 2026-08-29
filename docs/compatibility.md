@@ -33,7 +33,10 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 | Incremental button update | PASS: 13 nodes / 31 ms | PASS: 2 nodes / 3 ms | PASS: 5 nodes / 212 ms on 5,158-node tree | NOT TESTED |
 | Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED | NOT TESTED |
 | Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected | NOT TESTED |
-| ComboBox semantic role | NOT TESTED | NOT TESTED | PASS read-only mapping | PASS read-only mapping |
+| ComboBox semantic role | PARTIAL: safe open + popup scope; semantic options NOT EXPOSED | PARTIAL: open + popup options + select PASS; explicit close NOT EXPOSED | PASS read-only mapping; actions anonymous | PARTIAL: role observed in prior 234-node probe; actions anonymous |
+| RelationSet | PASS: five `LabelledBy` | PASS: `LabelFor` + `LabelledBy` | PASS: `EmbeddedBy`, `MemberOf` on large fixture | PASS: `NodeChildOf`, `LabelledBy`, `DescribedBy`, `LabelFor` in first-run UI |
+| Interaction scopes | Window/ModalDialog/Popup PASS | Window/ModalDialog/Popup PASS | Window PASS | Window/Dialog PASS in prior probe |
+| Command hierarchy/search | PASS | PASS | anonymous actions remain excluded | anonymous actions remain excluded |
 | Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items | PARTIAL: modern, 217 items / 27.048 ms; incomplete record triggers walk fallback |
 | Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync | NOT TESTED |
 | Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero | PARTIAL: 227 Collection nodes; root queries returned zero |
@@ -115,3 +118,11 @@ drawing-area fixture. It reconstructs fields/forms/commands/selections and
 preserves sparse graphical content without toolkit-name branches. Exact node,
 region, scene, timing, and action results are in
 [transcompiler.md](transcompiler.md).
+
+## Phase 3D relational/contextual probe
+
+The 2026-08-29 run added targeted RelationSet enrichment, typed graph queries, modal/popup scopes,
+and a canonical hierarchical command model. Chrome 5,158 nodes issued only 256 relation RPCs
+(7.987 ms), while LibreOffice exposed 478 reachable safe leaves without rendering them as 478
+default scene rows. Complete cross-family counts and the GTK/Qt ComboBox limitations are in
+[relations.md](relations.md).

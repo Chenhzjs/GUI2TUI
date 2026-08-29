@@ -10,6 +10,7 @@ pub enum UiIntent {
     Toggle,
     Select,
     OpenMenu,
+    ClosePopup,
     OpenCommandPalette,
     BeginEdit,
     CommitEdit,
@@ -75,7 +76,9 @@ pub fn interaction_capability(
         return InteractionCapability::EditText;
     }
     let intent = match role {
-        SemanticRole::ToggleButton | SemanticRole::CheckBox => UiIntent::Toggle,
+        SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
+            UiIntent::Toggle
+        }
         SemanticRole::Button => UiIntent::Activate,
         SemanticRole::ListItem => {
             if resolve_action(role, actions, UiIntent::Select).is_ok()
@@ -90,6 +93,12 @@ pub fn interaction_capability(
                 return InteractionCapability::OpenMenu;
             }
             UiIntent::Activate
+        }
+        SemanticRole::ComboBox => {
+            if resolve_action(role, actions, UiIntent::OpenMenu).is_ok() {
+                return InteractionCapability::OpenMenu;
+            }
+            return InteractionCapability::None;
         }
         _ => return InteractionCapability::None,
     };
@@ -113,10 +122,24 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::CheckBox, UiIntent::Activate | UiIntent::Toggle) => {
             &["toggle", "click", "press"]
         }
+        (SemanticRole::RadioButton, UiIntent::Activate | UiIntent::Toggle) => {
+            &["toggle", "click", "press"]
+        }
         // Qt 6 QListWidgetItem exposes Toggle, but the user operation is Select.
         (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
+        // `click`/`press` are accepted only after the relational analyzer has
+        // identified the unique action-bearing disclosure child of a ComboBox.
+        (SemanticRole::ComboBox, UiIntent::OpenMenu) => {
+            &["showmenu", "show-menu", "click", "press"]
+        }
+        // Opening actions are not assumed to be reversible. Qt advertises
+        // both `ShowMenu` and `Press` as "Open the combo box selection popup";
+        // invoking either after a selection can reselect an item or leave the
+        // popup open. Until a backend advertises an explicit, verified close
+        // semantic, closing remains unavailable rather than guessed.
+        (SemanticRole::ComboBox, UiIntent::ClosePopup) => &[],
         _ => &[],
     }
 }
@@ -195,6 +218,10 @@ mod tests {
             interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"]), &[], &[]),
             InteractionCapability::Select
         );
+        assert_eq!(
+            interaction_capability(&SemanticRole::RadioButton, &actions(&["Toggle"]), &[], &[]),
+            InteractionCapability::Toggle
+        );
     }
 
     #[test]
@@ -215,6 +242,22 @@ mod tests {
                 .unwrap()
                 .name,
             "Press"
+        );
+    }
+
+    #[test]
+    fn combo_open_is_explicit_and_anonymous_actions_remain_rejected() {
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::ComboBox,
+                &actions(&["ShowMenu", "Press"]),
+                &[],
+                &[]
+            ),
+            InteractionCapability::OpenMenu
+        );
+        assert!(
+            resolve_action(&SemanticRole::ComboBox, &actions(&[""]), UiIntent::OpenMenu).is_err()
         );
     }
 

@@ -103,6 +103,34 @@ struct Cli {
     /// Print the planned terminal TuiScene instead of the raw tree.
     #[arg(long, requires = "app")]
     dump_scene: bool,
+
+    /// Lazily enrich and print relations for scene-relevant nodes.
+    #[arg(long, requires = "app")]
+    dump_relations: bool,
+
+    /// Print relations for one NODE_ID within the selected application.
+    #[arg(long, value_name = "NODE_ID", requires = "app")]
+    relations: Option<String>,
+
+    /// Print the application/window/dialog/popup interaction-scope hierarchy.
+    #[arg(long, requires = "app")]
+    dump_scopes: bool,
+
+    /// Print scope-filtered hierarchical commands and ranking explanations.
+    #[arg(long, requires = "app")]
+    dump_commands: bool,
+
+    /// Search string used with --dump-commands.
+    #[arg(long, requires = "dump_commands", default_value = "")]
+    command_query: String,
+
+    /// Expand command search beyond the active interaction scope.
+    #[arg(long, requires = "dump_commands")]
+    all_scopes: bool,
+
+    /// Audit reachability of safely invokable semantic leaf operations.
+    #[arg(long, requires = "app")]
+    audit_scene_reachability: bool,
 }
 
 #[tokio::main]
@@ -237,7 +265,8 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         if let Some(error) = result.modern_error {
             println!("modern decode failed before legacy fallback: {error}");
         }
-        for record in result.records.iter().take(5) {
+        let sample_limit = if cli.verbose { result.records.len() } else { 5 };
+        for record in result.records.iter().take(sample_limit) {
             println!(
                 "sample role={} name={:?} description={:?} path={} parent={:?} index={:?} children={:?}",
                 record.role.name(),
@@ -305,28 +334,117 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             .map(|reason| format!(" fallback={reason:?}"))
             .unwrap_or_default(),
     );
-    if cli.dump_regions || cli.dump_scene {
+    if cli.dump_regions
+        || cli.dump_scene
+        || cli.dump_relations
+        || cli.relations.is_some()
+        || cli.dump_scopes
+        || cli.dump_commands
+        || cli.audit_scene_reachability
+    {
+        let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let initial_tree = cache
+            .materialize_tree()
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let initial_analysis = gui2tui::transcompile::analyze_regions(&initial_tree);
+        let initial_scene = gui2tui::transcompile::compile_scene(&initial_tree, &initial_analysis);
+        let requested_locator = cli
+            .relations
+            .as_deref()
+            .map(gui2tui::semantic::BackendLocator::decode)
+            .transpose()?;
+        let mut candidates = gui2tui::semantic::targeted_relation_candidates(
+            &cache,
+            initial_scene
+                .elements
+                .iter()
+                .flat_map(|element| element.sources.iter().copied()),
+        );
+        if let Some(locator) = &requested_locator {
+            let runtime_id = cache.runtime_id(locator).ok_or_else(|| {
+                BackendError::SemanticCache(format!(
+                    "relation node {locator} does not belong to selected application"
+                ))
+            })?;
+            if !candidates.contains(&runtime_id) {
+                candidates.push(runtime_id);
+            }
+        }
+        let relation_metrics = backend.enrich_relations(&mut cache, &candidates).await;
+        eprintln!(
+            "Relations: candidates={} rpcs={} found={} unresolved={} unavailable={} latency={:.3} ms",
+            relation_metrics.candidate_nodes,
+            relation_metrics.rpc_count,
+            relation_metrics.relations_found,
+            relation_metrics.unresolved_targets,
+            relation_metrics.unavailable_nodes,
+            relation_metrics.duration.as_secs_f64() * 1000.0,
+        );
+        let tree = cache
+            .materialize_tree()
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let graph = gui2tui::semantic::RelationalSemanticGraph::new(&cache);
+        let scopes = gui2tui::transcompile::InteractionScopes::analyze(&cache, &graph);
         let analysis_started = Instant::now();
-        let analysis = gui2tui::transcompile::analyze_regions(&bootstrap.root);
+        let analysis = gui2tui::transcompile::analyze_regions_with_graph(&tree, &graph);
         let analysis_elapsed = analysis_started.elapsed();
+        let scene_started = Instant::now();
+        let scene = gui2tui::transcompile::compile_scene(&tree, &analysis);
+        let scene_elapsed = scene_started.elapsed();
+        let commands = gui2tui::transcompile::CommandHierarchy::build(&cache, &scopes);
         if cli.dump_regions {
             print!("{}", gui2tui::transcompile::format_regions(&analysis));
         }
         if cli.dump_scene {
-            let scene_started = Instant::now();
-            let scene = gui2tui::transcompile::compile_scene(&bootstrap.root, &analysis);
-            let scene_elapsed = scene_started.elapsed();
             print!("{}", gui2tui::transcompile::format_scene(&scene));
             eprintln!(
                 "Transcompiler: region analysis {:.3} ms; scene compile {:.3} ms",
                 analysis_elapsed.as_secs_f64() * 1000.0,
                 scene_elapsed.as_secs_f64() * 1000.0,
             );
-        } else {
+        } else if cli.dump_regions {
             eprintln!(
                 "Transcompiler: region analysis {:.3} ms",
                 analysis_elapsed.as_secs_f64() * 1000.0,
             );
+        }
+        if cli.dump_relations || cli.relations.is_some() {
+            let only = requested_locator
+                .as_ref()
+                .and_then(|locator| cache.runtime_id(locator));
+            print!("{}", gui2tui::semantic::format_relations(&cache, only));
+        }
+        if cli.dump_scopes {
+            print!("{}", gui2tui::transcompile::format_scopes(&scopes));
+        }
+        if cli.dump_commands {
+            print!(
+                "{}",
+                gui2tui::transcompile::format_commands(
+                    &commands,
+                    &scopes,
+                    &cli.command_query,
+                    cli.all_scopes,
+                )
+            );
+        }
+        if cli.audit_scene_reachability {
+            let audit = commands.audit(&cache);
+            println!("safe leaves: {}", audit.safe_leaves);
+            println!("reachable: {}", audit.reachable);
+            println!(
+                "structural reveal omitted: {}",
+                audit.structural_reveal_omitted
+            );
+            println!("unsafe/unresolved: {}", audit.unsafe_or_unresolved);
+            println!("unreachable: {}", audit.unreachable);
+            for command in &audit.unreachable_commands {
+                println!(
+                    "  RuntimeNodeId={} role={} name={:?} operation={:?} reason={}",
+                    command.source, command.role, command.name, command.intent, command.reason
+                );
+            }
         }
         return Ok(());
     }

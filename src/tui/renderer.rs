@@ -5,7 +5,10 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene};
+use crate::{
+    transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene},
+    tui::palette::PaletteEntry,
+};
 
 use super::{
     action::InteractionCapability,
@@ -25,8 +28,9 @@ pub struct RenderContext<'a> {
 
 pub struct PaletteRender<'a> {
     pub query: &'a str,
-    pub entries: &'a [(SceneElementId, String)],
+    pub entries: &'a [PaletteEntry],
     pub selected: usize,
+    pub all_scopes: bool,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
@@ -146,6 +150,8 @@ fn element_lines_for_width(
         SceneElementKind::Text { text } | SceneElementKind::Status { text } => {
             vec![format!("  {text}")]
         }
+        SceneElementKind::Hint { text } => vec![format!("    Hint: {text}")],
+        SceneElementKind::Error { text } => vec![format!("    Error: {text}")],
         SceneElementKind::Group { label } | SceneElementKind::CommandHeader { label } => {
             vec![format!("  {label}:")]
         }
@@ -205,19 +211,22 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
         height,
     );
     frame.render_widget(Clear, popup);
-    let mut lines = vec![format!("> {}", palette.query)];
-    lines.extend(
-        palette
-            .entries
-            .iter()
-            .enumerate()
-            .map(|(index, (_, label))| {
-                format!(
-                    "{} {label}",
-                    if index == palette.selected { ">" } else { " " }
-                )
-            }),
-    );
+    let search_scope = if palette.all_scopes {
+        "all application commands"
+    } else {
+        "current interaction scope"
+    };
+    let mut lines = vec![format!(
+        "> {}  [search: {search_scope}; F2 toggle]",
+        palette.query
+    )];
+    lines.extend(palette.entries.iter().enumerate().map(|(index, entry)| {
+        format!(
+            "{} {}",
+            if index == palette.selected { ">" } else { " " },
+            entry.label
+        )
+    }));
     frame.render_widget(
         Paragraph::new(lines.join("\n"))
             .block(

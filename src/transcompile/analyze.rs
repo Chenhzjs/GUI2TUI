@@ -1,5 +1,7 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
-    semantic::{SemanticNode, SemanticRole},
+    semantic::{RelationalSemanticGraph, RuntimeNodeId, SemanticNode, SemanticRole},
     tui::action::{InteractionCapability, UiIntent, interaction_capability},
 };
 
@@ -29,20 +31,100 @@ pub struct RegionAnalysis {
 }
 
 #[derive(Default)]
+struct RelationHints {
+    labels: HashMap<RuntimeNodeId, (RuntimeNodeId, String)>,
+    descriptions: HashMap<RuntimeNodeId, Vec<String>>,
+    errors: HashMap<RuntimeNodeId, Vec<String>>,
+    memberships: HashMap<RuntimeNodeId, Vec<RuntimeNodeId>>,
+    consumed_labels: HashSet<RuntimeNodeId>,
+}
+
+impl RelationHints {
+    fn from_graph(root: &SemanticNode, graph: &RelationalSemanticGraph<'_>) -> Self {
+        fn collect(node: &SemanticNode, output: &mut Vec<RuntimeNodeId>) {
+            output.push(node.runtime_id);
+            for child in &node.children {
+                collect(child, output);
+            }
+        }
+        let mut ids = Vec::new();
+        collect(root, &mut ids);
+        let mut hints = Self::default();
+        for id in ids {
+            let labels: Vec<_> = graph
+                .labels_for(id)
+                .into_iter()
+                .filter_map(|label_id| {
+                    graph
+                        .node(label_id)
+                        .and_then(|node| node.name.clone().or_else(|| node.value.clone()))
+                        .map(|label| (label_id, label))
+                })
+                .collect();
+            if let [(label_id, label)] = labels.as_slice() {
+                hints.labels.insert(id, (*label_id, label.clone()));
+                hints.consumed_labels.insert(*label_id);
+            }
+            let texts = |targets: Vec<RuntimeNodeId>| {
+                targets
+                    .into_iter()
+                    .filter_map(|target| {
+                        graph
+                            .node(target)
+                            .and_then(|node| node.name.clone().or_else(|| node.value.clone()))
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let descriptions = texts(graph.descriptions_for(id));
+            if !descriptions.is_empty() {
+                hints.descriptions.insert(id, descriptions);
+            }
+            let errors = texts(graph.errors_for(id));
+            if !errors.is_empty() {
+                hints.errors.insert(id, errors);
+            }
+            let memberships = graph.memberships_of(id);
+            if !memberships.is_empty() {
+                hints.memberships.insert(id, memberships);
+            }
+        }
+        hints
+    }
+}
+
+#[derive(Default)]
 struct Analyzer {
     next_region: u64,
     metrics: RegionMetrics,
+    relations: RelationHints,
 }
 
 pub fn analyze_regions(root: &SemanticNode) -> RegionAnalysis {
     let mut analyzer = Analyzer::default();
-    analyzer.metrics.semantic_nodes = count_nodes(root);
-    analyzer.metrics.interactive_nodes = count_interactive(root, &[]);
-    let root = analyzer.analyze_node(root, &[], &[]);
-    analyzer.metrics.regions = count_regions(&root);
-    RegionAnalysis {
-        root,
-        metrics: analyzer.metrics,
+    analyzer.run(root)
+}
+
+pub fn analyze_regions_with_graph(
+    root: &SemanticNode,
+    graph: &RelationalSemanticGraph<'_>,
+) -> RegionAnalysis {
+    let mut analyzer = Analyzer {
+        relations: RelationHints::from_graph(root, graph),
+        ..Default::default()
+    };
+    analyzer.run(root)
+}
+
+impl Analyzer {
+    fn run(&mut self, root: &SemanticNode) -> RegionAnalysis {
+        self.metrics.semantic_nodes = count_nodes(root);
+        self.metrics.interactive_nodes = count_interactive(root, &[]);
+        let root = self.analyze_node(root, &[], &[]);
+        self.metrics.regions = count_regions(&root);
+        RegionAnalysis {
+            root,
+            metrics: self.metrics.clone(),
+        }
     }
 }
 
@@ -86,6 +168,11 @@ impl Analyzer {
             region.modality = ModalityPolicy::FidelityPreferred;
             return region;
         }
+        if node.role == SemanticRole::TextInput
+            && let Some((label_id, label)) = self.relations.labels.get(&node.runtime_id).cloned()
+        {
+            return self.relation_field(node, label_id, label, parent_capabilities, command_path);
+        }
         if matches!(node.role, SemanticRole::Label | SemanticRole::Text)
             && let Some(control) = unique_descendant_text_input(node)
         {
@@ -101,6 +188,40 @@ impl Analyzer {
                 .push(self.control_region(control, parent_capabilities, command_path));
             self.metrics.reconstructed += 1;
             return field;
+        }
+        if node.role == SemanticRole::ComboBox {
+            self.metrics.direct_controls += 1;
+            let control = self.control_region(node, parent_capabilities, command_path);
+            let expanded = node
+                .states
+                .contains(&crate::semantic::SemanticState::Expanded);
+            let structural_popup = !expanded && node.children.len() > 1;
+            let popup_children: Vec<_> = if expanded {
+                node.children
+                    .iter()
+                    .filter(|child| matches!(child.role, SemanticRole::List | SemanticRole::Menu))
+                    .collect()
+            } else if structural_popup {
+                node.children.iter().skip(1).collect()
+            } else {
+                Vec::new()
+            };
+            if !popup_children.is_empty() {
+                let mut group = SemanticRegion::terminal_native(
+                    self.id(),
+                    SemanticRegionKind::Group,
+                    vec![node.runtime_id],
+                );
+                group.label = node.name.clone();
+                group.children.push(control);
+                group.children.extend(
+                    popup_children
+                        .into_iter()
+                        .map(|child| self.analyze_node(child, &node.capabilities, command_path)),
+                );
+                return group;
+            }
+            return control;
         }
         if is_direct_control(node) {
             self.metrics.direct_controls += 1;
@@ -154,9 +275,59 @@ impl Analyzer {
         let mut index = 0;
         while index < node.children.len() {
             let child = &node.children[index];
+            if self.relations.consumed_labels.contains(&child.runtime_id) {
+                index += 1;
+                continue;
+            }
+            if child.role == SemanticRole::TextInput
+                && let Some((label_id, label)) =
+                    self.relations.labels.get(&child.runtime_id).cloned()
+            {
+                regions.push(self.relation_field(
+                    child,
+                    label_id,
+                    label,
+                    &node.capabilities,
+                    command_path,
+                ));
+                index += 1;
+                continue;
+            }
+            if matches!(child.role, SemanticRole::Label | SemanticRole::Text) {
+                let mut end = index + 1;
+                while node
+                    .children
+                    .get(end)
+                    .is_some_and(|candidate| candidate.role == SemanticRole::RadioButton)
+                {
+                    end += 1;
+                }
+                if end.saturating_sub(index + 1) >= 2 {
+                    let radios = &node.children[index + 1..end];
+                    let mut group = SemanticRegion::terminal_native(
+                        self.id(),
+                        SemanticRegionKind::Selection,
+                        std::iter::once(child.runtime_id)
+                            .chain(radios.iter().map(|radio| radio.runtime_id))
+                            .collect(),
+                    );
+                    group.label = semantic_label(child).or_else(|| Some("Options".to_owned()));
+                    group.confidence = RegionConfidence::Strong;
+                    group.children = radios
+                        .iter()
+                        .map(|radio| self.control_region(radio, &node.capabilities, command_path))
+                        .collect();
+                    self.metrics.selection_regions += 1;
+                    self.metrics.reconstructed += 1;
+                    regions.push(group);
+                    index = end;
+                    continue;
+                }
+            }
             if matches!(child.role, SemanticRole::Label | SemanticRole::Text)
                 && let Some(control) = node.children.get(index + 1)
                 && control.role == SemanticRole::TextInput
+                && !self.relations.labels.contains_key(&control.runtime_id)
                 && conservative_label_match(child, control, &node.children)
             {
                 let mut field = SemanticRegion::terminal_native(
@@ -216,6 +387,46 @@ impl Analyzer {
         summaries
     }
 
+    fn relation_field(
+        &mut self,
+        control: &SemanticNode,
+        label_id: RuntimeNodeId,
+        label: String,
+        parent_capabilities: &[crate::semantic::SemanticCapability],
+        command_path: &[String],
+    ) -> SemanticRegion {
+        let mut field = SemanticRegion::terminal_native(
+            self.id(),
+            SemanticRegionKind::Field,
+            vec![label_id, control.runtime_id],
+        );
+        field.label = Some(label);
+        field.confidence = RegionConfidence::Exact;
+        field.descriptions = self
+            .relations
+            .descriptions
+            .get(&control.runtime_id)
+            .cloned()
+            .unwrap_or_default();
+        field.errors = self
+            .relations
+            .errors
+            .get(&control.runtime_id)
+            .cloned()
+            .unwrap_or_default();
+        field.logical_group = self
+            .relations
+            .memberships
+            .get(&control.runtime_id)
+            .cloned()
+            .unwrap_or_default();
+        field
+            .children
+            .push(self.control_region(control, parent_capabilities, command_path));
+        self.metrics.reconstructed += 1;
+        field
+    }
+
     fn control_region(
         &mut self,
         node: &SemanticNode,
@@ -239,6 +450,13 @@ impl Analyzer {
             region.interactions.push(RegionInteraction {
                 source: node.runtime_id,
                 intent,
+            });
+        } else if node.role == SemanticRole::ComboBox
+            && let Some(disclosure) = unique_combo_disclosure(node)
+        {
+            region.interactions.push(RegionInteraction {
+                source: disclosure.runtime_id,
+                intent: UiIntent::OpenMenu,
             });
         }
         region
@@ -401,6 +619,30 @@ fn is_direct_control(node: &SemanticNode) -> bool {
     )
 }
 
+fn unique_combo_disclosure(node: &SemanticNode) -> Option<&SemanticNode> {
+    fn collect<'a>(node: &'a SemanticNode, output: &mut Vec<&'a SemanticNode>) {
+        for child in &node.children {
+            if crate::tui::action::resolve_action(
+                &SemanticRole::ComboBox,
+                &child.actions,
+                UiIntent::OpenMenu,
+            )
+            .is_ok()
+            {
+                output.push(child);
+            }
+            collect(child, output);
+        }
+    }
+    let mut candidates = Vec::new();
+    collect(node, &mut candidates);
+    if candidates.len() == 1 {
+        candidates.first().copied()
+    } else {
+        None
+    }
+}
+
 fn is_command_container(node: &SemanticNode) -> bool {
     node.role == SemanticRole::MenuBar
         || matches!(&node.role, SemanticRole::Unknown(role) if role == "tool bar" || role == "toolbar")
@@ -509,6 +751,15 @@ fn format_region(region: &SemanticRegion, depth: usize, output: &mut String) {
     if !region.command_path.is_empty() {
         output.push_str(&format!(" path={:?}", region.command_path));
     }
+    if !region.descriptions.is_empty() {
+        output.push_str(&format!(" descriptions={:?}", region.descriptions));
+    }
+    if !region.errors.is_empty() {
+        output.push_str(&format!(" errors={:?}", region.errors));
+    }
+    if !region.logical_group.is_empty() {
+        output.push_str(&format!(" logical_group={:?}", region.logical_group));
+    }
     output.push('\n');
     for child in &region.children {
         format_region(child, depth + 1, output);
@@ -518,8 +769,9 @@ fn format_region(region: &SemanticRegion, depth: usize, output: &mut String) {
 #[cfg(test)]
 mod tests {
     use crate::semantic::{
-        BackendLocator, DebugInfo, RuntimeNodeId, SemanticAction, SemanticCapability,
-        SemanticState, TextInputKind,
+        BackendLocator, BackendRelation, DebugInfo, RelationalSemanticGraph, RuntimeNodeId,
+        SemanticAction, SemanticCache, SemanticCapability, SemanticRelationKind, SemanticState,
+        TextInputKind,
     };
 
     use super::*;
@@ -652,6 +904,33 @@ mod tests {
     }
 
     #[test]
+    fn uniquely_contiguous_radio_run_forms_a_labeled_selection_group() {
+        let mut root = node(0, SemanticRole::Container, "");
+        let mut light = node(2, SemanticRole::RadioButton, "Light");
+        light.actions.push(action("Toggle"));
+        let mut dark = node(3, SemanticRole::RadioButton, "Dark");
+        dark.actions.push(action("Toggle"));
+        root.children = vec![
+            node(1, SemanticRole::Label, "Theme"),
+            light,
+            dark,
+            node(4, SemanticRole::Button, "Apply"),
+        ];
+
+        let result = analyze_regions(&root);
+        let group = &result.root.children[0];
+        assert_eq!(group.kind, SemanticRegionKind::Selection);
+        assert_eq!(group.label.as_deref(), Some("Theme"));
+        assert_eq!(group.children.len(), 2);
+        assert!(
+            group
+                .children
+                .iter()
+                .all(|child| child.interactions[0].intent == UiIntent::Toggle)
+        );
+    }
+
+    #[test]
     fn sparse_graphics_are_opaque_but_action_rich_unknown_is_not() {
         let mut canvas = node(
             1,
@@ -673,5 +952,76 @@ mod tests {
         unknown.states.push(SemanticState::Enabled);
         let result = analyze_regions(&unknown);
         assert_eq!(result.root.kind, SemanticRegionKind::Unknown);
+    }
+
+    #[test]
+    fn explicit_relation_overrides_adjacency_and_carries_description_and_error() {
+        let mut root = node(0, SemanticRole::Window, "Form");
+        let explicit = node(1, SemanticRole::Label, "Explicit username");
+        let adjacent = node(2, SemanticRole::Label, "Adjacent guess");
+        let mut input = node(3, SemanticRole::TextInput, "Adjacent guess");
+        input.text_input_kind = Some(TextInputKind::Plain);
+        let hint = node(4, SemanticRole::Label, "Required account name");
+        let error = node(5, SemanticRole::Label, "Invalid account name");
+        root.children = vec![explicit, adjacent, input, hint, error];
+        let mut cache = SemanticCache::from_snapshot(root).unwrap();
+        let find = |cache: &SemanticCache, name: &str| {
+            cache
+                .nodes()
+                .find(|node| node.name.as_deref() == Some(name))
+                .unwrap()
+                .runtime_id
+        };
+        let input_id = cache
+            .nodes()
+            .find(|node| node.role == SemanticRole::TextInput)
+            .unwrap()
+            .runtime_id;
+        let targets = [
+            (SemanticRelationKind::LabelledBy, "Explicit username"),
+            (SemanticRelationKind::DescribedBy, "Required account name"),
+            (SemanticRelationKind::ErrorMessage, "Invalid account name"),
+        ]
+        .into_iter()
+        .map(|(kind, name)| BackendRelation {
+            kind,
+            targets: vec![
+                cache
+                    .node(find(&cache, name))
+                    .unwrap()
+                    .backend_locator
+                    .clone(),
+            ],
+        })
+        .collect();
+        cache.set_relations(input_id, targets).unwrap();
+        let tree = cache.materialize_tree().unwrap();
+        let analysis = analyze_regions_with_graph(&tree, &RelationalSemanticGraph::new(&cache));
+        let field = analysis
+            .root
+            .children
+            .iter()
+            .find(|region| region.kind == SemanticRegionKind::Field)
+            .unwrap();
+        assert_eq!(field.label.as_deref(), Some("Explicit username"));
+        assert_eq!(field.confidence, RegionConfidence::Exact);
+        assert_eq!(field.descriptions, vec!["Required account name"]);
+        assert_eq!(field.errors, vec!["Invalid account name"]);
+    }
+
+    #[test]
+    fn combo_uses_unique_semantic_disclosure_child_without_toolkit_branch() {
+        let mut combo = node(1, SemanticRole::ComboBox, "Choice");
+        let mut disclosure = node(2, SemanticRole::ToggleButton, "Alpha");
+        disclosure.actions.push(action("Click"));
+        combo.children.push(disclosure);
+        let analysis = analyze_regions(&combo);
+        assert_eq!(analysis.root.interactions.len(), 1);
+        assert_eq!(analysis.root.interactions[0].source, RuntimeNodeId::new(2));
+        assert_eq!(analysis.root.interactions[0].intent, UiIntent::OpenMenu);
+
+        let anonymous = node(3, SemanticRole::ComboBox, "Browser choice");
+        let analysis = analyze_regions(&anonymous);
+        assert!(analysis.root.interactions.is_empty());
     }
 }

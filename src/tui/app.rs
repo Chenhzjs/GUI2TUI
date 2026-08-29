@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use crossterm::event::KeyEvent;
 use ratatui::Frame;
@@ -9,10 +12,11 @@ use crate::{
         InspectOptions,
     },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
-    semantic::SemanticCache,
+    semantic::{BackendLocator, RuntimeNodeId, SemanticCache, targeted_relation_candidates},
     transcompile::{
-        PresentationMode, SceneElement, SceneElementId, SceneElementKind, TuiScene,
-        analyze_regions, compile_legacy_scene, compile_scene,
+        CommandHierarchy, InteractionScopeId, InteractionScopes, PresentationMode, SceneElement,
+        SceneElementId, SceneElementKind, TuiScene, analyze_regions, analyze_regions_with_graph,
+        compile_legacy_scene, compile_scene,
     },
 };
 
@@ -22,7 +26,10 @@ use super::{
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
-    operation::{BackendOperation, SemanticOperation, resolve_backend_operation},
+    operation::{
+        BackendOperation, SemanticOperation, resolve_backend_operation,
+        resolve_cached_node_operation,
+    },
     palette::{CommandPalette, PaletteOutcome},
     renderer::{PaletteRender, RenderContext, render},
 };
@@ -39,6 +46,10 @@ pub struct TuiApplication {
     event_stream_available: bool,
     presentation_mode: PresentationMode,
     scene: TuiScene,
+    scopes: InteractionScopes,
+    commands: CommandHierarchy,
+    recent_commands: HashMap<RuntimeNodeId, u32>,
+    scope_focus_history: HashMap<InteractionScopeId, BackendLocator>,
     focus: FocusModel,
     viewport: Viewport,
     viewport_height: u16,
@@ -76,12 +87,10 @@ impl TuiApplication {
         let bootstrap = backend
             .bootstrap_application(&application, inspect_options, bootstrap_strategy)
             .await?;
-        let cache = SemanticCache::from_snapshot(bootstrap.root)
+        let mut cache = SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
-        let projected = cache
-            .materialize_tree()
-            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
-        let scene = build_scene(&projected, presentation_mode);
+        enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
+        let (scene, scopes, commands) = build_contextual_view(&cache, presentation_mode)?;
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
@@ -97,6 +106,10 @@ impl TuiApplication {
             event_stream_available: true,
             presentation_mode,
             scene,
+            scopes,
+            commands,
+            recent_commands: HashMap::new(),
+            scope_focus_history: HashMap::new(),
             focus,
             viewport: Viewport::default(),
             viewport_height: 1,
@@ -135,6 +148,7 @@ impl TuiApplication {
             query: palette.query(),
             entries: palette.entries(),
             selected: palette.selected(),
+            all_scopes: palette.searches_all_scopes(),
         });
         let regions = render(
             frame,
@@ -165,11 +179,19 @@ impl TuiApplication {
             UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
                 self.execute_focused(intent).await
             }
+            UiIntent::ClosePopup => {
+                self.status =
+                    "Popup closing is resolved from its active interaction scope".to_owned()
+            }
             UiIntent::BeginEdit => self.begin_edit().await,
             UiIntent::CommitEdit => self.commit_edit().await,
             UiIntent::CancelEdit => self.cancel_edit(),
             UiIntent::OpenCommandPalette => {
-                let palette = CommandPalette::from_scene(&self.scene);
+                let palette = CommandPalette::new(
+                    self.commands.clone(),
+                    self.scopes.active(),
+                    self.recent_commands.clone(),
+                );
                 self.status = format!("Command palette — {} commands", palette.entries().len());
                 self.command_palette = Some(palette);
             }
@@ -193,12 +215,17 @@ impl TuiApplication {
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         if let Some(mut palette) = self.command_palette.take() {
-            match palette.handle_key(key, &self.scene) {
+            match palette.handle_key(key) {
                 PaletteOutcome::Continue => self.command_palette = Some(palette),
                 PaletteOutcome::Close => self.status = "Command palette closed".to_owned(),
-                PaletteOutcome::Execute(scene_id) => {
-                    self.focus.set(&self.scene, scene_id);
-                    self.execute_focused(UiIntent::Activate).await;
+                PaletteOutcome::Execute(runtime_id, intent) => {
+                    if let Some(scene_id) = self.scene.scene_id_for_runtime(runtime_id) {
+                        self.focus.set(&self.scene, scene_id);
+                        self.execute_focused(intent).await;
+                    } else {
+                        self.status =
+                            "Command is not currently reachable in this semantic scene".to_owned();
+                    }
                 }
             }
             return false;
@@ -326,6 +353,9 @@ impl TuiApplication {
         };
 
         let operation_description = describe_operation(intent, &backend_operation);
+        let popup_owner = (intent == UiIntent::Select)
+            .then(|| self.active_popup_owner())
+            .flatten();
         let result = match &backend_operation {
             BackendOperation::InvokeAction { locator, action } => self
                 .backend
@@ -346,6 +376,7 @@ impl TuiApplication {
         };
         match result {
             Ok(_) => {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
                 let status = format!(
                     "{} \"{}\" via {}",
                     operation_verb(intent),
@@ -353,6 +384,9 @@ impl TuiApplication {
                     operation_description
                 );
                 self.update_from_action_events(status).await;
+                if let Some(owner) = popup_owner {
+                    self.close_popup_after_selection(owner).await;
+                }
             }
             Err(error) => {
                 let (status, refresh) = operation_error_status(&error);
@@ -361,6 +395,68 @@ impl TuiApplication {
                     let status = self.status.clone();
                     self.full_reload(Some(status)).await;
                 }
+            }
+        }
+    }
+
+    fn active_popup_owner(&self) -> Option<RuntimeNodeId> {
+        let scope = self.scopes.scope(self.scopes.active())?;
+        if !matches!(
+            scope.kind,
+            crate::transcompile::InteractionScopeKind::Popup
+                | crate::transcompile::InteractionScopeKind::MenuPopup
+        ) {
+            return None;
+        }
+        let graph = crate::semantic::RelationalSemanticGraph::new(&self.cache);
+        graph.popup_owner(scope.root).or_else(|| {
+            self.cache
+                .node(scope.root)
+                .and_then(|node| node.parent)
+                .filter(|parent| {
+                    self.cache
+                        .node(*parent)
+                        .is_some_and(|node| node.role == crate::semantic::SemanticRole::ComboBox)
+                })
+        })
+    }
+
+    async fn close_popup_after_selection(&mut self, owner: RuntimeNodeId) {
+        let still_open = self
+            .scopes
+            .scope(self.scopes.active())
+            .is_some_and(|scope| {
+                matches!(
+                    scope.kind,
+                    crate::transcompile::InteractionScopeKind::Popup
+                        | crate::transcompile::InteractionScopeKind::MenuPopup
+                )
+            });
+        if !still_open {
+            return;
+        }
+        let operation = SemanticOperation::ClosePopup(owner);
+        let Ok(BackendOperation::InvokeAction { locator, action }) =
+            resolve_cached_node_operation(&self.cache, operation)
+        else {
+            self.status
+                .push_str("; popup remains open (no safe close operation)");
+            return;
+        };
+        match self
+            .backend
+            .do_action(&locator.encode(), action.index)
+            .await
+        {
+            Ok(_) => {
+                self.update_from_action_events(format!(
+                    "Selection confirmed; closed popup via {}",
+                    action.name
+                ))
+                .await;
+            }
+            Err(error) => {
+                self.status = format!("Selection succeeded, but popup close failed: {error}");
             }
         }
     }
@@ -543,7 +639,7 @@ impl TuiApplication {
                     self.edit_session = None;
                     return;
                 }
-                self.rebuild_view_preserving_focus();
+                self.rebuild_view_preserving_focus().await;
             }
             Err(error) => {
                 self.status = format!("Text was submitted but node refresh failed: {error}");
@@ -590,14 +686,22 @@ impl TuiApplication {
                     self.status = format!("Full refresh fallback failed: {error}");
                     return;
                 }
-                let projected = match self.cache.materialize_tree() {
-                    Ok(projected) => projected,
-                    Err(error) => {
-                        self.status = format!("Tree projection failed: {error}");
-                        return;
-                    }
+                if let Err(error) =
+                    enrich_relational_cache(&self.backend, &mut self.cache, self.presentation_mode)
+                        .await
+                {
+                    self.status = format!("Relation enrichment failed: {error}");
+                    return;
+                }
+                let Ok((scene, scopes, commands)) =
+                    build_contextual_view(&self.cache, self.presentation_mode)
+                else {
+                    self.status = "Contextual scene rebuild failed".to_owned();
+                    return;
                 };
-                self.scene = build_scene(&projected, self.presentation_mode);
+                self.scene = scene;
+                self.scopes = scopes;
+                self.commands = commands;
                 self.focus.reconcile(&self.scene, previous_locator.as_ref());
                 self.application_available = true;
                 self.status = format!(
@@ -788,7 +892,20 @@ impl TuiApplication {
             }
             return;
         }
-        let scopes = coalesce_dirty_scopes(&events);
+        let mut scopes = coalesce_dirty_scopes(&events);
+        let has_structural_refresh = scopes
+            .iter()
+            .any(|scope| matches!(scope, DirtyScope::Subtree(_)));
+        // A toolkit can emit state/property echoes for transient descendants
+        // immediately before or after the parent's ChildrenChanged signal.
+        // Refresh the structural baseline first so those node echoes are
+        // interpreted against the current tree, not the tree from the start
+        // of the burst.
+        scopes.sort_by_key(|scope| match scope {
+            DirtyScope::Subtree(_) => 0,
+            DirtyScope::Node(_) => 1,
+            DirtyScope::Application => 2,
+        });
         let dirty_count = scopes.len();
         let mut refreshed_nodes = 0_usize;
         let mut reconciled = 0_usize;
@@ -802,6 +919,15 @@ impl TuiApplication {
                     Ok(node) => {
                         refreshed_nodes += 1;
                         self.cache.refresh_node(node).map(|_| ())
+                    }
+                    Err(_error)
+                        if has_structural_refresh && self.cache.runtime_id(&locator).is_none() =>
+                    {
+                        // The preceding subtree refresh proved that this
+                        // transient source no longer belongs to the semantic
+                        // tree. Its trailing state/property event is stale,
+                        // not evidence that the whole application is corrupt.
+                        Ok(())
                     }
                     Err(error) => {
                         self.full_reload(Some(format!(
@@ -849,7 +975,7 @@ impl TuiApplication {
                 return;
             }
         }
-        self.rebuild_view_preserving_focus();
+        self.rebuild_view_preserving_focus().await;
         let elapsed = started.elapsed().as_millis();
         let cache_nodes = self.cache.node_count();
         let reconciled_detail = reconciled_ids
@@ -863,21 +989,34 @@ impl TuiApplication {
         );
     }
 
-    fn rebuild_view_preserving_focus(&mut self) {
+    async fn rebuild_view_preserving_focus(&mut self) {
         let materialization_started = Instant::now();
+        let previous_scope = self.scopes.active();
         let previous_id = self.focus.current();
         let previous_locator = previous_id
             .and_then(|id| self.scene.element(id))
             .and_then(|element| element.binding.as_ref())
             .map(|binding| binding.backend_locator.clone());
-        let projected = match self.cache.materialize_tree() {
-            Ok(projected) => projected,
-            Err(error) => {
-                self.status = format!("Tree projection failed: {error}");
-                return;
-            }
-        };
-        self.scene = build_scene(&projected, self.presentation_mode);
+        if let Some(locator) = previous_locator.clone() {
+            self.scope_focus_history.insert(previous_scope, locator);
+        }
+        if let Err(error) =
+            enrich_relational_cache(&self.backend, &mut self.cache, self.presentation_mode).await
+        {
+            self.status = format!("Relation enrichment failed: {error}");
+            return;
+        }
+        let (scene, scopes, commands) =
+            match build_contextual_view(&self.cache, self.presentation_mode) {
+                Ok(view) => view,
+                Err(error) => {
+                    self.status = format!("Contextual scene rebuild failed: {error}");
+                    return;
+                }
+            };
+        self.scene = scene;
+        self.scopes = scopes;
+        self.commands = commands;
         if self.edit_session.as_ref().is_some_and(|session| {
             self.cache
                 .node(session.target)
@@ -891,7 +1030,12 @@ impl TuiApplication {
             materialization_ms = materialization_started.elapsed().as_secs_f64() * 1000.0,
             "materialized semantic arena for TUI view"
         );
-        if let Some(locator) = previous_locator.as_ref()
+        let restore_locator = if self.scopes.active() != previous_scope {
+            self.scope_focus_history.get(&self.scopes.active())
+        } else {
+            previous_locator.as_ref()
+        };
+        if let Some(locator) = restore_locator
             && let Some(id) = self.scene.scene_id_for_locator(locator)
             && self
                 .scene
@@ -900,7 +1044,7 @@ impl TuiApplication {
         {
             self.focus.set(&self.scene, id);
         } else {
-            self.focus.reconcile(&self.scene, previous_locator.as_ref());
+            self.focus.reconcile(&self.scene, restore_locator);
         }
         self.ensure_focus_visible();
     }
@@ -1013,6 +1157,7 @@ fn operation_verb(intent: UiIntent) -> &'static str {
     match intent {
         UiIntent::Select => "Selected",
         UiIntent::OpenMenu => "Opened menu",
+        UiIntent::ClosePopup => "Closed popup",
         UiIntent::Toggle => "Toggled",
         UiIntent::BeginEdit | UiIntent::CommitEdit | UiIntent::CancelEdit => "Edited",
         _ => "Activated",
@@ -1055,6 +1200,62 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
             compile_scene(root, &analysis)
         }
     }
+}
+
+async fn enrich_relational_cache(
+    backend: &AtspiBackend,
+    cache: &mut SemanticCache,
+    mode: PresentationMode,
+) -> Result<(), BackendError> {
+    let tree = cache
+        .materialize_tree()
+        .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+    let preliminary = build_scene(&tree, mode);
+    let candidates = targeted_relation_candidates(
+        cache,
+        preliminary
+            .elements
+            .iter()
+            .flat_map(|element| element.sources.iter().copied()),
+    );
+    let metrics = backend.enrich_relations(cache, &candidates).await;
+    tracing::debug!(
+        candidates = metrics.candidate_nodes,
+        relation_rpcs = metrics.rpc_count,
+        relations = metrics.relations_found,
+        unresolved = metrics.unresolved_targets,
+        unavailable = metrics.unavailable_nodes,
+        relation_ms = metrics.duration.as_secs_f64() * 1000.0,
+        "targeted semantic relation enrichment"
+    );
+    Ok(())
+}
+
+fn build_contextual_view(
+    cache: &SemanticCache,
+    mode: PresentationMode,
+) -> Result<(TuiScene, InteractionScopes, CommandHierarchy), BackendError> {
+    let tree = cache
+        .materialize_tree()
+        .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+    let graph = crate::semantic::RelationalSemanticGraph::new(cache);
+    let scopes = InteractionScopes::analyze(cache, &graph);
+    let mut scene = match mode {
+        PresentationMode::Legacy => compile_legacy_scene(&tree),
+        PresentationMode::Transcompiled => {
+            let analysis = analyze_regions_with_graph(&tree, &graph);
+            compile_scene(&tree, &analysis)
+        }
+    };
+    for element in &mut scene.elements {
+        if let Some(binding) = &element.binding
+            && !scopes.allows_node(binding.runtime_id)
+        {
+            element.binding = None;
+        }
+    }
+    let commands = CommandHierarchy::build(cache, &scopes);
+    Ok((scene, scopes, commands))
 }
 
 #[cfg(test)]

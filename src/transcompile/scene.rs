@@ -79,6 +79,12 @@ pub enum SceneElementKind {
     Status {
         text: String,
     },
+    Hint {
+        text: String,
+    },
+    Error {
+        text: String,
+    },
     OpaqueContent {
         label: String,
         dimensions: Option<(i32, i32)>,
@@ -120,7 +126,10 @@ impl SceneElement {
 
     pub fn label(&self) -> &str {
         match &self.kind {
-            SceneElementKind::Text { text } | SceneElementKind::Status { text } => text,
+            SceneElementKind::Text { text }
+            | SceneElementKind::Status { text }
+            | SceneElementKind::Hint { text }
+            | SceneElementKind::Error { text } => text,
             SceneElementKind::Group { label }
             | SceneElementKind::Field { label, .. }
             | SceneElementKind::Button { label }

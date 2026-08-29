@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability},
+    semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability},
     transcompile::TuiScene,
 };
 
@@ -13,6 +13,7 @@ pub enum SemanticOperation {
     ToggleNode(RuntimeNodeId),
     SelectNode(RuntimeNodeId),
     OpenMenu(RuntimeNodeId),
+    ClosePopup(RuntimeNodeId),
     ReplaceText { target: RuntimeNodeId, text: String },
 }
 
@@ -23,6 +24,7 @@ impl SemanticOperation {
             UiIntent::Toggle => Some(Self::ToggleNode(runtime_id)),
             UiIntent::Select => Some(Self::SelectNode(runtime_id)),
             UiIntent::OpenMenu => Some(Self::OpenMenu(runtime_id)),
+            UiIntent::ClosePopup => Some(Self::ClosePopup(runtime_id)),
             _ => None,
         }
     }
@@ -32,7 +34,8 @@ impl SemanticOperation {
             Self::ActivateNode(id)
             | Self::ToggleNode(id)
             | Self::SelectNode(id)
-            | Self::OpenMenu(id) => *id,
+            | Self::OpenMenu(id)
+            | Self::ClosePopup(id) => *id,
             Self::ReplaceText { target, .. } => *target,
         }
     }
@@ -43,9 +46,39 @@ impl SemanticOperation {
             Self::ToggleNode(_) => UiIntent::Toggle,
             Self::SelectNode(_) => UiIntent::Select,
             Self::OpenMenu(_) => UiIntent::OpenMenu,
+            Self::ClosePopup(_) => UiIntent::ClosePopup,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
         }
     }
+}
+
+/// Resolve an operation directly against the canonical semantic runtime.
+/// This is used for contextual owner operations (for example closing a
+/// ComboBox popup) whose owner is intentionally not interactive in the active
+/// popup scene.
+pub fn resolve_cached_node_operation(
+    cache: &SemanticCache,
+    operation: SemanticOperation,
+) -> Result<BackendOperation, OperationResolutionError> {
+    let runtime_id = operation.runtime_id();
+    let node = cache
+        .node(runtime_id)
+        .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+    if matches!(
+        operation,
+        SemanticOperation::SelectNode(_) | SemanticOperation::ReplaceText { .. }
+    ) {
+        return Err(OperationResolutionError::NoCompatibleOperation(
+            "operation requires scene relationship context".to_owned(),
+        ));
+    }
+    let action = resolve_action(&node.role, &node.actions, operation.intent())
+        .map_err(action_error)?
+        .clone();
+    Ok(BackendOperation::InvokeAction {
+        locator: node.backend_locator.clone(),
+        action,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
