@@ -307,6 +307,49 @@ mod tests {
     }
 
     #[test]
+    fn selection_and_focus_have_independent_non_color_markers() {
+        let item = element(SceneElementKind::SelectionItem {
+            label: "Beta".into(),
+            selected: true,
+        });
+        assert_eq!(element_lines(&item, false), vec!["  * Beta"]);
+        assert_eq!(element_lines(&item, true), vec!["> * Beta"]);
+    }
+
+    #[test]
+    fn unavailable_control_is_visibly_read_only() {
+        let mut checkbox = element(SceneElementKind::Checkbox {
+            label: "Enable feature".into(),
+            checked: false,
+        });
+        checkbox.binding.as_mut().unwrap().capability = InteractionCapability::None;
+        assert_eq!(
+            element_lines(&checkbox, false),
+            vec!["  [ ] Enable feature  (read-only)"]
+        );
+    }
+
+    #[test]
+    fn editing_renders_a_local_cursor_inside_a_narrow_window() {
+        let mut field = element(SceneElementKind::Field {
+            label: "Username".into(),
+            display: "confirmed".into(),
+            input_kind: crate::semantic::TextInputKind::Plain,
+        });
+        field.binding.as_mut().unwrap().capability = InteractionCapability::EditText;
+        let session = EditSession::new(
+            RuntimeNodeId::new(1),
+            BackendLocator::new(":1.2", "/node/1"),
+            "0123456789abcdef".into(),
+            1,
+        );
+        let lines = element_lines_for_width(&field, true, Some(&session), 14);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].contains('|'));
+        assert!(lines[1].ends_with("def|"));
+    }
+
+    #[test]
     fn opaque_content_is_explicitly_preserved() {
         let mut opaque = element(SceneElementKind::OpaqueContent {
             label: "Canvas".into(),

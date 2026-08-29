@@ -573,6 +573,41 @@ mod tests {
     }
 
     #[test]
+    fn form_compilation_removes_layout_nodes_and_assigns_unique_scene_ids() {
+        let mut root = node(0, SemanticRole::Window, "Profile");
+        let mut username = node(2, SemanticRole::TextInput, "Username");
+        username.text_input_kind = Some(TextInputKind::Plain);
+        let mut password = node(4, SemanticRole::TextInput, "Password");
+        password.text_input_kind = Some(TextInputKind::Password);
+        root.children = vec![
+            node(1, SemanticRole::Label, "Username"),
+            username,
+            node(3, SemanticRole::Label, "Password"),
+            password,
+        ];
+
+        let analysis = analyze_regions(&root);
+        assert_eq!(analysis.root.kind, SemanticRegionKind::Form);
+        let scene = compile_scene(&root, &analysis);
+        assert_eq!(
+            scene
+                .elements
+                .iter()
+                .filter(|element| matches!(element.kind, SceneElementKind::Field { .. }))
+                .count(),
+            2
+        );
+        let mut ids = scene
+            .elements
+            .iter()
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), scene.elements.len());
+    }
+
+    #[test]
     fn command_set_compiles_to_palette_source_commands() {
         let mut root = node(0, SemanticRole::MenuBar, "Commands");
         let mut command = node(1, SemanticRole::MenuItem, "Save");
