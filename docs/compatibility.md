@@ -106,3 +106,12 @@ unchanged. GUI2TUI therefore reported a normalized/rejected update and did not m
 cache optimistically. Native editing of the same field emitted `TextChanged` plus caret/selection
 events, proving the event stream itself was active. Password redaction counts were zero in normal,
 verbose, TUI, event, and Firefox log captures.
+
+## Phase 3C semantic presentation
+
+The generic transcompiler was subsequently exercised against GTK4, Qt6,
+LibreOffice Writer, Java Swing, Electron, Chrome, Firefox, and a GTK opaque
+drawing-area fixture. It reconstructs fields/forms/commands/selections and
+preserves sparse graphical content without toolkit-name branches. Exact node,
+region, scene, timing, and action results are in
+[transcompiler.md](transcompiler.md).

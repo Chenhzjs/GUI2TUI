@@ -5,7 +5,8 @@ GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a fr
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
 This repository contains the validated inspector, cross-toolkit semantic TUI, container operations,
-event-driven cache, and the **Phase 3A bulk semantic bootstrap** validated with GTK4, Qt6, and Chrome:
+event-driven cache, bulk semantic bootstrap, atomic plain-text editing, and the application-agnostic
+semantic transcompiler:
 
 ```text
 GUI application
@@ -18,7 +19,11 @@ AT-SPI Cache bulk bootstrap (recursive-walk fallback)
       ↓
 Arena-backed live semantic cache
       ↓
-Terminal-native view model
+Semantic region analysis
+      ↓
+Presentation planning
+      ↓
+Terminal-native TuiScene
       ↓
 Ratatui keyboard/mouse interaction
       ↓
@@ -52,7 +57,13 @@ The first prototype provides:
 - terminal-native Menu/MenuItem presentation with distinct OpenMenu and leaf Activate intents;
 - explicit `(read-only)` presentation for focusable controls without a compatible advertised action; and
 - local single-line plain-text edit sessions committed atomically through AT-SPI EditableText,
-  with authoritative GUI read-back and conflict/replacement protection.
+  with authoritative GUI read-back and conflict/replacement protection; and
+- generic reconstruction of labeled fields, forms, command sets, selections, status/content
+  summaries, and semantically sparse graphical regions without application-name branches.
+
+The transcompiled presentation is the default. `--presentation legacy` retains the former direct
+widget projection as a diagnostic comparison. Press `:` outside text-edit mode to open the command
+palette generated from safe semantic commands.
 
 Password, multiline/rich-text, remote caret/selection, IME, and clipboard editing are deliberately
 not implemented. The raw normalized stream can be inspected with
@@ -84,12 +95,19 @@ src/semantic/cache.rs      canonical arena/hash maps + identity reconciliation
            │
            ▼
 src/semantic/              SemanticNode + BackendLocator + RuntimeNodeId
-           ├───────────────────────────┐
-           ▼                           ▼
-src/inspect.rs             src/tui/view_model.rs
-Inspector formatter                    │
-                                       ▼
-                            Ratatui renderer + input
+           ├──────────────────────────────────────────────┐
+           ▼                                              ▼
+src/inspect.rs                         src/transcompile/
+Inspector formatter                    SemanticRegion analysis
+                                                   │
+                                                   ▼
+                                        PresentationStrategy
+                                                   │
+                                                   ▼
+                                               TuiScene
+                                                   │
+                                                   ▼
+                                        Ratatui renderer + input
                                        │
                                        ▼
                          UiIntent → SemanticOperation
@@ -127,6 +145,8 @@ gui2tui
 gui2tui --app gui2tui-live-fixture
 gui2tui --app gtk4-demo --max-depth 20 --max-nodes 2000
 gui2tui --app firefox --bootstrap auto
+gui2tui --app assistant --presentation transcompiled
+gui2tui --app assistant --presentation legacy
 ```
 
 Keys:
@@ -138,6 +158,7 @@ Space            activate, toggle, or select a non-text control
 ↑ / ↓            scroll one line
 PageUp/PageDown  scroll one page
 r                 refresh the semantic snapshot
+:                 open semantic command palette
 q / Esc           quit
 Mouse wheel       scroll
 Left click        focus; buttons/toggles/checkboxes also activate
@@ -175,7 +196,18 @@ gui2tui-inspect --app firefox --probe-cache
 gui2tui-inspect --app firefox --bootstrap cache
 gui2tui-inspect --app firefox --bootstrap walk
 gui2tui-inspect --app firefox --probe-collection
+gui2tui-inspect --app firefox --dump-regions
+gui2tui-inspect --app firefox --dump-scene
 ```
+
+`--dump-regions` exposes generic rewrite decisions, their confidence, source runtime IDs, and
+coverage metrics. `--dump-scene` shows the renderer-facing presentation primitives and reports
+region-analysis/scene-compilation timing on stderr.
+
+The cross-family live measurements and rule limits are recorded in
+[docs/transcompiler.md](docs/transcompiler.md); design and licensing boundaries are in
+[docs/design-principles.md](docs/design-principles.md), [docs/architecture.md](docs/architecture.md),
+and [docs/term-everything-study.md](docs/term-everything-study.md).
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
 

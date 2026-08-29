@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>GUI2TUI Electron Fixture</title></head>
+<body>
+  <h1>Electron semantic compatibility</h1>
+  <label>Username <input aria-label="Username" value="alice"></label>
+  <label>Password <input aria-label="Password" type="password" value="electron-phase-secret"></label>
+  <label><input id="enabled" type="checkbox"> Enable feature</label>
+  <p id="status">Status: idle</p>
+  <button onclick="activateDemo()">Activate safely</button>
+  <label>Items
+    <select aria-label="Items"><option>Alpha</option><option>Beta</option><option>Gamma</option></select>
+  </label>
+  <script>
+    function activateDemo() {
+      document.querySelector("#enabled").checked = true;
+      document.querySelector("#status").textContent = "Status: activated";
+    }
+  </script>
+</body>
+</html>
