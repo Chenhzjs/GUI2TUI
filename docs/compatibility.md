@@ -3,6 +3,18 @@
 Validated through 2026-08-30 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5,
 Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 
+## External modality resolution (Phase 3G)
+
+| Capability | GTK4 | Qt6 | Chrome | Firefox | LibreOffice |
+| --- | --- | --- | --- | --- | --- |
+| Image semantic role | PASS (`Image`) | ACCESSIBILITY-LIMITED (`QLabel`) | PASS (`Image`) | NOT EXPOSED in captured tree | PASS (`Image`) |
+| Generic resource reference | UNRESOLVED | UNRESOLVED | PASS (local file URI via Accessible attribute) | UNRESOLVED | UNRESOLVED |
+| Portable artifact from accessibility | UNRESOLVED | UNRESOLVED | UNRESOLVED | UNRESOLVED | UNRESOLVED |
+| Safe fallback | unavailable | unavailable | reference handoff | unavailable/live visual | unavailable |
+
+This matrix is updated only from live AT-SPI evidence. Application-specific APIs
+are forbidden; toolkit-independent broker and transport behavior is tested separately.
+
 | Feature | GTK4 | Qt6 | Chrome | Firefox |
 | --- | --- | --- | --- | --- |
 | Application discovery | PASS | PASS | PASS (Chrome 152) | PASS (Firefox 154.0.1) |

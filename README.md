@@ -35,6 +35,11 @@ AT-SPI action → original GUI
 
 It does not reconstruct GUI pixels or map GUI screen coordinates into terminal coordinates. It also does not contain raster capture, a Wayland compositor, or SSH session plumbing.
 
+When a semantic task genuinely needs an original image, document, video, or
+portable model, Phase 3G uses a reference-first, user-authorized local handoff.
+See [External modality handoff](docs/modality-handoff.md). It is not a remote
+desktop, file-sync service, or continuous media stream.
+
 ## Interactive prototype
 
 Run the semantic TUI against one accessible application, or omit `--app` to use the application selector:

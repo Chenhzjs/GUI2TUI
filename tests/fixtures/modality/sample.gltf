@@ -1,0 +1,6 @@
+{
+  "asset": { "version": "2.0", "generator": "GUI2TUI Phase 3G fixture" },
+  "scene": 0,
+  "scenes": [{ "nodes": [0] }],
+  "nodes": [{ "name": "Portable triangle" }]
+}
