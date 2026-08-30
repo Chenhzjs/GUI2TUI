@@ -43,6 +43,12 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 | Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items | PARTIAL: modern, 217 items / 27.048 ms; incomplete record triggers walk fallback |
 | Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync | NOT TESTED |
 | Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero | PARTIAL: 227 Collection nodes; root queries returned zero |
+| Semantic content model | PASS: read-only multiline TextView without Document role | PARTIAL: model detected; Qt 6.4 crashed serving Text read | PASS: 76-block fixture | PASS: 52-block fixture |
+| Reader | PASS: 1 block / 170 bytes | FAILED: fixture process segfaulted on Text query | PASS: 18-block viewport | PASS: 18-block viewport |
+| Outline | N/A: no headings in fixture | N/A | PASS: 4 headings | PASS: 4 headings |
+| Content search | PASS: loaded range | NOT TESTED after Text crash | PASS: indexed + loaded | PASS: indexed + loaded |
+| VirtualCollectionModel | complete fixture list | PASS: `PartialRealized`, 3 realized, total unknown | PARTIAL: ARIA/list semantics probed | PARTIAL: select semantics probed |
+| ActiveDescendantChanged | NOT TESTED | NOT OBSERVED | NOT OBSERVED | NOT OBSERVED |
 
 ## Qt accessibility activation
 
@@ -121,6 +127,10 @@ drawing-area fixture. It reconstructs fields/forms/commands/selections and
 preserves sparse graphical content without toolkit-name branches. Exact node,
 region, scene, timing, and action results are in
 [transcompiler.md](transcompiler.md).
+
+Phase 3E additionally validated terminal-native content reading in LibreOffice Writer (1,976
+nodes, 17 blocks, 4 headings), Chrome, Firefox, and a generic GTK TextView. The measurements and
+Qt rich-text bridge failure are recorded in [content-navigation.md](content-navigation.md).
 
 ## Phase 3D relational/contextual probe
 

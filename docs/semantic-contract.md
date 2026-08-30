@@ -184,9 +184,23 @@ selection/children/active-descendant changes dirty a container subtree; lifecycl
 events use the application fallback. A 40 ms window coalesces each burst. The single cache owner is
 the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome sequences.
 
+## Content navigation contract
+
+`SemanticContentModel` is a derived, toolkit-independent view over the live semantic arena. Its
+`ContentBlockId` is content-local and distinct from backend/runtime/scene identities. Document,
+heading, paragraph, link, list, quote, form/table anchor, and opaque media semantics come from
+AT-SPI roles and relationships, not file parsing or GUI geometry.
+
+The main scene replaces content-only rows with a `DocumentSummary`; form controls and other bound
+tasks remain reachable. Reader text is fetched lazily from non-password Text objects into a
+512-KiB/256-range LRU. Text, property, and structural events invalidate only affected sources.
+`manages-descendants` yields partial completeness and never a fabricated logical total. Search
+covers semantic labels plus loaded ranges; progressive full-content search is not implemented.
+Actual cross-application results are in [content-navigation.md](content-navigation.md).
+
 ## Known semantic gaps
 
-- Multi-selection, deselection, Selection child enumeration, and SelectionChanged events are not implemented.
+- Multi-selection, deselection, and Selection child enumeration are not implemented.
 - GTK4 demo list-item actions such as `listitem.scroll-to` and nested expansion actions remain intentionally excluded from generic activation.
 - Qt6 `QListWidgetItem.Toggle` is accepted only for the ListItem Select operation; it is not a global alias.
 - Menu keyboard hierarchy, Escape/back behavior, and popup focus trapping are not implemented; the current model opens the real menu and refreshes its semantic snapshot.
@@ -196,8 +210,9 @@ the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome 
   local cursor is Unicode-scalar-safe but not grapheme-cluster-aware, so a combining sequence or
   multi-code-point emoji may take more than one edit step. Tab is blocked until the session is
   explicitly committed or cancelled.
-- `manages-descendants` and ActiveDescendant events are retained, but virtualized collection
-  traversal is LIMITED SUPPORT.
+- `manages-descendants` produces an explicit partial `VirtualCollectionModel`. ActiveDescendant
+  normalization/update support exists, but Chrome, Firefox, and Qt live probes did not emit that
+  event; virtualized traversal remains LIMITED SUPPORT.
 - GTK4 `ComboBoxText` did not expose usable named options through the observed AT-SPI tree and is
   safely read-only. Chrome's hidden HTML-select Menu advertised Selection but rejected direct
   selection and is also read-only. Qt and Firefox complete the same Choice task without opening a

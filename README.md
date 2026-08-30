@@ -21,9 +21,10 @@ Arena-backed live semantic cache
       ↓
 Targeted relation enrichment + semantic graph
       ↓
-Region analysis + interaction scopes
+Region analysis + interaction scopes ───────┐
+Semantic content analysis + bounded cache ──┤
       ↓
-Hierarchical commands + presentation planning
+Hierarchical commands + presentation/Reader planning
       ↓
 Terminal-native TuiScene
       ↓
@@ -64,13 +65,17 @@ The first prototype provides:
   summaries, and semantically sparse graphical regions without application-name branches.
 - targeted AT-SPI relations, modal/popup interaction scopes, and a true hierarchical command
   browser/search model with scope filtering before explainable ranking.
+- a progressive semantic Reader, heading Outline, and indexed/loaded content Search for Web,
+  Writer, and generic read-only multiline Text objects; and
+- bounded partial-collection models that never equate realized children with a logical total.
 
 The transcompiled presentation is the default. `--presentation legacy` retains the former direct
 widget projection as a diagnostic comparison. Press `:` outside text-edit mode to open the command
 palette generated from safe semantic commands.
 
-Password, multiline/rich-text, remote caret/selection, IME, and clipboard editing are deliberately
-not implemented. The raw normalized stream can be inspected with
+Password, multiline/rich-text editing, remote caret/selection, IME, and clipboard editing are
+deliberately not implemented. Read-only rich content is supported by the Reader. The raw normalized
+stream can be inspected with
 `gui2tui-inspect --watch-events --app NAME`.
 
 ## Phase 0 capabilities
@@ -209,6 +214,11 @@ gui2tui-inspect --app firefox --dump-scopes
 gui2tui-inspect --app firefox --dump-commands
 gui2tui-inspect --app firefox --command-query about
 gui2tui-inspect --app firefox --audit-scene-reachability
+gui2tui-inspect --app firefox --dump-content
+gui2tui-inspect --app firefox --dump-outline
+gui2tui-inspect --app firefox --probe-document
+gui2tui-inspect --app firefox --dump-virtual-collections
+gui2tui-inspect --app firefox --audit-content-reachability
 ```
 
 `--dump-regions` exposes generic rewrite decisions, their confidence, source runtime IDs, and
@@ -219,7 +229,9 @@ The cross-family live measurements and rule limits are recorded in
 [docs/transcompiler.md](docs/transcompiler.md); design and licensing boundaries are in
 [docs/design-principles.md](docs/design-principles.md), [docs/architecture.md](docs/architecture.md),
 and [docs/term-everything-study.md](docs/term-everything-study.md). Relation, scope, and command
-planning observations are in [docs/relations.md](docs/relations.md).
+planning observations are in [docs/relations.md](docs/relations.md). Content architecture and live
+measurements are in [docs/content-navigation.md](docs/content-navigation.md); representative actual
+GUI-to-TUI frames are in [docs/gui-to-tui-examples.md](docs/gui-to-tui-examples.md).
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
 
@@ -381,7 +393,8 @@ The raw-to-normalized event contract and measured incremental results are in
 - Plain single-line TextInput supports explicit local edit sessions and atomic AT-SPI
   `EditableText.SetTextContents`. Remote caret/selection synchronization, IME, clipboard,
   multiline, rich-text, and password editing are not implemented.
-- There is no virtualized collection backend, raster fallback,
+- Partial virtual collections are modeled from realized AT-SPI children, but arbitrary logical
+  paging and reliable ActiveDescendant traversal remain limited. There is no raster fallback,
   compositor, or SSH integration yet.
 - List selection currently supports a compatible item action or direct-child selection through a
   parent Selection interface. Multi-selection/deselection is not implemented.
@@ -398,7 +411,11 @@ Phase 1  Interactive semantic TUI prototype       ✓ validated
 Phase 2A GTK + Qt semantic contract               ✓ validated
 Phase 2B Container selection/menu + browser probe ✓ validated
 Phase 2C Event stream + incremental semantic cache ✓ validated
-Phase 3  EditableText + richer semantic controls
+Phase 3A Fast bulk bootstrap                    ✓ validated
+Phase 3B Atomic EditableText                    ✓ validated
+Phase 3C Semantic UI transcompiler              ✓ validated
+Phase 3D Relational/contextual task planning    ✓ validated
+Phase 3E Semantic content navigation            ✓ validated
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration
