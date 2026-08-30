@@ -198,7 +198,7 @@ impl ContentCatalog {
         candidates.retain(|candidate| {
             !ancestors(cache, *candidate).any(|ancestor| all_candidates.contains(&ancestor))
         });
-        // Browser chrome and transient panels can expose secondary Document
+        // Application chrome and transient panels can expose secondary Document
         // objects in the same interaction scope. Keep the richest visible
         // content root per Window/Dialog scope; independent windows and modal
         // dialogs retain their own Reader.
@@ -365,7 +365,7 @@ impl ModelBuilder<'_> {
         if node.text_input_kind == Some(TextInputKind::Password) {
             return None;
         }
-        if is_application_chrome(&node.role) {
+        if is_ui_chrome_role(&node.role) {
             return None;
         }
         let kind = block_kind(node);
@@ -498,7 +498,7 @@ fn heading_level(node: &CachedSemanticNode) -> Option<u8> {
     })
 }
 
-fn is_application_chrome(role: &SemanticRole) -> bool {
+fn is_ui_chrome_role(role: &SemanticRole) -> bool {
     matches!(
         role,
         SemanticRole::MenuBar

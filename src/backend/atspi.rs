@@ -973,8 +973,8 @@ impl AtspiBackend {
             )
             .await?;
             if end <= offset {
-                // GTK TextView can advertise paragraph granularity while
-                // returning a non-advancing range. Fall back to a bounded
+                // A Text implementation can advertise paragraph granularity
+                // while returning a non-advancing range. Fall back to a bounded
                 // character chunk; never spin and never fetch an unbounded
                 // whole document.
                 let chunk_end = offset.saturating_add(4096).min(character_count);
