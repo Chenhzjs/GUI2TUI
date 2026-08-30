@@ -13,6 +13,9 @@ pub enum UiIntent {
     OpenMenu,
     ClosePopup,
     OpenCommandPalette,
+    BeginRead,
+    OpenOutline,
+    OpenContentSearch,
     BeginEdit,
     CommitEdit,
     CancelEdit,
@@ -31,6 +34,7 @@ pub enum InteractionCapability {
     Choose,
     OpenMenu,
     EditText,
+    BrowseContent,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

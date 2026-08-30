@@ -135,6 +135,30 @@ struct Cli {
     /// Audit reachability of safely invokable semantic leaf operations.
     #[arg(long, requires = "app")]
     audit_scene_reachability: bool,
+
+    /// Audit Reader navigation and document control reachability after compression.
+    #[arg(long, requires = "app")]
+    audit_content_reachability: bool,
+
+    /// Print semantic content blocks without eagerly reading body text.
+    #[arg(long, requires = "app")]
+    dump_content: bool,
+
+    /// Include non-secret content text already available to --dump-content.
+    #[arg(long, requires = "dump_content")]
+    with_text: bool,
+
+    /// Print the semantic heading outline.
+    #[arg(long, requires = "app")]
+    dump_outline: bool,
+
+    /// Probe generic AT-SPI Document/Text/Hypertext metadata for content roots.
+    #[arg(long, requires = "app")]
+    probe_document: bool,
+
+    /// Print progressively realized List/Tree/Table models.
+    #[arg(long, requires = "app")]
+    dump_virtual_collections: bool,
 }
 
 #[tokio::main]
@@ -346,14 +370,78 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.dump_scopes
         || cli.dump_commands
         || cli.audit_scene_reachability
+        || cli.audit_content_reachability
+        || cli.dump_content
+        || cli.dump_outline
+        || cli.probe_document
+        || cli.dump_virtual_collections
     {
         let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let content = gui2tui::content::ContentCatalog::analyze(&cache);
+        if cli.dump_content {
+            for model in content.models() {
+                print!(
+                    "{}",
+                    gui2tui::content::format_content_model(model, cli.with_text)
+                );
+            }
+        }
+        if cli.dump_outline {
+            for model in content.models() {
+                print!("{}", gui2tui::content::format_outline(model));
+            }
+        }
+        if cli.probe_document {
+            for model in content.models() {
+                let Some(node) = cache.node(model.root) else {
+                    continue;
+                };
+                match backend.probe_document(&node.backend_locator).await {
+                    Ok(probe) => println!(
+                        "Document root={} locator={} document={} text={} hypertext={} locale={:?} page={:?}/{:?} chars={:?} links={:?} attributes={:?}",
+                        model.root,
+                        node.backend_locator,
+                        probe.document_interface,
+                        probe.text_interface,
+                        probe.hypertext_interface,
+                        probe.locale,
+                        probe.current_page,
+                        probe.page_count,
+                        probe.character_count,
+                        probe.hyperlink_count,
+                        probe.attributes,
+                    ),
+                    Err(error) => println!("Document root={} unavailable: {error}", model.root),
+                }
+            }
+        }
+        if cli.dump_virtual_collections {
+            let models = gui2tui::content::analyze_virtual_collections(&cache);
+            print!(
+                "{}",
+                gui2tui::content::format_virtual_collections(&cache, &models)
+            );
+        }
+        let only_content = !cli.dump_regions
+            && !cli.dump_scene
+            && !cli.dump_choices
+            && !cli.dump_relations
+            && cli.relations.is_none()
+            && !cli.dump_scopes
+            && !cli.dump_commands
+            && !cli.audit_scene_reachability
+            && !cli.audit_content_reachability;
+        if only_content {
+            return Ok(());
+        }
         let initial_tree = cache
             .materialize_tree()
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
         let initial_analysis = gui2tui::transcompile::analyze_regions(&initial_tree);
-        let initial_scene = gui2tui::transcompile::compile_scene(&initial_tree, &initial_analysis);
+        let mut initial_scene =
+            gui2tui::transcompile::compile_scene(&initial_tree, &initial_analysis);
+        gui2tui::transcompile::compress_content_scene(&mut initial_scene, &cache, &content);
         let requested_locator = cli
             .relations
             .as_deref()
@@ -431,7 +519,9 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         let analysis = gui2tui::transcompile::analyze_regions_with_graph(&tree, &graph);
         let analysis_elapsed = analysis_started.elapsed();
         let scene_started = Instant::now();
-        let scene = gui2tui::transcompile::compile_scene(&tree, &analysis);
+        let mut scene = gui2tui::transcompile::compile_scene(&tree, &analysis);
+        let content_compression =
+            gui2tui::transcompile::compress_content_scene(&mut scene, &cache, &content);
         let scene_elapsed = scene_started.elapsed();
         let commands = gui2tui::transcompile::CommandHierarchy::build(&cache, &scopes);
         if cli.dump_choices {
@@ -447,9 +537,13 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         if cli.dump_scene {
             print!("{}", gui2tui::transcompile::format_scene(&scene));
             eprintln!(
-                "Transcompiler: region analysis {:.3} ms; scene compile {:.3} ms",
+                "Transcompiler: region analysis {:.3} ms; scene compile {:.3} ms; content compression {} -> {} elements (summaries={} preserved_bindings={})",
                 analysis_elapsed.as_secs_f64() * 1000.0,
                 scene_elapsed.as_secs_f64() * 1000.0,
+                content_compression.before_elements,
+                content_compression.after_elements,
+                content_compression.summaries,
+                content_compression.preserved_bound_elements,
             );
         } else if cli.dump_regions {
             eprintln!(
@@ -493,6 +587,13 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                     command.source, command.role, command.name, command.intent, command.reason
                 );
             }
+        }
+        if cli.audit_content_reachability {
+            let audit = gui2tui::transcompile::audit_content_reachability(&scene, &content);
+            print!(
+                "{}",
+                gui2tui::transcompile::format_content_reachability(&audit)
+            );
         }
         return Ok(());
     }

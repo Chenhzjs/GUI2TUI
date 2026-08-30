@@ -118,7 +118,9 @@ PROJECT_ROOT="$project_root" TARGET_DIR="$target_dir" dbus-run-session -- bash -
             echo "EDITABLE_TEXT_TEST requires python3-pexpect" >&2
             exit 1
         }
-        APP=gui2tui-live-fixture TABS=0 SUFFIX=-harness-gtk \
+        # The GTK fixture now exposes one semantic Reader summary before the
+        # task controls, so Username is the next focus target.
+        APP=gui2tui-live-fixture TABS=1 SUFFIX=-harness-gtk \
             GUI2TUI="$TARGET_DIR/debug/gui2tui" python3 - <<"PY"
 import os
 import time

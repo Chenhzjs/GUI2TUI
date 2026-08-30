@@ -66,6 +66,14 @@ pub enum SceneElementKind {
     Selector {
         label: String,
     },
+    DocumentSummary {
+        title: String,
+        blocks: usize,
+        headings: usize,
+        links: usize,
+        forms: usize,
+        completeness: String,
+    },
     SelectionItem {
         label: String,
         selected: bool,
@@ -113,6 +121,7 @@ impl SceneElement {
                     | SceneElementKind::Toggle { .. }
                     | SceneElementKind::Checkbox { .. }
                     | SceneElementKind::Selector { .. }
+                    | SceneElementKind::DocumentSummary { .. }
                     | SceneElementKind::SelectionItem { .. }
                     | SceneElementKind::Command { .. }
             )
@@ -140,6 +149,7 @@ impl SceneElement {
             | SceneElementKind::CommandHeader { label }
             | SceneElementKind::OpaqueContent { label, .. }
             | SceneElementKind::Unsupported { label } => label,
+            SceneElementKind::DocumentSummary { title, .. } => title,
             SceneElementKind::Command { path } => path,
         }
     }
@@ -149,6 +159,7 @@ impl SceneElement {
             SceneElementKind::Field { .. } if width < 100 => 2,
             SceneElementKind::OpaqueContent { dimensions, .. } if dimensions.is_some() => 3,
             SceneElementKind::OpaqueContent { .. } => 2,
+            SceneElementKind::DocumentSummary { .. } => 5,
             _ => 1,
         }
     }
@@ -287,6 +298,43 @@ impl TuiScene {
         self.elements
             .iter()
             .filter(|element| matches!(element.kind, SceneElementKind::Command { .. }))
+    }
+
+    pub fn replace_elements(&mut self, elements: Vec<SceneElement>) {
+        self.elements = elements;
+        self.by_runtime = self
+            .elements
+            .iter()
+            .filter_map(|element| {
+                element
+                    .binding
+                    .as_ref()
+                    .map(|binding| (binding.runtime_id, element.id))
+            })
+            .collect();
+        self.metrics = SceneMetrics {
+            elements: self.elements.len(),
+            interactive_elements: self
+                .elements
+                .iter()
+                .filter(|element| element.is_focusable())
+                .count(),
+            commands: self
+                .elements
+                .iter()
+                .filter(|element| matches!(element.kind, SceneElementKind::Command { .. }))
+                .count(),
+            opaque: self
+                .elements
+                .iter()
+                .filter(|element| matches!(element.kind, SceneElementKind::OpaqueContent { .. }))
+                .count(),
+            unsupported: self
+                .elements
+                .iter()
+                .filter(|element| matches!(element.kind, SceneElementKind::Unsupported { .. }))
+                .count(),
+        };
     }
 }
 

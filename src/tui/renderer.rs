@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::{
+    content::{ContentBlockKind, ContentSearchResult, ReaderBlock},
     transcompile::ChoiceOption,
     transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene},
     tui::palette::PaletteEntry,
@@ -13,6 +14,7 @@ use crate::{
 
 use super::{
     action::InteractionCapability,
+    content_view::ContentViewMode,
     edit::EditSession,
     hit_test::{HitInteraction, HitRegion},
 };
@@ -26,6 +28,7 @@ pub struct RenderContext<'a> {
     pub edit_session: Option<&'a EditSession>,
     pub palette: Option<PaletteRender<'a>>,
     pub choice: Option<ChoiceRender<'a>>,
+    pub content: Option<ContentRender>,
 }
 
 pub struct PaletteRender<'a> {
@@ -39,6 +42,18 @@ pub struct ChoiceRender<'a> {
     pub label: &'a str,
     pub options: &'a [ChoiceOption],
     pub selected: usize,
+    pub partial: bool,
+}
+
+pub struct ContentRender {
+    pub title: String,
+    pub mode: ContentViewMode,
+    pub blocks: Vec<ReaderBlock>,
+    pub outline: Vec<(String, Option<u8>)>,
+    pub outline_selected: usize,
+    pub query: String,
+    pub results: Vec<ContentSearchResult>,
+    pub result_selected: usize,
     pub partial: bool,
 }
 
@@ -66,6 +81,9 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     if let Some(choice) = context.choice {
         render_choice(frame, content_area, choice);
     }
+    if let Some(content) = context.content {
+        render_content(frame, content_area, content);
+    }
     let footer = format!(
         "{} | Tab Focus | Enter Operate | : Commands | ↑/↓ Scroll | r Refresh | q Quit",
         context.status
@@ -75,6 +93,94 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         footer_area,
     );
     hit_regions
+}
+
+fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
+    frame.render_widget(Clear, area);
+    let (title, lines, help) = match content.mode {
+        ContentViewMode::Reader => {
+            let lines = content
+                .blocks
+                .iter()
+                .flat_map(|block| {
+                    let prefix = match block.kind {
+                        ContentBlockKind::Heading { .. } => "# ",
+                        ContentBlockKind::Link => "[Link] ",
+                        ContentBlockKind::ListItem => "• ",
+                        ContentBlockKind::Quote => "> ",
+                        ContentBlockKind::OpaqueContent(_) => "[Media] ",
+                        _ => "",
+                    };
+                    vec![format!("{prefix}{}", block.text), String::new()]
+                })
+                .collect::<Vec<_>>();
+            (
+                format!(" Reader — {} ", content.title),
+                lines,
+                "j/k Move | PageUp/PageDown | o Outline | / Search | Esc Back",
+            )
+        }
+        ContentViewMode::Outline => {
+            let lines = if content.outline.is_empty() {
+                vec!["No semantic headings exposed.".to_owned()]
+            } else {
+                content
+                    .outline
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (label, level))| {
+                        let marker = if index == content.outline_selected {
+                            ">"
+                        } else {
+                            " "
+                        };
+                        let indent = "  ".repeat(level.unwrap_or(1).saturating_sub(1) as usize);
+                        format!("{marker} {indent}{label}")
+                    })
+                    .collect()
+            };
+            (
+                format!(" Outline — {} ", content.title),
+                lines,
+                "↑/↓ Navigate | Enter Read | / Search | Esc Reader",
+            )
+        }
+        ContentViewMode::Search => {
+            let mut lines = vec![format!("> {}", content.query)];
+            if content.results.is_empty() {
+                lines.push("No matches in indexed labels or loaded text.".to_owned());
+            } else {
+                lines.extend(content.results.iter().enumerate().map(|(index, result)| {
+                    format!(
+                        "{} {}",
+                        if index == content.result_selected {
+                            ">"
+                        } else {
+                            " "
+                        },
+                        result.preview
+                    )
+                }));
+            }
+            (
+                format!(" Content search — {} ", content.title),
+                lines,
+                "Type Search | ↑/↓ Navigate | Enter Read | Esc Reader",
+            )
+        }
+    };
+    let completeness = if content.partial { " — partial" } else { "" };
+    let block = Block::default()
+        .title(format!("{title}{completeness}"))
+        .borders(Borders::ALL);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(
+        Paragraph::new(lines.join("\n"))
+            .wrap(Wrap { trim: false })
+            .block(Block::default().title(help)),
+        inner,
+    );
 }
 
 fn render_choice(frame: &mut Frame<'_>, area: Rect, choice: ChoiceRender<'_>) {
@@ -170,6 +276,7 @@ fn interaction(element: &SceneElement) -> Option<HitInteraction> {
         SceneElementKind::Field { .. } | SceneElementKind::Selector { .. } => {
             Some(HitInteraction::Focus)
         }
+        SceneElementKind::DocumentSummary { .. } => Some(HitInteraction::Activate),
         _ => None,
     }
 }
@@ -230,6 +337,20 @@ fn element_lines_for_width(
             }
         }
         SceneElementKind::Selector { label } => vec![format!("{marker}[ {label} ▼ ]{unavailable}")],
+        SceneElementKind::DocumentSummary {
+            title,
+            blocks,
+            headings,
+            links,
+            forms,
+            completeness,
+        } => vec![
+            format!("{marker}Document: {title}"),
+            format!("    {blocks} blocks | {headings} headings | {links} links | {forms} forms"),
+            format!("    completeness: {completeness}"),
+            "    [ Enter: Read document ]".to_owned(),
+            "    o Outline | / Content search".to_owned(),
+        ],
         SceneElementKind::SelectionItem { label, selected } => vec![format!(
             "{marker}{} {label}{unavailable}",
             if *selected { "*" } else { "•" }

@@ -673,6 +673,7 @@ fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> 
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),
+        InteractionCapability::BrowseContent => Some(UiIntent::BeginRead),
     }
 }
 

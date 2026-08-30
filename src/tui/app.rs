@@ -11,6 +11,7 @@ use crate::{
         AtspiBackend, BackendError, BootstrapStrategy, EventDelivery, EventSubscription,
         InspectOptions,
     },
+    content::{ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget},
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::{
         BackendLocator, LARGE_TREE_RELATION_CANDIDATE_LIMIT, RelationPriorityContext,
@@ -21,12 +22,14 @@ use crate::{
         ChoiceCatalog, ChoiceOptions, CommandHierarchy, InteractionScopeId, InteractionScopes,
         PresentationMode, SceneBinding, SceneElement, SceneElementId, SceneElementKind, TuiScene,
         analyze_regions, analyze_regions_with_graph, compile_legacy_scene, compile_scene,
+        compress_content_scene,
     },
 };
 
 use super::{
     action::{InteractionCapability, UiIntent},
     choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
+    content_view::{ContentViewCommand, ContentViewMode, ContentViewState, move_index},
     edit::{EditCommand, EditSession, key_to_edit_command},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
@@ -36,7 +39,7 @@ use super::{
         resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
-    renderer::{ChoiceRender, PaletteRender, RenderContext, render},
+    renderer::{ChoiceRender, ContentRender, PaletteRender, RenderContext, render},
 };
 
 pub struct TuiApplication {
@@ -66,6 +69,8 @@ pub struct TuiApplication {
     edit_session: Option<EditSession>,
     command_palette: Option<CommandPalette>,
     choice_overlay: Option<ChoiceOverlay>,
+    content: ContentRuntime,
+    content_view: Option<ContentViewState>,
 }
 
 #[derive(Clone, Debug)]
@@ -104,7 +109,9 @@ impl TuiApplication {
         let mut cache = SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
-        let (scene, scopes, commands, choices) = build_contextual_view(&cache, presentation_mode)?;
+        let content = ContentRuntime::new(&cache, ContentCacheBudget::default());
+        let (scene, scopes, commands, choices) =
+            build_contextual_view(&cache, presentation_mode, content.catalog())?;
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
@@ -138,6 +145,8 @@ impl TuiApplication {
             edit_session: None,
             command_palette: None,
             choice_overlay: None,
+            content,
+            content_view: None,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -176,6 +185,47 @@ impl TuiApplication {
             selected: overlay.selected(),
             partial: matches!(overlay.choice().options, ChoiceOptions::Partial(_)),
         });
+        let content = self.content_view.as_ref().and_then(|view| {
+            let model = self.content.model(view.root)?;
+            let outline = model
+                .navigation
+                .headings
+                .iter()
+                .filter_map(|id| model.block(*id))
+                .map(|block| {
+                    let level = match block.kind {
+                        crate::content::ContentBlockKind::Heading { level } => level,
+                        _ => None,
+                    };
+                    (
+                        self.content
+                            .displayed_block_text(view.root, block.id)
+                            .unwrap_or_else(|| "Untitled heading".to_owned()),
+                        level,
+                    )
+                })
+                .collect();
+            Some(ContentRender {
+                title: model
+                    .metadata
+                    .title
+                    .clone()
+                    .or_else(|| {
+                        self.cache
+                            .node(view.root)
+                            .and_then(|node| node.name.clone())
+                    })
+                    .unwrap_or_else(|| "Document".to_owned()),
+                mode: view.mode,
+                blocks: view.reader_blocks.clone(),
+                outline,
+                outline_selected: view.outline_selected,
+                query: view.query.clone(),
+                results: view.results.clone(),
+                result_selected: view.result_selected,
+                partial: model.completeness != ContentCompleteness::Complete,
+            })
+        });
         let regions = render(
             frame,
             RenderContext {
@@ -187,6 +237,7 @@ impl TuiApplication {
                 edit_session: self.edit_session.as_ref(),
                 palette,
                 choice,
+                content,
             },
         );
         self.hit_map.replace(regions);
@@ -225,6 +276,9 @@ impl TuiApplication {
                 self.status = format!("Command palette — {} commands", palette.entries().len());
                 self.command_palette = Some(palette);
             }
+            UiIntent::BeginRead => self.begin_read().await,
+            UiIntent::OpenOutline => self.open_outline(),
+            UiIntent::OpenContentSearch => self.open_content_search(),
             UiIntent::Refresh => {
                 self.full_reload(Some("Forced full semantic snapshot".to_owned()))
                     .await;
@@ -244,6 +298,12 @@ impl TuiApplication {
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        if let Some(mut content_view) = self.content_view.take() {
+            let command = content_view.handle_key(key);
+            self.content_view = Some(content_view);
+            self.handle_content_view_command(command).await;
+            return false;
+        }
         if let Some(mut overlay) = self.choice_overlay.take() {
             match overlay.handle_key(key) {
                 ChoiceOverlayOutcome::Continue => self.choice_overlay = Some(overlay),
@@ -312,6 +372,28 @@ impl TuiApplication {
                 EditCommand::Ignore => false,
             };
         }
+        let focused_document = self
+            .focus
+            .current()
+            .and_then(|id| self.scene.element(id))
+            .is_some_and(|element| {
+                matches!(element.kind, SceneElementKind::DocumentSummary { .. })
+            });
+        if focused_document {
+            match key.code {
+                crossterm::event::KeyCode::Char('o') => {
+                    self.begin_read().await;
+                    self.open_outline();
+                    return false;
+                }
+                crossterm::event::KeyCode::Char('/') => {
+                    self.begin_read().await;
+                    self.open_content_search();
+                    return false;
+                }
+                _ => {}
+            }
+        }
         if let Some(mut intent) = key_to_intent(key) {
             if intent == UiIntent::Activate
                 && self
@@ -331,6 +413,16 @@ impl TuiApplication {
                     })
             {
                 intent = UiIntent::BeginChoice;
+            } else if intent == UiIntent::Activate
+                && self
+                    .focus
+                    .current()
+                    .and_then(|id| self.scene.element(id))
+                    .is_some_and(|element| {
+                        matches!(element.kind, SceneElementKind::DocumentSummary { .. })
+                    })
+            {
+                intent = UiIntent::BeginRead;
             }
             self.handle_intent(intent).await
         } else {
@@ -369,6 +461,182 @@ impl TuiApplication {
         }
     }
 
+    async fn begin_read(&mut self) {
+        let Some(scene_id) = self.focus.current() else {
+            self.status = "No document summary is focused".to_owned();
+            return;
+        };
+        let Some(element) = self.scene.element(scene_id) else {
+            return;
+        };
+        let Some(binding) = element.binding.as_ref() else {
+            return;
+        };
+        let root = binding.runtime_id;
+        let Some(model) = self.content.model(root) else {
+            self.status = "Document content is no longer available".to_owned();
+            return;
+        };
+        let Some(position) = model.reading_order().first().copied() else {
+            self.status = "Document exposes no readable semantic blocks".to_owned();
+            return;
+        };
+        self.content_view = Some(ContentViewState::new(
+            root,
+            position,
+            Some(scene_id),
+            Some(root),
+        ));
+        self.refresh_content_view().await;
+    }
+
+    fn open_outline(&mut self) {
+        if let Some(view) = self.content_view.as_mut() {
+            view.mode = ContentViewMode::Outline;
+            if let Some(model) = self.content.model(view.root) {
+                view.outline_selected = model
+                    .navigation
+                    .headings
+                    .iter()
+                    .position(|id| *id == view.position)
+                    .unwrap_or(0);
+            }
+            self.status = "Document outline — Enter reads from heading; Esc returns".to_owned();
+        }
+    }
+
+    fn open_content_search(&mut self) {
+        if let Some(view) = self.content_view.as_mut() {
+            view.mode = ContentViewMode::Search;
+            view.results = self.content.search(view.root, &view.query);
+            view.result_selected = 0;
+            self.status =
+                "Content search covers indexed labels and currently loaded text".to_owned();
+        }
+    }
+
+    async fn handle_content_view_command(&mut self, command: ContentViewCommand) {
+        match command {
+            ContentViewCommand::Continue => {}
+            ContentViewCommand::Close => {
+                let Some(view) = self.content_view.take() else {
+                    return;
+                };
+                if let Some(scene_id) = view.restore_scene
+                    && self.scene.element(scene_id).is_some()
+                {
+                    self.focus.set(&self.scene, scene_id);
+                } else {
+                    self.focus
+                        .reconcile_identity(&self.scene, view.restore_runtime, None);
+                }
+                self.status = "Reader closed; document focus restored".to_owned();
+            }
+            ContentViewCommand::MoveBlocks(delta) => {
+                let Some(view) = self.content_view.as_mut() else {
+                    return;
+                };
+                let Some(model) = self.content.model(view.root) else {
+                    self.content_view = None;
+                    self.status = "Document disappeared; Reader closed".to_owned();
+                    return;
+                };
+                let order = model.reading_order();
+                let current = order
+                    .iter()
+                    .position(|id| *id == view.position)
+                    .unwrap_or(0);
+                let next = move_index(current, delta, order.len());
+                if let Some(id) = order.get(next) {
+                    view.position = *id;
+                }
+                self.refresh_content_view().await;
+            }
+            ContentViewCommand::OpenOutline => self.open_outline(),
+            ContentViewCommand::OpenSearch => self.open_content_search(),
+            ContentViewCommand::OutlineMove(delta) => {
+                if let Some(view) = self.content_view.as_mut()
+                    && let Some(model) = self.content.model(view.root)
+                {
+                    view.outline_selected = move_index(
+                        view.outline_selected,
+                        delta,
+                        model.navigation.headings.len(),
+                    );
+                }
+            }
+            ContentViewCommand::ChooseOutline => {
+                if let Some(view) = self.content_view.as_mut()
+                    && let Some(model) = self.content.model(view.root)
+                    && let Some(id) = model.navigation.headings.get(view.outline_selected)
+                {
+                    view.position = *id;
+                    view.mode = ContentViewMode::Reader;
+                }
+                self.refresh_content_view().await;
+            }
+            ContentViewCommand::SearchChanged => {
+                if let Some(view) = self.content_view.as_mut() {
+                    view.results = self.content.search(view.root, &view.query);
+                    view.result_selected = 0;
+                }
+            }
+            ContentViewCommand::SearchMove(delta) => {
+                if let Some(view) = self.content_view.as_mut() {
+                    view.result_selected =
+                        move_index(view.result_selected, delta, view.results.len());
+                }
+            }
+            ContentViewCommand::ChooseSearch => {
+                if let Some(view) = self.content_view.as_mut()
+                    && let Some(result) = view.results.get(view.result_selected)
+                {
+                    view.position = result.block_id;
+                    view.mode = ContentViewMode::Reader;
+                }
+                self.refresh_content_view().await;
+            }
+        }
+    }
+
+    async fn refresh_content_view(&mut self) {
+        let Some((root, position)) = self
+            .content_view
+            .as_ref()
+            .map(|view| (view.root, view.position))
+        else {
+            return;
+        };
+        match self
+            .content
+            .materialize_viewport(
+                &self.backend,
+                &self.cache,
+                root,
+                position,
+                MaterializationBudget::default(),
+            )
+            .await
+        {
+            Ok((blocks, report)) => {
+                if let Some(view) = self.content_view.as_mut() {
+                    view.reader_blocks = blocks;
+                }
+                self.status = format!(
+                    "Reader loaded {} blocks (text_rpcs={} ranges={} cache={} bytes) in {:.3} ms",
+                    report.requested_blocks,
+                    report.backend_text_rpcs,
+                    report.loaded_ranges,
+                    report.cache.bytes,
+                    report.duration_micros as f64 / 1000.0
+                );
+            }
+            Err(error) => {
+                self.status = format!("Reader content load failed: {error}");
+            }
+        }
+    }
+
     async fn execute_focused(&mut self, _requested_intent: UiIntent) {
         let Some(scene_id) = self.focus.current() else {
             self.status = "No focusable control".to_owned();
@@ -392,6 +660,10 @@ impl TuiApplication {
         let intent = intent_for_element(&element);
         if intent == UiIntent::BeginChoice {
             self.begin_choice();
+            return;
+        }
+        if intent == UiIntent::BeginRead {
+            self.begin_read().await;
             return;
         }
         let Some(runtime_id) = element.binding.as_ref().map(|binding| binding.runtime_id) else {
@@ -924,9 +1196,12 @@ impl TuiApplication {
                     self.status = format!("Relation enrichment failed: {error}");
                     return;
                 }
-                let Ok((scene, scopes, commands, choices)) =
-                    build_contextual_view(&self.cache, self.presentation_mode)
-                else {
+                self.content.rebuild_semantics(&self.cache);
+                let Ok((scene, scopes, commands, choices)) = build_contextual_view(
+                    &self.cache,
+                    self.presentation_mode,
+                    self.content.catalog(),
+                ) else {
                     self.status = "Contextual scene rebuild failed".to_owned();
                     return;
                 };
@@ -1135,6 +1410,9 @@ impl TuiApplication {
         {
             session.mark_external_change();
         }
+        for event in &events {
+            self.content.invalidate_event(&self.cache, event);
+        }
         let raw_count = events.len();
         // Cache Add/Remove reports cache residency. A bootstrap (especially a
         // recursive walk) can itself populate the toolkit cache, so replaying
@@ -1277,14 +1555,18 @@ impl TuiApplication {
             self.status = format!("Relation enrichment failed: {error}");
             return;
         }
-        let (scene, scopes, commands, choices) =
-            match build_contextual_view(&self.cache, self.presentation_mode) {
-                Ok(view) => view,
-                Err(error) => {
-                    self.status = format!("Contextual scene rebuild failed: {error}");
-                    return;
-                }
-            };
+        self.content.rebuild_semantics(&self.cache);
+        let (scene, scopes, commands, choices) = match build_contextual_view(
+            &self.cache,
+            self.presentation_mode,
+            self.content.catalog(),
+        ) {
+            Ok(view) => view,
+            Err(error) => {
+                self.status = format!("Contextual scene rebuild failed: {error}");
+                return;
+            }
+        };
         self.scene = scene;
         self.scopes = scopes;
         self.commands = commands;
@@ -1331,6 +1613,18 @@ impl TuiApplication {
             "restored exact semantic focus after contextual scene rebuild"
         );
         self.ensure_focus_visible();
+        if self.content_view.is_some() {
+            let root_is_live = self
+                .content_view
+                .as_ref()
+                .is_some_and(|view| self.content.model(view.root).is_some());
+            if root_is_live {
+                self.refresh_content_view().await;
+            } else {
+                self.content_view = None;
+                self.status = "Document content disappeared; Reader closed".to_owned();
+            }
+        }
     }
 
     fn ensure_focus_visible(&mut self) {
@@ -1378,8 +1672,9 @@ impl TuiApplication {
         if metrics.relations_found == 0 {
             return;
         }
+        self.content.rebuild_semantics(&self.cache);
         let Ok((scene, scopes, commands, choices)) =
-            build_contextual_view(&self.cache, self.presentation_mode)
+            build_contextual_view(&self.cache, self.presentation_mode, self.content.catalog())
         else {
             return;
         };
@@ -1483,6 +1778,7 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
         InteractionCapability::Choose => UiIntent::BeginChoice,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
         InteractionCapability::EditText => UiIntent::BeginEdit,
+        InteractionCapability::BrowseContent => UiIntent::BeginRead,
         InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
     }
 }
@@ -1671,6 +1967,7 @@ fn collect_cached_subtree_ids(
 fn build_contextual_view(
     cache: &SemanticCache,
     mode: PresentationMode,
+    content: &crate::content::ContentCatalog,
 ) -> Result<(TuiScene, InteractionScopes, CommandHierarchy, ChoiceCatalog), BackendError> {
     let tree = cache
         .materialize_tree()
@@ -1745,6 +2042,7 @@ fn build_contextual_view(
             element.binding = None;
         }
     }
+    compress_content_scene(&mut scene, cache, content);
     let commands = CommandHierarchy::build(cache, &scopes);
     Ok((scene, scopes, commands, choices))
 }

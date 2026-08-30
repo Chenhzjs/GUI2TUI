@@ -1,6 +1,7 @@
 pub mod action;
 pub mod app;
 pub mod choice_overlay;
+pub mod content_view;
 pub mod edit;
 pub mod focus;
 pub mod hit_test;

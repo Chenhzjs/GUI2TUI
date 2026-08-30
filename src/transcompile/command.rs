@@ -325,7 +325,9 @@ fn capability_intent(capability: InteractionCapability) -> Option<UiIntent> {
         InteractionCapability::Select => Some(UiIntent::Select),
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
-        InteractionCapability::EditText | InteractionCapability::None => None,
+        InteractionCapability::EditText
+        | InteractionCapability::BrowseContent
+        | InteractionCapability::None => None,
     }
 }
 

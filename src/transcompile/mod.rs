@@ -1,6 +1,7 @@
 pub mod analyze;
 pub mod choice;
 pub mod command;
+pub mod content;
 pub mod presentation;
 pub mod region;
 pub mod scene;
@@ -16,6 +17,10 @@ pub use choice::{
 pub use command::{
     CommandEntry, CommandGroup, CommandHierarchy, RankedCommand, ReachabilityAudit,
     SemanticCommand, UnreachableCommand, format_commands,
+};
+pub use content::{
+    ContentCompressionMetrics, ContentReachabilityAudit, audit_content_reachability,
+    compress_content_scene, format_content_reachability,
 };
 pub use presentation::{
     PresentationMode, PresentationStrategy, compile_legacy_scene, compile_scene,
