@@ -33,6 +33,48 @@ makes anonymous actions safe. Live observations and measured relation cost are i
 
 Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` and `EditableText` interfaces. Their sentinel values were absent from normal inspector, verbose inspector, and TUI output.
 
+## Choice task contract
+
+GUI2TUI models the user task “choose one semantic option”, not a toolkit popup sequence.
+`SemanticChoice` names an owner, current option, `Available`/`Partial`/`Unavailable` options,
+collection completeness, disclosure requirement, and dismissal behavior. Each named option carries
+either a safe child semantic action or a visible parent container `Selection.select_child` strategy.
+An empty option vector never means “accessibility did not expose the choices”. Anonymous actions,
+hidden parent Selection containers, and role-only guesses are non-interactive.
+
+```text
+ComboBox / RadioGroup / single-selection List
+                    ↓
+             SemanticChoice
+        ┌───────────┴───────────┐
+        │                       │
+ named child action       visible parent Selection
+        │                       │
+        └───────────┬───────────┘
+                    ↓
+       terminal-native Choice overlay
+                    ↓
+          authoritative GUI read-back
+```
+
+The terminal overlay has its own lifecycle. Escape closes it and restores the owner SceneElement;
+it does not call the GUI. When options are already available, `DisclosureRequirement::NotRequired`
+forbids opening a GUI popup merely to imitate the original presentation. An opening action is never
+assumed to be a closing action.
+
+Live results on 2026-08-30:
+
+- Qt QComboBox exposed Alpha/Beta/Gamma as ListItems with named `Toggle`; selecting Beta succeeded
+  with zero `ShowMenu` calls and one-node event refresh.
+- GTK ComboBox exposed no named semantic options. Production presented it read-only and issued zero
+  popup calls. Its separate visible List selected Beta through parent Selection.
+- Chrome exposed named options and a hidden Menu Selection interface, but the application rejected
+  `select_child`; the hidden parent is therefore not claimed as a safe strategy and Choice is read-only.
+- Firefox exposed a showing Menu with Selection. The same overlay selected Beta through
+  `select_child(1)`, then refreshed six nodes from three dirty events.
+- Qt radio siblings Light/Dark use the same Choice catalog and overlay; selecting Dark invoked the
+  child `Toggle` and was independently confirmed as checked.
+
 ## Role and action observations
 
 | Semantic role | GTK4 observation | Qt6 observation | TUI contract |
@@ -44,7 +86,7 @@ Both GTK4 `password text` and Qt6 `password text` were observed with the `Text` 
 | Label | role `label`; GTK exposes text-oriented actions on some labels | role `label`; no advertised actions in fixture | non-focusable text; label actions are ignored by the TUI |
 | List | GTK4 demo: role `list`, `Selection` interface | Qt6: role `list`, `Table` interface, no Action interface | group heading; container capability is retained outside the renderer |
 | ListItem | GTK4 demo: role `list item`, action `listitem.scroll-to`; selected through the parent | Qt6: role `list item`, action `Toggle`; Toggle set `selected` | focusable/selectable; selected `*` and keyboard focus `>` are independent |
-| ComboBox | descendant ToggleButton `Click` opened; popup options were unnamed/unavailable | actions `ShowMenu`,`Press`; popup ListItems expose `Toggle` | `[ label ▼ ]`; safe open only, selection requires semantic options; opening actions are not assumed to close |
+| ComboBox | descendant ToggleButton exists, but named options are unavailable | actions `ShowMenu`,`Press`; descendant ListItems expose `Toggle` | terminal Choice overlay when named options and a safe strategy exist; otherwise read-only; no GUI popup required |
 | MenuBar | not tested in bundled GTK fixture | role `menu bar`, Action interface, no advertised action | `Menu:` heading |
 | Menu | not tested in bundled GTK fixture | popup role `popup menu` mapped to Menu | terminal-native menu heading |
 | MenuItem | not tested in bundled GTK fixture | top item `ShowMenu`; leaf `Press` changed the fixture label to `Status: menu activated` | `ShowMenu` becomes OpenMenu; leaf `Press` becomes Activate |
@@ -92,6 +134,7 @@ capabilities, and the node's relationship to its parent:
 - `Select`: either a compatible list-item action exists or its direct parent can select children.
 - `OpenMenu`: the menu item advertises a compatible show-menu action.
 - `EditText`: a plain TextInput satisfies the explicit interface/state contract above.
+- `Choose`: named options exist and at least one enabled option has a verified child-action or visible-parent Selection strategy.
 
 The TUI never invokes `actions[0]` as a fallback and never mutates checked/selected state locally. Explicit inspector commands `--action-name` and `--action --index` remain available as low-level APIs.
 
@@ -155,6 +198,8 @@ the only tree writer. See [events.md](events.md) for actual GTK, Qt, and Chrome 
   explicitly committed or cancelled.
 - `manages-descendants` and ActiveDescendant events are retained, but virtualized collection
   traversal is LIMITED SUPPORT.
-- GTK4 `ComboBoxText` created a popup scope but did not expose option names/actions through the
-  observed AT-SPI tree. Qt selection worked, but no explicit close action was advertised. Neither
-  case uses key injection, index guessing, or an assumed reversible open action.
+- GTK4 `ComboBoxText` did not expose usable named options through the observed AT-SPI tree and is
+  safely read-only. Chrome's hidden HTML-select Menu advertised Selection but rejected direct
+  selection and is also read-only. Qt and Firefox complete the same Choice task without opening a
+  GUI popup. No path uses key injection, anonymous action inference, index guessing, or an assumed
+  reversible opening action.

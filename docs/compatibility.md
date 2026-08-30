@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Validated on 2026-08-28 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5,
+Validated through 2026-08-30 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5,
 Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 
 | Feature | GTK4 | Qt6 | Chrome | Firefox |
@@ -18,8 +18,8 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 | Checkbox state | PASS | PASS | PASS | PASS |
 | Checkbox action | NO ACTION EXPOSED in fixture | PASS (`Toggle`) | PARTIAL: anonymous actions only | PARTIAL: anonymous actions only |
 | List | PASS; parent `Selection` | PASS; `Table` interface | PARTIAL: HTML select is `combo box`; popup has `Selection` | PARTIAL: HTML select maps to `combo box` |
-| ListItem selection | PASS through parent `Selection.select_child` | PASS through item `Toggle` | NOT TESTED | NOT TESTED |
-| Selection backend | PASS | N/A for fixture strategy | NOT TESTED | NOT TESTED |
+| ListItem selection | PASS through parent `Selection.select_child` and Choice overlay | PASS through item `Toggle` and Choice overlay | N/A for fixture ComboBox | PASS for HTML select through visible parent Selection |
+| Selection backend | PASS | PASS through child action | hidden parent rejected; safely unavailable | PASS |
 | Menu inspection | NOT TESTED in bundled fixture | PASS | PASS for HTML select popup | NOT TESTED |
 | OpenMenu | NOT TESTED | PASS (`ShowMenu`) | NOT TESTED | NOT TESTED |
 | MenuItem activation | NOT TESTED | PASS (`Press`) | NOT TESTED | NOT TESTED |
@@ -33,7 +33,10 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 | Incremental button update | PASS: 13 nodes / 31 ms | PASS: 2 nodes / 3 ms | PASS: 5 nodes / 212 ms on 5,158-node tree | NOT TESTED |
 | Incremental list selection | PASS: 9 nodes / 26 ms | PASS: 1 node / 2 ms | NOT TESTED | NOT TESTED |
 | Runtime identity churn | NOT TESTED | NOT TESTED | PASS: unique reconciled; duplicates rejected | NOT TESTED |
-| ComboBox semantic role | PARTIAL: safe open + popup scope; semantic options NOT EXPOSED | PARTIAL: open + popup options + select PASS; explicit close NOT EXPOSED | PASS read-only mapping; actions anonymous | PARTIAL: role observed in prior 234-node probe; actions anonymous |
+| ComboBox semantic role | PARTIAL / ACCESSIBILITY-LIMITED: options unavailable, production popup calls 0, read-only | PASS: named options + child `Toggle`; Beta selected with `ShowMenu` calls 0 | PARTIAL: named options exposed, but hidden parent Selection rejected; read-only | PASS: named options + visible parent Selection; Beta selected |
+| Choice overlay | PASS safe degradation; separate List PASS | PASS ComboBox/Radio/List | PASS read-only degradation | PASS selection |
+| Choice disclosure | Unavailable / not used | NotRequired | NotRequired for discovery; no safe selection | NotRequired |
+| Choice dismissal | Unknown for unavailable GUI popup; TUI Esc local | NotApplicable | NotApplicable | NotApplicable |
 | RelationSet | PASS: five `LabelledBy` | PASS: `LabelFor` + `LabelledBy` | PASS: `EmbeddedBy`, `MemberOf` on large fixture | PASS: `NodeChildOf`, `LabelledBy`, `DescribedBy`, `LabelFor` in first-run UI |
 | Interaction scopes | Window/ModalDialog/Popup PASS | Window/ModalDialog/Popup PASS | Window PASS | Window/Dialog PASS in prior probe |
 | Command hierarchy/search | PASS | PASS | anonymous actions remain excluded | anonymous actions remain excluded |
@@ -121,8 +124,8 @@ region, scene, timing, and action results are in
 
 ## Phase 3D relational/contextual probe
 
-The 2026-08-29 run added targeted RelationSet enrichment, typed graph queries, modal/popup scopes,
-and a canonical hierarchical command model. Chrome 5,158 nodes issued only 256 relation RPCs
-(7.987 ms), while LibreOffice exposed 478 reachable safe leaves without rendering them as 478
-default scene rows. Complete cross-family counts and the GTK/Qt ComboBox limitations are in
-[relations.md](relations.md).
+The completion run replaced traversal-prefix enrichment with a contextual priority scheduler.
+Chrome 5,158 nodes issued only 256 relation RPCs (8.860–9.244 ms) and reached its first TUI frame
+in 491–496 ms internally, while LibreOffice exposed 478 reachable safe leaves without rendering
+them as 478 default scene rows. Complete cross-family counts and the safe cross-toolkit Choice
+results are in [relations.md](relations.md).

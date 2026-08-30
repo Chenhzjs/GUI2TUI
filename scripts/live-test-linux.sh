@@ -139,9 +139,9 @@ time.sleep(1)
 child.send(b"q")
 child.expect(pexpect.EOF, timeout=5)
 PY
-        # The transcompiled scene exposes the safe menu command first, then the
-        # reconstructed Username field. One Tab therefore reaches Username.
-        APP=gui2tui-qt-fixture TABS=1 SUFFIX=-harness-qt \
+        # Contextual command planning keeps menu commands in the palette, so
+        # the reconstructed Username field is the first document focus target.
+        APP=gui2tui-qt-fixture TABS=0 SUFFIX=-harness-qt \
             GUI2TUI="$TARGET_DIR/debug/gui2tui" python3 - <<"PY"
 import os
 import time

@@ -11,11 +11,13 @@ domains from process names or labels.
       → Ratatui renderer
 
 Rules consume only roles, names, descriptions, values, states, actions,
-interfaces/capabilities, and parent/child relationships. AT-SPI labelled-by
-relations are not yet present in the Semantic IR, and geometry remains debug
-metadata rather than a rewrite input. A rewrite is accepted only when it
-preserves every interactive source node and is unambiguous. Otherwise the
-source remains a direct control or an explicit unsupported summary.
+interfaces/capabilities, parent/child relationships, and typed AT-SPI
+relations. Explicit labelled-by/description/error edges take precedence over
+structural reconstruction; conservative adjacency remains the fallback when
+relations are unavailable. Geometry remains debug metadata rather than a
+rewrite input. A rewrite is accepted only when it preserves every interactive
+source node and is unambiguous. Otherwise the source remains a direct control
+or an explicit unsupported summary.
 
 Current generic rewrites:
 
@@ -23,8 +25,9 @@ Current generic rewrites:
   exactly one descendant TextInput, become one labeled field;
 - containers with at least two reconstructed fields become forms;
 - menu bars, toolbars, and action-heavy containers become command sets;
-- List and ListItem semantics become selection regions while retaining the
-  already-resolved node-action or parent-Selection backend strategy;
+- ComboBox, radio-group, and single-selection List semantics become a shared
+  Choice task when named options expose a safe node-action or parent-Selection
+  strategy; unavailable choices remain visibly read-only;
 - unnamed, non-interactive one-child layout groups are flattened;
 - semantically sparse graphical roles (image, canvas, drawing area, video,
   animation, 3d view) become fidelity-preferred opaque regions.

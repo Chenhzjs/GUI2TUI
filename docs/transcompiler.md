@@ -48,15 +48,18 @@ not become commands or semantic activation.
 - Menu bars, toolbars, and action-heavy containers become command sets. Only
   operations accepted by the role-aware resolver enter the palette.
 - Lists retain the existing node-action or parent-Selection operation behind a
-  common selection presentation.
+  common Choice overlay. ComboBox, radio sibling groups, and Lists share this
+  terminal task while retaining different safe backend strategies.
+- Structured Label nodes that wrap controls are preserved as groups; only
+  standalone relation labels are suppressed from duplicate presentation.
 - Unnamed one-child layout groups are flattened and consecutive content rows
   are combined into summaries.
 - Sparse drawing-area/canvas/image/video/animation/3d-view roles with no value,
   action, or semantic descendants become `OpaqueContent` with
   `FidelityPreferred` modality.
 
-AT-SPI labelled-by relations are **not implemented** in the current Semantic
-IR. Geometry is used only to report dimensions for an already-classified
+AT-SPI labelled-by and related edges are retained in the relational graph and
+enriched through a priority budget. Geometry is used only to report dimensions for an already-classified
 opaque region; it never maps GUI pixels to terminal coordinates.
 
 ## Timing samples
@@ -84,7 +87,8 @@ real PTY at 120×40.
 - LibreOffice exposes hundreds of valid menu actions; flattening makes them
   searchable but the palette still needs grouping/ranking.
 - Firefox exposes many menu objects that remain unsupported summaries.
-- Relation ingestion, ComboBox popup reconstruction, virtualized collection
-  semantics, and an opaque surface provider are not implemented.
+- Virtualized collection semantics and an opaque surface provider are not
+  implemented. Choice discovery never requires GUI popup reconstruction when
+  named options are already accessible.
 - No raster, framebuffer, Chafa, Kitty, Sixel, compositor, UNO, DevTools,
   Electron, or Java application API is used.
