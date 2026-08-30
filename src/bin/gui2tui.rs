@@ -21,6 +21,7 @@ use gui2tui::{
     },
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -64,6 +65,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(io::stderr)
+        .try_init();
     match run(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

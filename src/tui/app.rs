@@ -12,26 +12,31 @@ use crate::{
         InspectOptions,
     },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
-    semantic::{BackendLocator, RuntimeNodeId, SemanticCache, targeted_relation_candidates},
+    semantic::{
+        BackendLocator, LARGE_TREE_RELATION_CANDIDATE_LIMIT, RelationPriorityContext,
+        RuntimeNodeId, SemanticCache, SemanticRole, SemanticState, schedule_on_demand_relations,
+        schedule_relation_candidates,
+    },
     transcompile::{
-        CommandHierarchy, InteractionScopeId, InteractionScopes, PresentationMode, SceneElement,
-        SceneElementId, SceneElementKind, TuiScene, analyze_regions, analyze_regions_with_graph,
-        compile_legacy_scene, compile_scene,
+        ChoiceCatalog, ChoiceOptions, CommandHierarchy, InteractionScopeId, InteractionScopes,
+        PresentationMode, SceneBinding, SceneElement, SceneElementId, SceneElementKind, TuiScene,
+        analyze_regions, analyze_regions_with_graph, compile_legacy_scene, compile_scene,
     },
 };
 
 use super::{
     action::{InteractionCapability, UiIntent},
+    choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
     edit::{EditCommand, EditSession, key_to_edit_command},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
     operation::{
         BackendOperation, SemanticOperation, resolve_backend_operation,
-        resolve_cached_node_operation,
+        resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
-    renderer::{PaletteRender, RenderContext, render},
+    renderer::{ChoiceRender, PaletteRender, RenderContext, render},
 };
 
 pub struct TuiApplication {
@@ -48,8 +53,9 @@ pub struct TuiApplication {
     scene: TuiScene,
     scopes: InteractionScopes,
     commands: CommandHierarchy,
+    choices: ChoiceCatalog,
     recent_commands: HashMap<RuntimeNodeId, u32>,
-    scope_focus_history: HashMap<InteractionScopeId, BackendLocator>,
+    scope_focus_history: HashMap<InteractionScopeId, FocusAnchor>,
     focus: FocusModel,
     viewport: Viewport,
     viewport_height: u16,
@@ -59,6 +65,14 @@ pub struct TuiApplication {
     application_available: bool,
     edit_session: Option<EditSession>,
     command_palette: Option<CommandPalette>,
+    choice_overlay: Option<ChoiceOverlay>,
+}
+
+#[derive(Clone, Debug)]
+struct FocusAnchor {
+    scene_id: SceneElementId,
+    runtime_id: RuntimeNodeId,
+    locator: BackendLocator,
 }
 
 impl TuiApplication {
@@ -90,7 +104,7 @@ impl TuiApplication {
         let mut cache = SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
-        let (scene, scopes, commands) = build_contextual_view(&cache, presentation_mode)?;
+        let (scene, scopes, commands, choices) = build_contextual_view(&cache, presentation_mode)?;
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
@@ -108,6 +122,7 @@ impl TuiApplication {
             scene,
             scopes,
             commands,
+            choices,
             recent_commands: HashMap::new(),
             scope_focus_history: HashMap::new(),
             focus,
@@ -122,6 +137,7 @@ impl TuiApplication {
             application_available: true,
             edit_session: None,
             command_palette: None,
+            choice_overlay: None,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -150,6 +166,16 @@ impl TuiApplication {
             selected: palette.selected(),
             all_scopes: palette.searches_all_scopes(),
         });
+        let choice = self.choice_overlay.as_ref().map(|overlay| ChoiceRender {
+            label: self
+                .cache
+                .node(overlay.choice().owner)
+                .and_then(|node| node.name.as_deref())
+                .unwrap_or("choice"),
+            options: overlay.choice().options.options(),
+            selected: overlay.selected(),
+            partial: matches!(overlay.choice().options, ChoiceOptions::Partial(_)),
+        });
         let regions = render(
             frame,
             RenderContext {
@@ -160,6 +186,7 @@ impl TuiApplication {
                 application_available: self.application_available,
                 edit_session: self.edit_session.as_ref(),
                 palette,
+                choice,
             },
         );
         self.hit_map.replace(regions);
@@ -171,14 +198,17 @@ impl TuiApplication {
             UiIntent::FocusNext => {
                 self.focus.next(&self.scene);
                 self.ensure_focus_visible();
+                self.ensure_focused_relations().await;
             }
             UiIntent::FocusPrevious => {
                 self.focus.previous(&self.scene);
                 self.ensure_focus_visible();
+                self.ensure_focused_relations().await;
             }
             UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
                 self.execute_focused(intent).await
             }
+            UiIntent::BeginChoice => self.begin_choice(),
             UiIntent::ClosePopup => {
                 self.status =
                     "Popup closing is resolved from its active interaction scope".to_owned()
@@ -214,6 +244,19 @@ impl TuiApplication {
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        if let Some(mut overlay) = self.choice_overlay.take() {
+            match overlay.handle_key(key) {
+                ChoiceOverlayOutcome::Continue => self.choice_overlay = Some(overlay),
+                ChoiceOverlayOutcome::Cancel => {
+                    self.restore_choice_owner(&overlay);
+                    self.status = "Choice selection cancelled; GUI unchanged".to_owned();
+                }
+                ChoiceOverlayOutcome::Select(option) => {
+                    self.execute_choice(&overlay, option).await;
+                }
+            }
+            return false;
+        }
         if let Some(mut palette) = self.command_palette.take() {
             match palette.handle_key(key) {
                 PaletteOutcome::Continue => self.command_palette = Some(palette),
@@ -223,8 +266,7 @@ impl TuiApplication {
                         self.focus.set(&self.scene, scene_id);
                         self.execute_focused(intent).await;
                     } else {
-                        self.status =
-                            "Command is not currently reachable in this semantic scene".to_owned();
+                        self.execute_cached_command(runtime_id, intent).await;
                     }
                 }
             }
@@ -279,6 +321,16 @@ impl TuiApplication {
                     .is_some_and(|element| matches!(element.kind, SceneElementKind::Field { .. }))
             {
                 intent = UiIntent::BeginEdit;
+            } else if intent == UiIntent::Activate
+                && self
+                    .focus
+                    .current()
+                    .and_then(|id| self.scene.element(id))
+                    .is_some_and(|element| {
+                        matches!(element.kind, SceneElementKind::Selector { .. })
+                    })
+            {
+                intent = UiIntent::BeginChoice;
             }
             self.handle_intent(intent).await
         } else {
@@ -338,12 +390,21 @@ impl TuiApplication {
             return;
         }
         let intent = intent_for_element(&element);
+        if intent == UiIntent::BeginChoice {
+            self.begin_choice();
+            return;
+        }
         let Some(runtime_id) = element.binding.as_ref().map(|binding| binding.runtime_id) else {
             self.status = "Scene element has no semantic binding".to_owned();
             return;
         };
-        let semantic_operation = SemanticOperation::from_intent(runtime_id, intent)
-            .expect("interaction capabilities only produce operation intents");
+        let Some(semantic_operation) = SemanticOperation::from_intent(runtime_id, intent) else {
+            self.status = format!(
+                "No backend operation is defined for \"{}\"",
+                element_label(&element)
+            );
+            return;
+        };
         let backend_operation = match resolve_backend_operation(&self.scene, semantic_operation) {
             Ok(operation) => operation,
             Err(error) => {
@@ -396,6 +457,163 @@ impl TuiApplication {
                     self.full_reload(Some(status)).await;
                 }
             }
+        }
+    }
+
+    async fn execute_cached_command(&mut self, runtime_id: RuntimeNodeId, intent: UiIntent) {
+        let Some(node) = self.cache.node(runtime_id) else {
+            self.status = "Command is no longer present in the semantic runtime".to_owned();
+            return;
+        };
+        let label = node.name.clone().unwrap_or_else(|| node.role.to_string());
+        let Some(operation) = SemanticOperation::from_intent(runtime_id, intent) else {
+            self.status = format!("Command \"{label}\" has no executable semantic operation");
+            return;
+        };
+        let backend_operation = match resolve_cached_node_operation(&self.cache, operation) {
+            Ok(operation) => operation,
+            Err(error) => {
+                self.status = format!("Cannot execute command \"{label}\": {error}");
+                return;
+            }
+        };
+        let description = describe_operation(intent, &backend_operation);
+        let result = match &backend_operation {
+            BackendOperation::InvokeAction { locator, action } => self
+                .backend
+                .do_action(&locator.encode(), action.index)
+                .await
+                .map(|_| ()),
+            BackendOperation::SelectChild {
+                container_locator,
+                child_index,
+            } => {
+                self.backend
+                    .select_child(container_locator, *child_index)
+                    .await
+            }
+            BackendOperation::SetTextContents { .. } => {
+                unreachable!("command palette never edits text")
+            }
+        };
+        match result {
+            Ok(()) => {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.update_from_action_events(format!(
+                    "{} \"{}\" via {}",
+                    operation_verb(intent),
+                    label,
+                    description
+                ))
+                .await;
+            }
+            Err(error) => {
+                let (status, refresh) = operation_error_status(&error);
+                self.status = status;
+                if refresh {
+                    self.full_reload(Some(self.status.clone())).await;
+                }
+            }
+        }
+    }
+
+    fn begin_choice(&mut self) {
+        let Some(scene_id) = self.focus.current() else {
+            self.status = "No focused choice control".to_owned();
+            return;
+        };
+        let Some(element) = self.scene.element(scene_id) else {
+            self.status = "Focused choice disappeared".to_owned();
+            return;
+        };
+        let Some(binding) = element.binding.as_ref() else {
+            self.status = "Choice control has no semantic binding".to_owned();
+            return;
+        };
+        let Some(choice) = self.choices.get(binding.runtime_id).cloned() else {
+            self.status = format!("Choices for \"{}\" are unavailable", element_label(element));
+            return;
+        };
+        if !choice.is_interactive() {
+            self.status = format!(
+                "Choices for \"{}\" are unavailable through accessibility; control is read-only",
+                element_label(element)
+            );
+            return;
+        }
+        tracing::debug!(
+            owner_runtime_id = %binding.runtime_id,
+            owner_scene_id = %scene_id,
+            gui_disclosure_calls = 0,
+            "opened terminal-native choice overlay"
+        );
+        self.status = "Choice overlay — ↑/↓ Navigate | Enter Select | Esc Cancel".to_owned();
+        self.choice_overlay = Some(ChoiceOverlay::new(choice, scene_id, binding.runtime_id));
+    }
+
+    async fn execute_choice(
+        &mut self,
+        overlay: &ChoiceOverlay,
+        option: crate::transcompile::ChoiceOption,
+    ) {
+        let Some(strategy) = option.selection.as_ref() else {
+            self.status = format!("Choice \"{}\" has no safe semantic selection", option.label);
+            self.choice_overlay = Some(overlay.clone());
+            return;
+        };
+        let operation = match resolve_choice_backend_operation(&self.cache, strategy) {
+            Ok(operation) => operation,
+            Err(error) => {
+                self.status = format!("Cannot select \"{}\": {error}", option.label);
+                self.choice_overlay = Some(overlay.clone());
+                return;
+            }
+        };
+        let operation_name = describe_operation(UiIntent::Select, &operation);
+        let result = match &operation {
+            BackendOperation::InvokeAction { locator, action } => self
+                .backend
+                .do_action(&locator.encode(), action.index)
+                .await
+                .map(|_| ()),
+            BackendOperation::SelectChild {
+                container_locator,
+                child_index,
+            } => {
+                self.backend
+                    .select_child(container_locator, *child_index)
+                    .await
+            }
+            BackendOperation::SetTextContents { .. } => unreachable!("choice never edits text"),
+        };
+        match result {
+            Ok(()) => {
+                let restore_runtime = overlay.restore_runtime();
+                self.update_from_action_events(format!(
+                    "Selected \"{}\" via {} (GUI disclosure calls=0)",
+                    option.label, operation_name
+                ))
+                .await;
+                if let Some(scene_id) = self.scene.scene_id_for_runtime(restore_runtime) {
+                    self.focus.set(&self.scene, scene_id);
+                }
+            }
+            Err(error) => {
+                let (status, refresh) = operation_error_status(&error);
+                self.status = status;
+                if refresh {
+                    self.full_reload(Some(self.status.clone())).await;
+                }
+            }
+        }
+    }
+
+    fn restore_choice_owner(&mut self, overlay: &ChoiceOverlay) {
+        if self.focus.set(&self.scene, overlay.restore_scene()) {
+            return;
+        }
+        if let Some(scene_id) = self.scene.scene_id_for_runtime(overlay.restore_runtime()) {
+            self.focus.set(&self.scene, scene_id);
         }
     }
 
@@ -665,12 +883,25 @@ impl TuiApplication {
     }
 
     async fn full_reload(&mut self, success_status: Option<String>) {
-        let previous_locator = self
-            .focus
-            .current()
+        let previous_scope = self.scopes.active();
+        let previous_scene = self.focus.current();
+        let previous_binding = previous_scene
             .and_then(|id| self.scene.element(id))
-            .and_then(|element| element.binding.as_ref())
-            .map(|binding| binding.backend_locator.clone());
+            .and_then(|element| element.binding.as_ref());
+        let previous_runtime = previous_binding.map(|binding| binding.runtime_id);
+        let previous_locator = previous_binding.map(|binding| binding.backend_locator.clone());
+        if let (Some(scene_id), Some(runtime_id), Some(locator)) =
+            (previous_scene, previous_runtime, previous_locator.clone())
+        {
+            self.scope_focus_history.insert(
+                previous_scope,
+                FocusAnchor {
+                    scene_id,
+                    runtime_id,
+                    locator,
+                },
+            );
+        }
         let started = Instant::now();
         match load_snapshot(
             &self.backend,
@@ -693,7 +924,7 @@ impl TuiApplication {
                     self.status = format!("Relation enrichment failed: {error}");
                     return;
                 }
-                let Ok((scene, scopes, commands)) =
+                let Ok((scene, scopes, commands, choices)) =
                     build_contextual_view(&self.cache, self.presentation_mode)
                 else {
                     self.status = "Contextual scene rebuild failed".to_owned();
@@ -702,7 +933,34 @@ impl TuiApplication {
                 self.scene = scene;
                 self.scopes = scopes;
                 self.commands = commands;
-                self.focus.reconcile(&self.scene, previous_locator.as_ref());
+                self.choices = choices;
+                let restore_anchor = (self.scopes.active() != previous_scope)
+                    .then(|| self.scope_focus_history.get(&self.scopes.active()))
+                    .flatten();
+                let restore_runtime = restore_anchor
+                    .map(|anchor| anchor.runtime_id)
+                    .or(previous_runtime);
+                let restore_locator = restore_anchor
+                    .map(|anchor| &anchor.locator)
+                    .or(previous_locator.as_ref());
+                self.focus
+                    .reconcile_identity(&self.scene, restore_runtime, restore_locator);
+                let restored_scene = self.focus.current();
+                let restored_runtime = restored_scene
+                    .and_then(|id| self.scene.element(id))
+                    .and_then(|element| element.binding.as_ref())
+                    .map(|binding| binding.runtime_id);
+                tracing::debug!(
+                    refresh = "full",
+                    previous_scope = %previous_scope,
+                    active_scope = %self.scopes.active(),
+                    previous_scene_id = ?previous_scene.map(SceneElementId::get),
+                    previous_runtime_id = ?previous_runtime.map(RuntimeNodeId::get),
+                    history_scene_id = ?restore_anchor.map(|anchor| anchor.scene_id.get()),
+                    restored_scene_id = ?restored_scene.map(SceneElementId::get),
+                    restored_runtime_id = ?restored_runtime.map(RuntimeNodeId::get),
+                    "restored exact semantic focus after contextual scene rebuild"
+                );
                 self.application_available = true;
                 self.status = format!(
                     "{} — {} nodes via {} in {snapshot_ms} ms full_snapshots={}",
@@ -993,12 +1251,25 @@ impl TuiApplication {
         let materialization_started = Instant::now();
         let previous_scope = self.scopes.active();
         let previous_id = self.focus.current();
+        let previous_runtime = previous_id
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .map(|binding| binding.runtime_id);
         let previous_locator = previous_id
             .and_then(|id| self.scene.element(id))
             .and_then(|element| element.binding.as_ref())
             .map(|binding| binding.backend_locator.clone());
-        if let Some(locator) = previous_locator.clone() {
-            self.scope_focus_history.insert(previous_scope, locator);
+        if let (Some(scene_id), Some(runtime_id), Some(locator)) =
+            (previous_id, previous_runtime, previous_locator.clone())
+        {
+            self.scope_focus_history.insert(
+                previous_scope,
+                FocusAnchor {
+                    scene_id,
+                    runtime_id,
+                    locator,
+                },
+            );
         }
         if let Err(error) =
             enrich_relational_cache(&self.backend, &mut self.cache, self.presentation_mode).await
@@ -1006,7 +1277,7 @@ impl TuiApplication {
             self.status = format!("Relation enrichment failed: {error}");
             return;
         }
-        let (scene, scopes, commands) =
+        let (scene, scopes, commands, choices) =
             match build_contextual_view(&self.cache, self.presentation_mode) {
                 Ok(view) => view,
                 Err(error) => {
@@ -1017,6 +1288,7 @@ impl TuiApplication {
         self.scene = scene;
         self.scopes = scopes;
         self.commands = commands;
+        self.choices = choices;
         if self.edit_session.as_ref().is_some_and(|session| {
             self.cache
                 .node(session.target)
@@ -1030,22 +1302,34 @@ impl TuiApplication {
             materialization_ms = materialization_started.elapsed().as_secs_f64() * 1000.0,
             "materialized semantic arena for TUI view"
         );
-        let restore_locator = if self.scopes.active() != previous_scope {
+        let restore_anchor = if self.scopes.active() != previous_scope {
             self.scope_focus_history.get(&self.scopes.active())
         } else {
-            previous_locator.as_ref()
+            None
         };
-        if let Some(locator) = restore_locator
-            && let Some(id) = self.scene.scene_id_for_locator(locator)
-            && self
-                .scene
-                .element(id)
-                .is_some_and(SceneElement::is_focusable)
-        {
-            self.focus.set(&self.scene, id);
-        } else {
-            self.focus.reconcile(&self.scene, restore_locator);
-        }
+        let restore_runtime = restore_anchor
+            .map(|anchor| anchor.runtime_id)
+            .or(previous_runtime);
+        let restore_locator = restore_anchor
+            .map(|anchor| &anchor.locator)
+            .or(previous_locator.as_ref());
+        self.focus
+            .reconcile_identity(&self.scene, restore_runtime, restore_locator);
+        let restored_scene = self.focus.current();
+        let restored_runtime = restored_scene
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .map(|binding| binding.runtime_id);
+        tracing::debug!(
+            previous_scope = %previous_scope,
+            active_scope = %self.scopes.active(),
+            previous_scene_id = ?previous_id.map(SceneElementId::get),
+            previous_runtime_id = ?previous_runtime.map(RuntimeNodeId::get),
+            history_scene_id = ?restore_anchor.map(|anchor| anchor.scene_id.get()),
+            restored_scene_id = ?restored_scene.map(SceneElementId::get),
+            restored_runtime_id = ?restored_runtime.map(RuntimeNodeId::get),
+            "restored exact semantic focus after contextual scene rebuild"
+        );
         self.ensure_focus_visible();
     }
 
@@ -1057,6 +1341,55 @@ impl TuiApplication {
             self.viewport
                 .ensure_visible(top, height, self.viewport_height);
         }
+    }
+
+    async fn ensure_focused_relations(&mut self) {
+        let Some(scene_id) = self.focus.current() else {
+            return;
+        };
+        let Some(element) = self.scene.element(scene_id) else {
+            return;
+        };
+        let schedule = schedule_on_demand_relations(&self.cache, element.sources.clone(), 8);
+        if schedule.candidates.is_empty() {
+            return;
+        }
+        let previous_runtime = element.binding.as_ref().map(|binding| binding.runtime_id);
+        let previous_locator = element
+            .binding
+            .as_ref()
+            .map(|binding| binding.backend_locator.clone());
+        let candidates: Vec<_> = schedule
+            .candidates
+            .iter()
+            .map(|candidate| candidate.runtime_id)
+            .collect();
+        let metrics = self
+            .backend
+            .enrich_relations(&mut self.cache, &candidates)
+            .await;
+        tracing::debug!(
+            requested = candidates.len(),
+            relation_rpcs = metrics.rpc_count,
+            relations = metrics.relations_found,
+            relation_ms = metrics.duration.as_secs_f64() * 1000.0,
+            "on-demand relation enrichment for focused scene element"
+        );
+        if metrics.relations_found == 0 {
+            return;
+        }
+        let Ok((scene, scopes, commands, choices)) =
+            build_contextual_view(&self.cache, self.presentation_mode)
+        else {
+            return;
+        };
+        self.scene = scene;
+        self.scopes = scopes;
+        self.commands = commands;
+        self.choices = choices;
+        self.focus
+            .reconcile_identity(&self.scene, previous_runtime, previous_locator.as_ref());
+        self.ensure_focus_visible();
     }
 
     fn report_unavailable(&mut self, scene_id: SceneElementId) {
@@ -1147,6 +1480,7 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
     match element.capability() {
         InteractionCapability::Toggle => UiIntent::Toggle,
         InteractionCapability::Select => UiIntent::Select,
+        InteractionCapability::Choose => UiIntent::BeginChoice,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
         InteractionCapability::EditText => UiIntent::BeginEdit,
         InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
@@ -1156,6 +1490,7 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
 fn operation_verb(intent: UiIntent) -> &'static str {
     match intent {
         UiIntent::Select => "Selected",
+        UiIntent::BeginChoice => "Opened choice overlay",
         UiIntent::OpenMenu => "Opened menu",
         UiIntent::ClosePopup => "Closed popup",
         UiIntent::Toggle => "Toggled",
@@ -1211,35 +1546,138 @@ async fn enrich_relational_cache(
         .materialize_tree()
         .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
     let preliminary = build_scene(&tree, mode);
-    let candidates = targeted_relation_candidates(
+    let provisional_graph = crate::semantic::RelationalSemanticGraph::new(cache);
+    let provisional_scopes = InteractionScopes::analyze(cache, &provisional_graph);
+    let focused = cache
+        .nodes()
+        .find(|node| node.states.contains(&SemanticState::Focused))
+        .map(|node| node.runtime_id);
+    let active_scope: std::collections::HashSet<_> = cache
+        .nodes()
+        .filter(|node| {
+            provisional_scopes.scope_for_node(node.runtime_id) == Some(provisional_scopes.active())
+        })
+        .map(|node| node.runtime_id)
+        .collect();
+    let visible_scene = preliminary
+        .elements
+        .iter()
+        .flat_map(|element| element.sources.iter().copied())
+        .collect();
+    let window_root = provisional_scopes
+        .scope(provisional_scopes.active())
+        .map(|scope| scope.root)
+        .and_then(|mut id| {
+            loop {
+                let node = cache.node(id)?;
+                if matches!(node.role, SemanticRole::Window | SemanticRole::Dialog) {
+                    break Some(id);
+                }
+                id = node.parent?;
+            }
+        });
+    let mut current_window = std::collections::HashSet::new();
+    if let Some(root) = window_root {
+        collect_cached_subtree_ids(cache, root, &mut current_window);
+    }
+    let budget = if cache.node_count() <= 512 {
+        cache.node_count()
+    } else {
+        LARGE_TREE_RELATION_CANDIDATE_LIMIT
+    };
+    let schedule = schedule_relation_candidates(
         cache,
-        preliminary
-            .elements
-            .iter()
-            .flat_map(|element| element.sources.iter().copied()),
+        &RelationPriorityContext {
+            focused,
+            active_scope,
+            visible_scene,
+            current_window,
+        },
+        budget,
     );
+    let candidates: Vec<_> = schedule
+        .candidates
+        .iter()
+        .map(|candidate| candidate.runtime_id)
+        .collect();
     let metrics = backend.enrich_relations(cache, &candidates).await;
     tracing::debug!(
+        budget = schedule.budget,
+        deferred = schedule.deferred,
+        focused =
+            schedule
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.reason
+                    == crate::semantic::RelationPriorityReason::Focused)
+                .count(),
+        active_scope = schedule
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.reason
+                == crate::semantic::RelationPriorityReason::ActiveScope)
+            .count(),
+        visible_scene = schedule
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.reason
+                == crate::semantic::RelationPriorityReason::VisibleScene)
+            .count(),
+        relation_sensitive = schedule
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.reason
+                == crate::semantic::RelationPriorityReason::RelationSensitiveRole)
+            .count(),
+        current_window = schedule
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.reason
+                == crate::semantic::RelationPriorityReason::CurrentWindow)
+            .count(),
+        background = schedule
+            .candidates
+            .iter()
+            .filter(
+                |candidate| candidate.reason == crate::semantic::RelationPriorityReason::Background
+            )
+            .count(),
         candidates = metrics.candidate_nodes,
         relation_rpcs = metrics.rpc_count,
         relations = metrics.relations_found,
         unresolved = metrics.unresolved_targets,
         unavailable = metrics.unavailable_nodes,
         relation_ms = metrics.duration.as_secs_f64() * 1000.0,
-        "targeted semantic relation enrichment"
+        "priority-driven semantic relation enrichment"
     );
     Ok(())
+}
+
+fn collect_cached_subtree_ids(
+    cache: &SemanticCache,
+    root: RuntimeNodeId,
+    output: &mut std::collections::HashSet<RuntimeNodeId>,
+) {
+    if !output.insert(root) {
+        return;
+    }
+    if let Some(node) = cache.node(root) {
+        for child in &node.children {
+            collect_cached_subtree_ids(cache, *child, output);
+        }
+    }
 }
 
 fn build_contextual_view(
     cache: &SemanticCache,
     mode: PresentationMode,
-) -> Result<(TuiScene, InteractionScopes, CommandHierarchy), BackendError> {
+) -> Result<(TuiScene, InteractionScopes, CommandHierarchy, ChoiceCatalog), BackendError> {
     let tree = cache
         .materialize_tree()
         .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
     let graph = crate::semantic::RelationalSemanticGraph::new(cache);
     let scopes = InteractionScopes::analyze(cache, &graph);
+    let choices = ChoiceCatalog::discover(cache);
     let mut scene = match mode {
         PresentationMode::Legacy => compile_legacy_scene(&tree),
         PresentationMode::Transcompiled => {
@@ -1247,6 +1685,59 @@ fn build_contextual_view(
             compile_scene(&tree, &analysis)
         }
     };
+    let mut promoted_choice_options = std::collections::HashSet::new();
+    for choice in choices.choices() {
+        let option_ids: std::collections::HashSet<_> = choice
+            .options
+            .options()
+            .iter()
+            .map(|option| option.runtime_id)
+            .collect();
+        let candidate = scene.elements.iter().position(|element| {
+            element
+                .binding
+                .as_ref()
+                .is_some_and(|binding| binding.runtime_id == choice.owner)
+                || (matches!(element.kind, SceneElementKind::Group { .. })
+                    && (element.sources.contains(&choice.owner)
+                        || (!option_ids.is_empty()
+                            && option_ids.iter().all(|id| element.sources.contains(id)))))
+        });
+        let Some(index) = candidate else { continue };
+        let Some(owner) = cache.node(choice.owner) else {
+            continue;
+        };
+        let existing_label = match &scene.elements[index].kind {
+            SceneElementKind::Group { label } | SceneElementKind::Selector { label } => {
+                Some(label.clone())
+            }
+            _ => None,
+        };
+        let owner_label = existing_label
+            .or_else(|| owner.name.clone())
+            .unwrap_or_else(|| "Choice".to_owned());
+        let label = choice_scene_label(choice, &owner_label);
+        scene.elements[index].kind = SceneElementKind::Selector { label };
+        scene.elements[index].binding = Some(SceneBinding {
+            runtime_id: choice.owner,
+            backend_locator: owner.backend_locator.clone(),
+            semantic_role: owner.role.clone(),
+            actions: owner.actions.clone(),
+            capability: if choice.is_interactive() {
+                InteractionCapability::Choose
+            } else {
+                InteractionCapability::None
+            },
+            default_intent: UiIntent::BeginChoice,
+        });
+        promoted_choice_options.extend(option_ids);
+    }
+    scene.elements.retain(|element| {
+        element.binding.as_ref().is_none_or(|binding| {
+            binding.capability == InteractionCapability::Choose
+                || !promoted_choice_options.contains(&binding.runtime_id)
+        })
+    });
     for element in &mut scene.elements {
         if let Some(binding) = &element.binding
             && !scopes.allows_node(binding.runtime_id)
@@ -1255,15 +1746,45 @@ fn build_contextual_view(
         }
     }
     let commands = CommandHierarchy::build(cache, &scopes);
-    Ok((scene, scopes, commands))
+    Ok((scene, scopes, commands, choices))
+}
+
+fn choice_scene_label(choice: &crate::transcompile::SemanticChoice, owner_label: &str) -> String {
+    let current = choice.current.and_then(|id| {
+        choice
+            .options
+            .options()
+            .iter()
+            .find(|option| option.runtime_id == id)
+            .map(|option| option.label.clone())
+    });
+    match (&choice.options, current) {
+        (ChoiceOptions::Unavailable, _) => format!("{owner_label} (options unavailable)"),
+        (_, Some(value))
+            if choice
+                .options
+                .options()
+                .iter()
+                .any(|option| option.label == owner_label)
+                || owner_label.ends_with(&format!(": {value}")) =>
+        {
+            format!("Choice: {value}")
+        }
+        (_, Some(value)) => format!("{owner_label}: {value}"),
+        _ => format!("{owner_label} (current value unavailable)"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::semantic::{
-        BackendLocator, RuntimeNodeId, SemanticAction, SemanticNode, SemanticRole,
+        BackendLocator, CollectionCompleteness, RuntimeNodeId, SemanticAction, SemanticNode,
+        SemanticRole,
     };
-    use crate::transcompile::{PresentationStrategy, SceneBinding};
+    use crate::transcompile::{
+        ChoiceOption, ChoiceOptions, DisclosureRequirement, DismissBehavior, PresentationStrategy,
+        SceneBinding, SemanticChoice,
+    };
 
     use super::*;
 
@@ -1275,6 +1796,7 @@ mod tests {
         let default_intent = match capability {
             InteractionCapability::Toggle => UiIntent::Toggle,
             InteractionCapability::Select => UiIntent::Select,
+            InteractionCapability::Choose => UiIntent::BeginChoice,
             InteractionCapability::OpenMenu => UiIntent::OpenMenu,
             InteractionCapability::EditText => UiIntent::BeginEdit,
             _ => UiIntent::Activate,
@@ -1431,5 +1953,34 @@ mod tests {
                 locator: BackendLocator::new(":1.2", "/new")
             }
         ));
+    }
+
+    #[test]
+    fn choice_scene_label_tracks_gui_confirmation_without_using_popup_lifecycle() {
+        let choice = SemanticChoice {
+            owner: RuntimeNodeId::new(1),
+            current: Some(RuntimeNodeId::new(3)),
+            options: ChoiceOptions::Available(vec![
+                ChoiceOption {
+                    runtime_id: RuntimeNodeId::new(2),
+                    label: "Alpha".to_owned(),
+                    selected: false,
+                    enabled: true,
+                    selection: None,
+                },
+                ChoiceOption {
+                    runtime_id: RuntimeNodeId::new(3),
+                    label: "Beta".to_owned(),
+                    selected: true,
+                    enabled: true,
+                    selection: None,
+                },
+            ]),
+            disclosure: DisclosureRequirement::NotRequired,
+            dismiss: DismissBehavior::NotApplicable,
+            completeness: CollectionCompleteness::Complete,
+        };
+        assert_eq!(choice_scene_label(&choice, "Alpha"), "Choice: Beta");
+        assert_eq!(choice_scene_label(&choice, "Theme"), "Theme: Beta");
     }
 }

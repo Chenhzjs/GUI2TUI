@@ -9,6 +9,7 @@ pub enum UiIntent {
     Activate,
     Toggle,
     Select,
+    BeginChoice,
     OpenMenu,
     ClosePopup,
     OpenCommandPalette,
@@ -27,6 +28,7 @@ pub enum InteractionCapability {
     Activate,
     Toggle,
     Select,
+    Choose,
     OpenMenu,
     EditText,
 }
@@ -94,12 +96,9 @@ pub fn interaction_capability(
             }
             UiIntent::Activate
         }
-        SemanticRole::ComboBox => {
-            if resolve_action(role, actions, UiIntent::OpenMenu).is_ok() {
-                return InteractionCapability::OpenMenu;
-            }
-            return InteractionCapability::None;
-        }
+        // Choice interactivity depends on exposed named options and their safe
+        // selection strategies. It is assigned by the ChoiceCatalog, not by role.
+        SemanticRole::ComboBox => return InteractionCapability::None,
         _ => return InteractionCapability::None,
     };
     if resolve_action(role, actions, intent).is_err() {
@@ -246,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn combo_open_is_explicit_and_anonymous_actions_remain_rejected() {
+    fn combo_role_alone_never_claims_choice_or_disclosure_capability() {
         assert_eq!(
             interaction_capability(
                 &SemanticRole::ComboBox,
@@ -254,10 +253,18 @@ mod tests {
                 &[],
                 &[]
             ),
-            InteractionCapability::OpenMenu
+            InteractionCapability::None
         );
         assert!(
             resolve_action(&SemanticRole::ComboBox, &actions(&[""]), UiIntent::OpenMenu).is_err()
+        );
+        assert!(
+            resolve_action(
+                &SemanticRole::ComboBox,
+                &actions(&["ShowMenu", "Press"]),
+                UiIntent::ClosePopup
+            )
+            .is_err()
         );
     }
 

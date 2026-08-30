@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::{
+    transcompile::ChoiceOption,
     transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene},
     tui::palette::PaletteEntry,
 };
@@ -24,6 +25,7 @@ pub struct RenderContext<'a> {
     pub application_available: bool,
     pub edit_session: Option<&'a EditSession>,
     pub palette: Option<PaletteRender<'a>>,
+    pub choice: Option<ChoiceRender<'a>>,
 }
 
 pub struct PaletteRender<'a> {
@@ -31,6 +33,13 @@ pub struct PaletteRender<'a> {
     pub entries: &'a [PaletteEntry],
     pub selected: usize,
     pub all_scopes: bool,
+}
+
+pub struct ChoiceRender<'a> {
+    pub label: &'a str,
+    pub options: &'a [ChoiceOption],
+    pub selected: usize,
+    pub partial: bool,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
@@ -54,6 +63,9 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     if let Some(palette) = context.palette {
         render_palette(frame, content_area, palette);
     }
+    if let Some(choice) = context.choice {
+        render_choice(frame, content_area, choice);
+    }
     let footer = format!(
         "{} | Tab Focus | Enter Operate | : Commands | ↑/↓ Scroll | r Refresh | q Quit",
         context.status
@@ -63,6 +75,39 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         footer_area,
     );
     hit_regions
+}
+
+fn render_choice(frame: &mut Frame<'_>, area: Rect, choice: ChoiceRender<'_>) {
+    let width = area.width.clamp(20, 56);
+    let height = (choice.options.len() as u16 + 4).min(area.height).max(5);
+    let popup = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(Clear, popup);
+    let title = if choice.partial {
+        format!(" Choose {} (partial) ", choice.label)
+    } else {
+        format!(" Choose {} ", choice.label)
+    };
+    let block = Block::default().title(title).borders(Borders::ALL);
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+    let lines = choice
+        .options
+        .iter()
+        .enumerate()
+        .map(|(index, option)| {
+            let cursor = if index == choice.selected { ">" } else { " " };
+            let selected = if option.selected { "*" } else { " " };
+            let disabled = if option.enabled { "" } else { " (disabled)" };
+            format!("{cursor} {selected} {}{disabled}", option.label)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn render_elements(

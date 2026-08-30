@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability},
-    transcompile::TuiScene,
+    transcompile::{ChoiceSelectionStrategy, TuiScene},
 };
 
 use super::action::{ActionResolutionError, UiIntent, resolve_action};
@@ -107,6 +107,50 @@ pub enum SelectionStrategy {
         child_index: usize,
     },
     Unsupported,
+}
+
+pub fn resolve_choice_backend_operation(
+    cache: &SemanticCache,
+    strategy: &ChoiceSelectionStrategy,
+) -> Result<BackendOperation, OperationResolutionError> {
+    match strategy {
+        ChoiceSelectionStrategy::ChildSemanticAction { child, action } => {
+            let node = cache
+                .node(*child)
+                .ok_or(OperationResolutionError::NodeNotFound(*child))?;
+            if !node.actions.iter().any(|advertised| advertised == action)
+                || action.name.trim().is_empty()
+            {
+                return Err(OperationResolutionError::NoCompatibleOperation(
+                    "choice action is no longer safely advertised".to_owned(),
+                ));
+            }
+            Ok(BackendOperation::InvokeAction {
+                locator: node.backend_locator.clone(),
+                action: action.clone(),
+            })
+        }
+        ChoiceSelectionStrategy::ParentSelection {
+            parent,
+            child_index,
+        } => {
+            let node = cache
+                .node(*parent)
+                .ok_or(OperationResolutionError::NodeNotFound(*parent))?;
+            if !node
+                .capabilities
+                .contains(&SemanticCapability::SelectChildren)
+            {
+                return Err(OperationResolutionError::NoCompatibleOperation(
+                    "choice parent no longer exposes Selection".to_owned(),
+                ));
+            }
+            Ok(BackendOperation::SelectChild {
+                container_locator: node.backend_locator.clone(),
+                child_index: *child_index,
+            })
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

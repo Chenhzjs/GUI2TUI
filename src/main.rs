@@ -104,6 +104,10 @@ struct Cli {
     #[arg(long, requires = "app")]
     dump_scene: bool,
 
+    /// Print toolkit-independent choice discovery and safe selection strategies.
+    #[arg(long, requires = "app")]
+    dump_choices: bool,
+
     /// Lazily enrich and print relations for scene-relevant nodes.
     #[arg(long, requires = "app")]
     dump_relations: bool,
@@ -336,6 +340,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
     );
     if cli.dump_regions
         || cli.dump_scene
+        || cli.dump_choices
         || cli.dump_relations
         || cli.relations.is_some()
         || cli.dump_scopes
@@ -354,13 +359,29 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             .as_deref()
             .map(gui2tui::semantic::BackendLocator::decode)
             .transpose()?;
-        let mut candidates = gui2tui::semantic::targeted_relation_candidates(
+        let visible_scene = initial_scene
+            .elements
+            .iter()
+            .flat_map(|element| element.sources.iter().copied())
+            .collect();
+        let budget = if cache.node_count() <= 512 {
+            cache.node_count()
+        } else {
+            gui2tui::semantic::LARGE_TREE_RELATION_CANDIDATE_LIMIT
+        };
+        let schedule = gui2tui::semantic::schedule_relation_candidates(
             &cache,
-            initial_scene
-                .elements
-                .iter()
-                .flat_map(|element| element.sources.iter().copied()),
+            &gui2tui::semantic::RelationPriorityContext {
+                visible_scene,
+                ..Default::default()
+            },
+            budget,
         );
+        let mut candidates: Vec<_> = schedule
+            .candidates
+            .iter()
+            .map(|candidate| candidate.runtime_id)
+            .collect();
         if let Some(locator) = &requested_locator {
             let runtime_id = cache.runtime_id(locator).ok_or_else(|| {
                 BackendError::SemanticCache(format!(
@@ -373,7 +394,27 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         }
         let relation_metrics = backend.enrich_relations(&mut cache, &candidates).await;
         eprintln!(
-            "Relations: candidates={} rpcs={} found={} unresolved={} unavailable={} latency={:.3} ms",
+            "Relations: budget={} deferred={} visible={} relation-sensitive={} background={} candidates={} rpcs={} found={} unresolved={} unavailable={} latency={:.3} ms",
+            schedule.budget,
+            schedule.deferred,
+            schedule
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.reason
+                    == gui2tui::semantic::RelationPriorityReason::VisibleScene)
+                .count(),
+            schedule
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.reason
+                    == gui2tui::semantic::RelationPriorityReason::RelationSensitiveRole)
+                .count(),
+            schedule
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.reason
+                    == gui2tui::semantic::RelationPriorityReason::Background)
+                .count(),
             relation_metrics.candidate_nodes,
             relation_metrics.rpc_count,
             relation_metrics.relations_found,
@@ -393,6 +434,13 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         let scene = gui2tui::transcompile::compile_scene(&tree, &analysis);
         let scene_elapsed = scene_started.elapsed();
         let commands = gui2tui::transcompile::CommandHierarchy::build(&cache, &scopes);
+        if cli.dump_choices {
+            let choices = gui2tui::transcompile::ChoiceCatalog::discover(&cache);
+            print!(
+                "{}",
+                gui2tui::transcompile::format_choices(&cache, &choices)
+            );
+        }
         if cli.dump_regions {
             print!("{}", gui2tui::transcompile::format_regions(&analysis));
         }

@@ -1,4 +1,5 @@
 pub mod analyze;
+pub mod choice;
 pub mod command;
 pub mod presentation;
 pub mod region;
@@ -7,6 +8,10 @@ pub mod scope;
 
 pub use analyze::{
     RegionAnalysis, RegionMetrics, analyze_regions, analyze_regions_with_graph, format_regions,
+};
+pub use choice::{
+    ChoiceCatalog, ChoiceOption, ChoiceOptions, ChoiceSelectionStrategy, DisclosureRequirement,
+    DismissBehavior, SemanticChoice, format_choices,
 };
 pub use command::{
     CommandEntry, CommandGroup, CommandHierarchy, RankedCommand, ReachabilityAudit,

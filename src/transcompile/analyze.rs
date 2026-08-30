@@ -189,6 +189,19 @@ impl Analyzer {
             self.metrics.reconstructed += 1;
             return field;
         }
+        if matches!(node.role, SemanticRole::Label | SemanticRole::Text)
+            && node.children.iter().any(has_interactive_descendant)
+        {
+            let mut group = SemanticRegion::terminal_native(
+                self.id(),
+                SemanticRegionKind::Group,
+                vec![node.runtime_id],
+            );
+            group.label = semantic_label(node);
+            group.children = self.analyze_children(node, command_path);
+            self.metrics.reconstructed += 1;
+            return group;
+        }
         if node.role == SemanticRole::ComboBox {
             self.metrics.direct_controls += 1;
             let control = self.control_region(node, parent_capabilities, command_path);
@@ -275,7 +288,9 @@ impl Analyzer {
         let mut index = 0;
         while index < node.children.len() {
             let child = &node.children[index];
-            if self.relations.consumed_labels.contains(&child.runtime_id) {
+            if self.relations.consumed_labels.contains(&child.runtime_id)
+                && child.children.is_empty()
+            {
                 index += 1;
                 continue;
             }
@@ -451,13 +466,6 @@ impl Analyzer {
                 source: node.runtime_id,
                 intent,
             });
-        } else if node.role == SemanticRole::ComboBox
-            && let Some(disclosure) = unique_combo_disclosure(node)
-        {
-            region.interactions.push(RegionInteraction {
-                source: disclosure.runtime_id,
-                intent: UiIntent::OpenMenu,
-            });
         }
         region
     }
@@ -619,30 +627,6 @@ fn is_direct_control(node: &SemanticNode) -> bool {
     )
 }
 
-fn unique_combo_disclosure(node: &SemanticNode) -> Option<&SemanticNode> {
-    fn collect<'a>(node: &'a SemanticNode, output: &mut Vec<&'a SemanticNode>) {
-        for child in &node.children {
-            if crate::tui::action::resolve_action(
-                &SemanticRole::ComboBox,
-                &child.actions,
-                UiIntent::OpenMenu,
-            )
-            .is_ok()
-            {
-                output.push(child);
-            }
-            collect(child, output);
-        }
-    }
-    let mut candidates = Vec::new();
-    collect(node, &mut candidates);
-    if candidates.len() == 1 {
-        candidates.first().copied()
-    } else {
-        None
-    }
-}
-
 fn is_command_container(node: &SemanticNode) -> bool {
     node.role == SemanticRole::MenuBar
         || matches!(&node.role, SemanticRole::Unknown(role) if role == "tool bar" || role == "toolbar")
@@ -676,12 +660,17 @@ fn has_semantic_signal(node: &SemanticNode) -> bool {
         || node.children.iter().any(has_semantic_signal)
 }
 
+fn has_interactive_descendant(node: &SemanticNode) -> bool {
+    is_direct_control(node) || node.children.iter().any(has_interactive_descendant)
+}
+
 fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> {
     match capability {
         InteractionCapability::None => None,
         InteractionCapability::Activate => Some(UiIntent::Activate),
         InteractionCapability::Toggle => Some(UiIntent::Toggle),
         InteractionCapability::Select => Some(UiIntent::Select),
+        InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),
     }
@@ -793,6 +782,23 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn label_wrapper_preserves_embedded_interactive_control() {
+        let mut root = node(0, SemanticRole::Window, "Browser");
+        let mut label = node(1, SemanticRole::Label, "");
+        label.children = vec![
+            node(2, SemanticRole::Label, "Demo items"),
+            node(3, SemanticRole::ComboBox, "Demo items"),
+        ];
+        root.children.push(label);
+        let analysis = analyze_regions(&root);
+        fn has_combo(region: &SemanticRegion) -> bool {
+            region.source_nodes.contains(&RuntimeNodeId::new(3))
+                || region.children.iter().any(has_combo)
+        }
+        assert!(has_combo(&analysis.root));
     }
 
     fn action(name: &str) -> SemanticAction {
@@ -1010,15 +1016,13 @@ mod tests {
     }
 
     #[test]
-    fn combo_uses_unique_semantic_disclosure_child_without_toolkit_branch() {
+    fn combo_disclosure_child_is_not_promoted_to_a_production_interaction() {
         let mut combo = node(1, SemanticRole::ComboBox, "Choice");
         let mut disclosure = node(2, SemanticRole::ToggleButton, "Alpha");
         disclosure.actions.push(action("Click"));
         combo.children.push(disclosure);
         let analysis = analyze_regions(&combo);
-        assert_eq!(analysis.root.interactions.len(), 1);
-        assert_eq!(analysis.root.interactions[0].source, RuntimeNodeId::new(2));
-        assert_eq!(analysis.root.interactions[0].intent, UiIntent::OpenMenu);
+        assert!(analysis.root.interactions.is_empty());
 
         let anonymous = node(3, SemanticRole::ComboBox, "Browser choice");
         let analysis = analyze_regions(&anonymous);

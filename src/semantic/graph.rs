@@ -7,6 +7,38 @@ use super::{
 
 pub const LARGE_TREE_RELATION_CANDIDATE_LIMIT: usize = 256;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RelationPriorityReason {
+    Background,
+    CurrentWindow,
+    RelationSensitiveRole,
+    VisibleScene,
+    ActiveScope,
+    Focused,
+    OnDemand,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RelationPriorityContext {
+    pub focused: Option<RuntimeNodeId>,
+    pub active_scope: HashSet<RuntimeNodeId>,
+    pub visible_scene: HashSet<RuntimeNodeId>,
+    pub current_window: HashSet<RuntimeNodeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationCandidate {
+    pub runtime_id: RuntimeNodeId,
+    pub reason: RelationPriorityReason,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationSchedule {
+    pub budget: usize,
+    pub candidates: Vec<RelationCandidate>,
+    pub deferred: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CollectionCompleteness {
     Complete,
@@ -149,6 +181,93 @@ pub fn targeted_relation_candidates(
     output
 }
 
+pub fn schedule_relation_candidates(
+    cache: &SemanticCache,
+    context: &RelationPriorityContext,
+    budget: usize,
+) -> RelationSchedule {
+    let mut candidates: Vec<_> = cache
+        .nodes()
+        .filter(|node| {
+            matches!(
+                cache.relation_state(node.runtime_id),
+                Some(RelationState::Unknown)
+            )
+        })
+        .map(|node| {
+            let reason = if context.focused == Some(node.runtime_id) {
+                RelationPriorityReason::Focused
+            } else if context.active_scope.contains(&node.runtime_id) {
+                RelationPriorityReason::ActiveScope
+            } else if context.visible_scene.contains(&node.runtime_id) {
+                RelationPriorityReason::VisibleScene
+            } else if relation_sensitive_role(&node.role) {
+                RelationPriorityReason::RelationSensitiveRole
+            } else if context.current_window.contains(&node.runtime_id) {
+                RelationPriorityReason::CurrentWindow
+            } else {
+                RelationPriorityReason::Background
+            };
+            RelationCandidate {
+                runtime_id: node.runtime_id,
+                reason,
+            }
+        })
+        .collect();
+    // HashMap iteration never determines the result. Equal-priority candidates
+    // use the stable session-local ID as a deterministic tie breaker.
+    candidates.sort_by(|left, right| {
+        right
+            .reason
+            .cmp(&left.reason)
+            .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+    });
+    let total = candidates.len();
+    candidates.truncate(budget.min(total));
+    RelationSchedule {
+        budget,
+        deferred: total.saturating_sub(candidates.len()),
+        candidates,
+    }
+}
+
+pub fn schedule_on_demand_relations(
+    cache: &SemanticCache,
+    requested: impl IntoIterator<Item = RuntimeNodeId>,
+    budget: usize,
+) -> RelationSchedule {
+    let mut seen = HashSet::new();
+    let candidates: Vec<_> = requested
+        .into_iter()
+        .filter(|id| seen.insert(*id))
+        .filter(|id| matches!(cache.relation_state(*id), Some(RelationState::Unknown)))
+        .take(budget)
+        .map(|runtime_id| RelationCandidate {
+            runtime_id,
+            reason: RelationPriorityReason::OnDemand,
+        })
+        .collect();
+    RelationSchedule {
+        budget,
+        deferred: 0,
+        candidates,
+    }
+}
+
+fn relation_sensitive_role(role: &SemanticRole) -> bool {
+    matches!(
+        role,
+        SemanticRole::Dialog
+            | SemanticRole::Window
+            | SemanticRole::TextInput
+            | SemanticRole::RadioButton
+            | SemanticRole::ComboBox
+            | SemanticRole::Menu
+            | SemanticRole::MenuItem
+            | SemanticRole::Label
+    )
+}
+
 pub fn format_relations(cache: &SemanticCache, only: Option<RuntimeNodeId>) -> String {
     let mut nodes: Vec<_> = cache
         .nodes()
@@ -228,6 +347,110 @@ mod tests {
         assert_eq!(
             collection_completeness(cache.node(cache.root_id()).unwrap()),
             CollectionCompleteness::PartialRealized
+        );
+    }
+
+    fn node(id: u64, role: SemanticRole, name: &str) -> SemanticNode {
+        SemanticNode {
+            runtime_id: RuntimeNodeId::new(id),
+            backend_locator: BackendLocator::new(":1.2", format!("/node/{id}")),
+            index_in_parent: None,
+            role,
+            name: Some(name.to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: Vec::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: DebugInfo::default(),
+        }
+    }
+
+    fn id_named(cache: &SemanticCache, name: &str) -> RuntimeNodeId {
+        cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some(name))
+            .unwrap()
+            .runtime_id
+    }
+
+    #[test]
+    fn priority_context_not_tree_order_selects_the_relation_budget() {
+        let mut root = node(1, SemanticRole::Application, "app");
+        // Background is deliberately first in traversal order.
+        let mut background = node(2, SemanticRole::Window, "background");
+        background
+            .children
+            .push(node(3, SemanticRole::Label, "background label"));
+        let mut active = node(4, SemanticRole::Window, "active");
+        active
+            .children
+            .push(node(5, SemanticRole::Button, "visible"));
+        active
+            .children
+            .push(node(6, SemanticRole::TextInput, "focused"));
+        root.children = vec![background, active];
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let focused = id_named(&cache, "focused");
+        let visible = id_named(&cache, "visible");
+        let active_root = id_named(&cache, "active");
+        let context = RelationPriorityContext {
+            focused: Some(focused),
+            active_scope: [active_root].into_iter().collect(),
+            visible_scene: [visible].into_iter().collect(),
+            current_window: [active_root, visible, focused].into_iter().collect(),
+        };
+        let schedule = schedule_relation_candidates(&cache, &context, 3);
+        assert_eq!(schedule.candidates[0].runtime_id, focused);
+        assert_eq!(
+            schedule.candidates[0].reason,
+            RelationPriorityReason::Focused
+        );
+        assert_eq!(schedule.candidates[1].runtime_id, active_root);
+        assert_eq!(
+            schedule.candidates[1].reason,
+            RelationPriorityReason::ActiveScope
+        );
+        assert_eq!(schedule.candidates[2].runtime_id, visible);
+        assert_eq!(
+            schedule.candidates[2].reason,
+            RelationPriorityReason::VisibleScene
+        );
+        assert!(schedule.deferred > 0);
+    }
+
+    #[test]
+    fn on_demand_fetch_bypasses_startup_omission_and_dialog_reprioritizes() {
+        let mut root = node(1, SemanticRole::Application, "app");
+        root.children.push(node(2, SemanticRole::Label, "omitted"));
+        root.children.push(node(3, SemanticRole::Dialog, "dialog"));
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let omitted = id_named(&cache, "omitted");
+        let dialog = id_named(&cache, "dialog");
+        let startup = schedule_relation_candidates(&cache, &RelationPriorityContext::default(), 1);
+        assert!(!startup.candidates.is_empty());
+        let demand = schedule_on_demand_relations(&cache, [omitted], 1);
+        assert_eq!(demand.candidates[0].runtime_id, omitted);
+        assert_eq!(
+            demand.candidates[0].reason,
+            RelationPriorityReason::OnDemand
+        );
+
+        let reprioritized = schedule_relation_candidates(
+            &cache,
+            &RelationPriorityContext {
+                active_scope: [dialog].into_iter().collect(),
+                ..Default::default()
+            },
+            1,
+        );
+        assert_eq!(reprioritized.candidates[0].runtime_id, dialog);
+        assert_eq!(
+            reprioritized.candidates[0].reason,
+            RelationPriorityReason::ActiveScope
         );
     }
 }
