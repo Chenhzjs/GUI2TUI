@@ -132,6 +132,22 @@ Phase 3E additionally validated terminal-native content reading in LibreOffice W
 nodes, 17 blocks, 4 headings), Chrome, Firefox, and a generic GTK TextView. The measurements and
 Qt rich-text bridge failure are recorded in [content-navigation.md](content-navigation.md).
 
+## Phase 3F progressive content operations
+
+| Capability | GTK4 | Qt6 | Chrome | Firefox | LibreOffice |
+| --- | --- | --- | --- | --- | --- |
+| Indexed Reader search | PASS | BRIDGE LIMITED | PASS | PASS | PASS |
+| Explicit progressive scan | PASS | QUARANTINED AFTER FIRST FAILURE | PASS | PASS | PASS |
+| Search cancellation | UNIT PASS | N/A | LIVE PASS | NOT TESTED | LIVE PASS |
+| Password excluded from scan | PASS | PASS | PASS | PASS | N/A |
+| Semantic table API | NO TABLE | NO TABLE IN PROBE | PASS (HTML table + ARIA grid) | PASS (HTML table + ARIA grid) | PASS |
+| Virtual collection navigation | UNIT PASS; live collection unavailable | PASS (`PartialRealized` fixture lists) | PASS (realized table rows) | UNIT PASS; live collection unavailable | PASS (realized table cells) |
+
+`BRIDGE LIMITED` means the Qt rich-text fixture crashed during its first bounded Text probe. The
+runtime then quarantined that source and issued no automatic retry; it does not identify Qt by
+name. Firefox 154 was rerun from Mozilla's installed arm64 tarball. Detailed commands and measurements are in
+[progressive-content.md](progressive-content.md).
+
 ## Phase 3D relational/contextual probe
 
 The completion run replaced traversal-prefix enrichment with a contextual priority scheduler.

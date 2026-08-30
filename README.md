@@ -231,7 +231,9 @@ The cross-family live measurements and rule limits are recorded in
 and [docs/term-everything-study.md](docs/term-everything-study.md). Relation, scope, and command
 planning observations are in [docs/relations.md](docs/relations.md). Content architecture and live
 measurements are in [docs/content-navigation.md](docs/content-navigation.md); representative actual
-GUI-to-TUI frames are in [docs/gui-to-tui-examples.md](docs/gui-to-tui-examples.md).
+GUI-to-TUI frames are in [docs/gui-to-tui-examples.md](docs/gui-to-tui-examples.md). Cancellable
+full search, runtime Text quarantine, virtual collection navigation, tables, and content-scope
+policy are documented in [docs/progressive-content.md](docs/progressive-content.md).
 
 Ordinary tree output prints a copyable node ID on nodes that expose actions:
 
@@ -416,6 +418,7 @@ Phase 3B Atomic EditableText                    ✓ validated
 Phase 3C Semantic UI transcompiler              ✓ validated
 Phase 3D Relational/contextual task planning    ✓ validated
 Phase 3E Semantic content navigation            ✓ validated
+Phase 3F Progressive content operations         ✓ validated
 Phase 4  Chromium / Electron
 Phase 5  Raster fallback
 Phase 6  Wayland compositor / SSH integration

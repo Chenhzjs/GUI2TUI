@@ -193,10 +193,17 @@ AT-SPI roles and relationships, not file parsing or GUI geometry.
 
 The main scene replaces content-only rows with a `DocumentSummary`; form controls and other bound
 tasks remain reachable. Reader text is fetched lazily from non-password Text objects into a
-512-KiB/256-range LRU. Text, property, and structural events invalidate only affected sources.
-`manages-descendants` yields partial completeness and never a fabricated logical total. Search
-covers semantic labels plus loaded ranges; progressive full-content search is not implemented.
-Actual cross-application results are in [content-navigation.md](content-navigation.md).
+512-KiB/256-range LRU. Text/property events locally invalidate their source; structural events use
+a conservative catalog rebuild while preserving source-derived block IDs. `manages-descendants`
+yields partial completeness and never a fabricated logical total.
+
+Ordinary `/` search covers semantic labels plus loaded ranges and never starts hidden I/O. An
+explicit `Ctrl-F` operation advances a `ContentSearchSession` under per-tick block/RPC budgets,
+streams results, and stops issuing new RPCs after cancellation. Text sources move through
+`Unsupported / Declared / Verified / Quarantined`; a failed bridge is not retried in the same
+runtime generation. `SemanticTableModel` and `VirtualCollectionModel` navigate only realized
+semantic cells/items and do not depend on GUI coordinates or ActiveDescendant for correctness.
+Actual cross-application results are in [progressive-content.md](progressive-content.md).
 
 ## Known semantic gaps
 

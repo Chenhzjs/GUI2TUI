@@ -16,7 +16,7 @@ summary while form controls remain separately reachable:
 ```text
 ┌ GUI2TUI — GUI2TUI Browser Fixture - Google Chrome ───────────────┐
 │> Document: GUI2TUI Browser Fixture                               │
-│    76 blocks | 4 headings | 3 links | 18 forms                   │
+│    114 blocks | 4 headings | 3 links | 18 forms                  │
 │    completeness: Complete                                        │
 │    [ Enter: Read document ]                                      │
 │    o Outline | / Content search                                  │
@@ -68,8 +68,36 @@ And indexed/loaded search:
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Firefox rendered the same page through the same model and Reader. Its first viewport used 4 Text
-RPCs/4 ranges and 251 cached bytes; Chrome used 3 RPCs/3 ranges and 171 bytes in the recorded run.
+Phase 3F's explicit full search uses the same terminal overlay but shows honest progress and streams
+matches. This cleaned frame was captured from the live GTK fixture:
+
+```text
+┌ Full document search — GTK rich text article ───────────────────┐
+│> semantic                                                       │
+│ Full search: Complete — 1 / 1 blocks scanned — 1 match          │
+│> GTK semantic content first paragraph...                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+The 7,266-node Chrome cancellation run showed `312 / 7009 blocks scanned`, `42 text RPCs`; Escape
+stopped the operation and returned to the Reader. Chrome's real HTML table and ARIA grid produced
+terminal table tasks backed by AT-SPI dimensions `3 × 3` and `3 × 2` respectively:
+
+```text
+┌ Table — GUI2TUI Browser Fixture ────────────────────────────────┐
+│  r1 c1  Name                                                   │
+│> r1 c2  Score                                                  │
+│  r1 c3  Status                                                 │
+│  r2 c1  Alice                                                  │
+│  r2 c2  92                                                     │
+│  r2 c3  Pass                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Firefox rendered the same page through the same model and Reader. The Phase 3F full-search frame
+reached 75 blocks through event-driven page realization and required no new Text RPC because the
+visible ranges were already resident. Chrome used 3 RPCs/3 ranges and 171 bytes in its recorded
+initial Reader viewport.
 
 ## 2. LibreOffice Writer → reflowed document Reader
 
@@ -168,4 +196,3 @@ buttons/inputs inside documents       →  separate reachable tasks
 Unsupported graphical content remains an explicit opaque/media placeholder. No example uses
 framebuffer capture, GUI coordinate scaling, raster conversion, toolkit-private APIs, DOM/CDP, or
 document-file parsers.
-

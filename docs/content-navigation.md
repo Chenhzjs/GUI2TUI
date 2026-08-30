@@ -62,12 +62,10 @@ list items use bullets, quotes use `>`, and opaque media uses `[Media]`. `j/k` a
 semantic block, `o` opens the heading outline, `/` opens content search, and Escape restores the
 previous scene focus.
 
-Search covers semantic labels and text ranges already loaded into the bounded cache. It returns a
-`ContentBlockId`, source runtime node, match range, and safe preview. A progressive full-document
-scan is **NOT IMPLEMENTED**: doing it correctly requires a cancellable asynchronous fetch task and
-would defeat the bounded first-viewport contract. The live fixtures expose useful heading/link
-labels before body fetch, while loaded-range search covers what the user has read; this phase does
-not justify a second, eager scan architecture.
+Search covers semantic labels and text ranges already loaded into the bounded cache. Phase 3F adds
+an explicit `Ctrl-F` progressive scan with per-tick block/RPC budgets, streaming results, mutation
+invalidation, and Escape cancellation. Ordinary `/` search remains bounded and never silently scans
+the document. See [progressive-content.md](progressive-content.md).
 
 ## Live compatibility
 
@@ -127,4 +125,3 @@ gui2tui-inspect --app firefox --dump-scene
 ```
 
 Raster rendering, PDF/ODT parsing, DOM/CDP, UNO, and toolkit-native model access are not used.
-
