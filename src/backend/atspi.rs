@@ -11,12 +11,12 @@ use std::{
 
 use atspi::{
     AccessibilityConnection, CoordType, Granularity, Interface, MatchType, ObjectMatchRule,
-    ObjectRef, ObjectRefOwned, Role, SortOrder, State,
+    ObjectRef, ObjectRefOwned, Role, SortOrder, State, TreeTraversalType,
     events::{CacheEvents, Event, ObjectEvents, WindowEvents},
     proxy::{
         accessible::ObjectRefExt, action::ActionProxy, collection::CollectionProxy,
         component::ComponentProxy, document::DocumentProxy, hypertext::HypertextProxy,
-        proxy_ext::ProxyExt, text::TextProxy, value::ValueProxy,
+        proxy_ext::ProxyExt, table::TableProxy, text::TextProxy, value::ValueProxy,
     },
 };
 use futures_lite::StreamExt;
@@ -229,6 +229,16 @@ pub struct CollectionProbe {
     pub collection_nodes: usize,
     pub source: Option<BackendLocator>,
     pub queries: Vec<CollectionQueryProbe>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TableProbe {
+    pub source: BackendLocator,
+    pub rows: Option<i32>,
+    pub columns: Option<i32>,
+    pub sampled_cells: usize,
+    pub duration: Duration,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -476,11 +486,139 @@ impl AtspiBackend {
                 error,
             });
         }
+        let current_path = ObjectPath::try_from(source.object_path())
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let any = ObjectMatchRule::default();
+        let started = Instant::now();
+        let result = tokio::time::timeout(
+            self.operation_timeout,
+            proxy.get_matches_from(
+                &current_path,
+                any.clone(),
+                SortOrder::Canonical,
+                TreeTraversalType::Inorder,
+                8,
+                false,
+            ),
+        )
+        .await;
+        let (count, error) = match result {
+            Ok(Ok(objects)) => (Some(objects.len()), None),
+            Ok(Err(error)) => (None, Some(error.to_string())),
+            Err(_) => (None, Some("operation timed out".to_owned())),
+        };
+        results.push(CollectionQueryProbe {
+            query: "matches-from",
+            count,
+            duration: started.elapsed(),
+            error,
+        });
+        let started = Instant::now();
+        let result = tokio::time::timeout(
+            self.operation_timeout,
+            proxy.get_matches_to(
+                &current_path,
+                any,
+                SortOrder::Canonical,
+                TreeTraversalType::Inorder,
+                false,
+                8,
+                false,
+            ),
+        )
+        .await;
+        let (count, error) = match result {
+            Ok(Ok(objects)) => (Some(objects.len()), None),
+            Ok(Err(error)) => (None, Some(error.to_string())),
+            Err(_) => (None, Some("operation timed out".to_owned())),
+        };
+        results.push(CollectionQueryProbe {
+            query: "matches-to",
+            count,
+            duration: started.elapsed(),
+            error,
+        });
+        let started = Instant::now();
+        let active =
+            tokio::time::timeout(self.operation_timeout, proxy.get_active_descendant()).await;
+        results.push(CollectionQueryProbe {
+            query: "active-descendant",
+            count: active
+                .as_ref()
+                .ok()
+                .and_then(|result| result.as_ref().ok())
+                .map(|_| 1),
+            duration: started.elapsed(),
+            error: match active {
+                Ok(Ok(_)) => None,
+                Ok(Err(error)) => Some(error.to_string()),
+                Err(_) => Some("operation timed out".to_owned()),
+            },
+        });
         Ok(CollectionProbe {
             collection_nodes: collection_nodes.len(),
             source: Some(source),
             queries: results,
         })
+    }
+
+    pub async fn probe_tables(&self, cache: &SemanticCache) -> Vec<TableProbe> {
+        let mut probes = Vec::new();
+        for node in cache.nodes().filter(|node| {
+            node.role == SemanticRole::Table
+                && node
+                    .debug
+                    .interfaces
+                    .iter()
+                    .any(|interface| interface == "Table")
+        }) {
+            let started = Instant::now();
+            let locator = node.backend_locator.clone();
+            let result = async {
+                let proxy = TableProxy::builder(self.connection.connection())
+                    .destination(locator.bus_name())?
+                    .path(locator.object_path())?
+                    .build()
+                    .await?;
+                let rows = tokio::time::timeout(self.operation_timeout, proxy.n_rows())
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+                let columns = tokio::time::timeout(self.operation_timeout, proxy.n_columns())
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+                let mut sampled = 0;
+                for row in 0..rows.unwrap_or(0).clamp(0, 3) {
+                    for column in 0..columns.unwrap_or(0).clamp(0, 3) {
+                        if tokio::time::timeout(
+                            self.operation_timeout,
+                            proxy.get_accessible_at(row, column),
+                        )
+                        .await
+                        .is_ok_and(|result| result.is_ok())
+                        {
+                            sampled += 1;
+                        }
+                    }
+                }
+                Ok::<_, zbus::Error>((rows, columns, sampled))
+            }
+            .await;
+            let (rows, columns, sampled_cells, error) = match result {
+                Ok((rows, columns, sampled)) => (rows, columns, sampled, None),
+                Err(error) => (None, None, 0, Some(error.to_string())),
+            };
+            probes.push(TableProbe {
+                source: locator,
+                rows,
+                columns,
+                sampled_cells,
+                duration: started.elapsed(),
+                error,
+            });
+        }
+        probes
     }
 
     pub async fn bootstrap_application(

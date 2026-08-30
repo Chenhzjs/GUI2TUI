@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, ops::Index};
 
 use crate::semantic::{
     CachedSemanticNode, RuntimeNodeId, SemanticCache, SemanticRole, TextInputKind,
@@ -37,6 +37,13 @@ pub enum ContentCompleteness {
     Complete,
     PartialRealized,
     Unknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentScopeClass {
+    Primary,
+    ActiveTransient,
+    BackgroundSecondary,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -104,6 +111,103 @@ pub struct ContentBlock {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ContentArena {
+    by_id: HashMap<ContentBlockId, ContentBlock>,
+    order: Vec<ContentBlockId>,
+    by_source: HashMap<RuntimeNodeId, Vec<ContentBlockId>>,
+}
+
+impl ContentArena {
+    pub fn from_blocks(blocks: impl IntoIterator<Item = ContentBlock>) -> Self {
+        let blocks = blocks.into_iter();
+        let (minimum, _) = blocks.size_hint();
+        let mut arena = Self {
+            by_id: HashMap::with_capacity(minimum),
+            order: Vec::with_capacity(minimum),
+            by_source: HashMap::with_capacity(minimum),
+        };
+        for block in blocks {
+            arena.insert(block);
+        }
+        arena
+    }
+
+    pub fn insert(&mut self, block: ContentBlock) {
+        let id = block.id;
+        let source = block.source;
+        if let Some(previous) = self.by_id.insert(id, block) {
+            if previous.source != source
+                && let Some(ids) = self.by_source.get_mut(&previous.source)
+            {
+                ids.retain(|candidate| *candidate != id);
+            }
+        } else {
+            self.order.push(id);
+        }
+        let ids = self.by_source.entry(source).or_default();
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+
+    pub fn get(&self, id: ContentBlockId) -> Option<&ContentBlock> {
+        self.by_id.get(&id)
+    }
+
+    pub fn get_mut(&mut self, id: ContentBlockId) -> Option<&mut ContentBlock> {
+        self.by_id.get_mut(&id)
+    }
+
+    pub fn blocks_for_source(&self, source: RuntimeNodeId) -> &[ContentBlockId] {
+        self.by_source
+            .get(&source)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &ContentBlock> {
+        self.order.iter().filter_map(|id| self.by_id.get(id))
+    }
+
+    pub fn ids(&self) -> impl Iterator<Item = ContentBlockId> + '_ {
+        self.order.iter().copied()
+    }
+
+    pub fn len(&self) -> usize {
+        self.by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_id.is_empty()
+    }
+}
+
+impl From<Vec<ContentBlock>> for ContentArena {
+    fn from(blocks: Vec<ContentBlock>) -> Self {
+        Self::from_blocks(blocks)
+    }
+}
+
+impl<'a> IntoIterator for &'a ContentArena {
+    type Item = &'a ContentBlock;
+    type IntoIter = Box<dyn Iterator<Item = &'a ContentBlock> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
+    }
+}
+
+impl Index<usize> for ContentArena {
+    type Output = ContentBlock;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.by_id
+            .get(&self.order[index])
+            .expect("content arena order references a missing block")
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContentNavigationIndex {
     pub headings: Vec<ContentBlockId>,
     pub links: Vec<ContentBlockId>,
@@ -121,14 +225,15 @@ pub struct SemanticContentModel {
     pub kind: ContentKind,
     pub metadata: ContentMetadata,
     pub roots: Vec<ContentBlockId>,
-    pub blocks: Vec<ContentBlock>,
+    pub blocks: ContentArena,
     pub navigation: ContentNavigationIndex,
     pub completeness: ContentCompleteness,
+    pub scope_class: ContentScopeClass,
 }
 
 impl SemanticContentModel {
     pub fn block(&self, id: ContentBlockId) -> Option<&ContentBlock> {
-        self.blocks.iter().find(|block| block.id == id)
+        self.blocks.get(id)
     }
 
     pub fn ordered_blocks(&self) -> impl Iterator<Item = &ContentBlock> {
@@ -215,11 +320,30 @@ impl ContentCatalog {
             best_by_scope.values().map(|(root, _)| *root).collect();
         candidates.retain(|candidate| selected.contains(candidate));
 
+        let primary = candidates.iter().copied().max_by_key(|candidate| {
+            let scope = nearest_content_scope(cache, *candidate).unwrap_or(*candidate);
+            let active = cache
+                .node(scope)
+                .is_some_and(|node| has_state(node, "active") || has_state(node, "focused"));
+            (active, descendant_count(cache, *candidate))
+        });
+
         let mut models = Vec::new();
         let mut by_root = HashMap::new();
         let mut owning_root = HashMap::new();
         for root in candidates {
-            let model = analyze_model(cache, root);
+            let scope = nearest_content_scope(cache, root).unwrap_or(root);
+            let scope_class = if Some(root) == primary {
+                ContentScopeClass::Primary
+            } else if cache.node(scope).is_some_and(|node| {
+                node.role == SemanticRole::Dialog
+                    && (has_state(node, "active") || has_state(node, "focused"))
+            }) {
+                ContentScopeClass::ActiveTransient
+            } else {
+                ContentScopeClass::BackgroundSecondary
+            };
+            let model = analyze_model(cache, root, scope_class);
             let index = models.len();
             for source in model.source_nodes() {
                 owning_root.entry(source).or_insert(root);
@@ -237,6 +361,12 @@ impl ContentCatalog {
 
     pub fn models(&self) -> impl Iterator<Item = &SemanticContentModel> {
         self.models.iter()
+    }
+
+    pub fn visible_models(&self) -> impl Iterator<Item = &SemanticContentModel> {
+        self.models
+            .iter()
+            .filter(|model| model.scope_class != ContentScopeClass::BackgroundSecondary)
     }
 
     pub fn get(&self, root: RuntimeNodeId) -> Option<&SemanticContentModel> {
@@ -301,7 +431,11 @@ fn ancestors(cache: &SemanticCache, id: RuntimeNodeId) -> impl Iterator<Item = R
     })
 }
 
-fn analyze_model(cache: &SemanticCache, root: RuntimeNodeId) -> SemanticContentModel {
+fn analyze_model(
+    cache: &SemanticCache,
+    root: RuntimeNodeId,
+    scope_class: ContentScopeClass,
+) -> SemanticContentModel {
     let root_node = cache.node(root).expect("content root must exist");
     let kind = if root_node.role == SemanticRole::Document {
         if has_interface(root_node, "Hypertext") {
@@ -346,9 +480,10 @@ fn analyze_model(cache: &SemanticCache, root: RuntimeNodeId) -> SemanticContentM
             ..Default::default()
         },
         roots,
-        blocks: builder.blocks,
+        blocks: ContentArena::from_blocks(builder.blocks),
         navigation: builder.navigation,
         completeness,
+        scope_class,
     }
 }
 
@@ -415,8 +550,12 @@ impl ModelBuilder<'_> {
         if semantically_empty {
             return None;
         }
-        let block_id = ContentBlockId::new(self.next_id);
-        self.next_id += 1;
+        // A base semantic block is owned by exactly one SemanticCache node.
+        // RuntimeNodeId is cache-session stable, so deriving the block ID from
+        // it preserves Reader/Outline/Search positions across unrelated local
+        // content rebuilds without guessing across ambiguous replacements.
+        let block_id = ContentBlockId::new(id.get());
+        self.next_id = self.next_id.max(id.get().saturating_add(1));
         match kind {
             ContentBlockKind::Heading { .. } => self.navigation.headings.push(block_id),
             ContentBlockKind::Link => self.navigation.links.push(block_id),
@@ -556,9 +695,10 @@ fn descendants_matching(
 
 pub fn format_content_model(model: &SemanticContentModel, with_text: bool) -> String {
     let mut output = format!(
-        "Content root={} kind={:?} completeness={:?} title={:?} blocks={} headings={} links={} forms={}\n",
+        "Content root={} kind={:?} scope={:?} completeness={:?} title={:?} blocks={} headings={} links={} forms={}\n",
         model.root,
         model.kind,
+        model.scope_class,
         model.completeness,
         model.metadata.title,
         model.blocks.len(),
@@ -566,7 +706,7 @@ pub fn format_content_model(model: &SemanticContentModel, with_text: bool) -> St
         model.navigation.links.len(),
         model.navigation.form_fields.len(),
     );
-    for block in &model.blocks {
+    for block in model.blocks.iter() {
         let text = if with_text {
             block
                 .text
@@ -693,7 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn content_block_identity_is_distinct_from_runtime_identity() {
+    fn content_block_identity_is_session_stable_from_runtime_source() {
         let mut document = node(99, SemanticRole::Document, "Article");
         document
             .children
@@ -704,7 +844,70 @@ mod tests {
             .next()
             .unwrap()
             .clone();
-        assert_ne!(model.blocks[0].id.get(), model.blocks[0].source.get());
+        assert_eq!(model.blocks[0].id.get(), model.blocks[0].source.get());
+    }
+
+    #[test]
+    fn arena_indexes_blocks_by_id_and_source() {
+        let block = ContentBlock {
+            id: ContentBlockId::new(7),
+            source: RuntimeNodeId::new(9),
+            kind: ContentBlockKind::Paragraph,
+            label: Some("Indexed".to_owned()),
+            text: TextContentState::Unknown,
+            children: Vec::new(),
+            interactive_sources: Vec::new(),
+        };
+        let arena = ContentArena::from_blocks([block]);
+        assert_eq!(
+            arena.get(ContentBlockId::new(7)).unwrap().label.as_deref(),
+            Some("Indexed")
+        );
+        assert_eq!(
+            arena.blocks_for_source(RuntimeNodeId::new(9)),
+            &[ContentBlockId::new(7)]
+        );
+    }
+
+    #[test]
+    fn generic_scope_policy_hides_background_secondary_document() {
+        let mut app = node(1, SemanticRole::Application, "Browser");
+        let mut primary_window = node(2, SemanticRole::Window, "Primary");
+        primary_window
+            .states
+            .push(SemanticState::Other("active".to_owned()));
+        let mut primary = node(3, SemanticRole::Document, "Article");
+        primary
+            .states
+            .push(SemanticState::Other("showing".to_owned()));
+        primary
+            .children
+            .push(node(4, SemanticRole::Paragraph, "Body"));
+        primary_window.children.push(primary);
+        let mut secondary_window = node(5, SemanticRole::Window, "Auxiliary");
+        let mut secondary = node(6, SemanticRole::Document, "Suggestions");
+        secondary
+            .states
+            .push(SemanticState::Other("showing".to_owned()));
+        secondary
+            .children
+            .push(node(7, SemanticRole::Paragraph, "Suggestion"));
+        secondary_window.children.push(secondary);
+        app.children.extend([primary_window, secondary_window]);
+        let cache = SemanticCache::from_snapshot(app).unwrap();
+        let catalog = ContentCatalog::analyze(&cache);
+        assert_eq!(catalog.models().count(), 2);
+        assert_eq!(catalog.visible_models().count(), 1);
+        assert_eq!(
+            catalog
+                .visible_models()
+                .next()
+                .unwrap()
+                .metadata
+                .title
+                .as_deref(),
+            Some("Article")
+        );
     }
 
     #[test]

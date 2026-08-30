@@ -1,4 +1,7 @@
-use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    time::Instant,
+};
 
 use crate::{
     backend::{AtspiBackend, BackendError, DocumentProbe},
@@ -8,15 +11,65 @@ use crate::{
 
 use super::{
     ContentBlockId, ContentBlockKind, ContentCache, ContentCacheBudget, ContentCacheMetrics,
-    ContentCatalog, ContentMetadata, ContentRangeKey, ContentSearchResult, LoadedContentRange,
-    SemanticContentModel, TextContentState, analyze_virtual_collections, search_indexed_content,
+    ContentCatalog, ContentMetadata, ContentRangeKey, ContentSearchResult, ContentSearchSession,
+    LoadedContentRange, SearchBudget, SearchSessionId, SearchState, SemanticContentModel,
+    TextContentState, analyze_virtual_collections, search::match_text, search_indexed_content,
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextCapabilityStatus {
+    Unsupported,
+    Declared,
+    Verified,
+    Quarantined,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextProbeOutcome {
+    Verified,
+    Unsupported,
+    Failed,
+}
+
+impl TextCapabilityStatus {
+    pub fn after_probe(self, outcome: TextProbeOutcome) -> Self {
+        if self == Self::Quarantined {
+            return Self::Quarantined;
+        }
+        match outcome {
+            TextProbeOutcome::Verified => Self::Verified,
+            TextProbeOutcome::Unsupported => Self::Unsupported,
+            TextProbeOutcome::Failed => Self::Quarantined,
+        }
+    }
+
+    pub fn should_probe(self) -> bool {
+        matches!(self, Self::Declared | Self::Verified)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ContentPatchMetrics {
+    pub local_invalidations: u64,
+    pub local_patches: u64,
+    pub catalog_rebuilds: u64,
+    pub preserved_block_ids: u64,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MaterializationBudget {
     pub visible_blocks: usize,
     pub lookahead_blocks: usize,
     pub paragraph_ranges_per_source: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MaterializationPriority {
+    Background,
+    ExplicitSearch,
+    Lookahead,
+    VisibleViewport,
+    ActiveTask,
 }
 
 impl Default for MaterializationBudget {
@@ -52,6 +105,12 @@ pub struct ContentRuntime {
     cache: ContentCache,
     next_dynamic_block_id: u64,
     virtual_collections: Vec<super::VirtualCollectionModel>,
+    tables: Vec<super::SemanticTableModel>,
+    text_capabilities: HashMap<RuntimeNodeId, TextCapabilityStatus>,
+    next_search_session_id: u64,
+    patch_metrics: ContentPatchMetrics,
+    pending_sources: HashSet<RuntimeNodeId>,
+    structural_rebuild_required: bool,
 }
 
 impl ContentRuntime {
@@ -69,6 +128,12 @@ impl ContentRuntime {
             cache: ContentCache::new(budget),
             next_dynamic_block_id,
             virtual_collections: analyze_virtual_collections(semantic),
+            tables: analyze_tables(semantic),
+            text_capabilities: declared_text_capabilities(semantic),
+            next_search_session_id: 1,
+            patch_metrics: ContentPatchMetrics::default(),
+            pending_sources: HashSet::new(),
+            structural_rebuild_required: false,
         }
     }
 
@@ -88,7 +153,71 @@ impl ContentRuntime {
         &self.virtual_collections
     }
 
+    pub fn table(&self, owner: RuntimeNodeId) -> Option<&super::SemanticTableModel> {
+        self.tables.iter().find(|table| table.owner == owner)
+    }
+
+    pub fn text_capability(&self, source: RuntimeNodeId) -> TextCapabilityStatus {
+        self.text_capabilities
+            .get(&source)
+            .copied()
+            .unwrap_or(TextCapabilityStatus::Unsupported)
+    }
+
+    pub fn patch_metrics(&self) -> ContentPatchMetrics {
+        self.patch_metrics
+    }
+
+    pub fn cache_metrics(&self) -> super::ContentCacheMetrics {
+        self.cache.metrics()
+    }
+
     pub fn rebuild_semantics(&mut self, semantic: &SemanticCache) {
+        if !self.structural_rebuild_required && !self.pending_sources.is_empty() {
+            let sources = std::mem::take(&mut self.pending_sources);
+            let mut safe_local_patch = true;
+            for source in &sources {
+                let Some(node) = semantic.node(*source) else {
+                    safe_local_patch = false;
+                    break;
+                };
+                for model_index in 0..self.catalog.models().count() {
+                    let ids = self
+                        .catalog
+                        .model_mut(model_index)
+                        .map(|model| model.blocks.blocks_for_source(*source).to_vec())
+                        .unwrap_or_default();
+                    for id in ids {
+                        let Some(model) = self.catalog.model_mut(model_index) else {
+                            continue;
+                        };
+                        let Some(block) = model.blocks.get_mut(id) else {
+                            continue;
+                        };
+                        block.label = node.name.clone().or_else(|| node.description.clone());
+                        if matches!(block.text, TextContentState::Summary(_)) {
+                            block.text = block
+                                .label
+                                .clone()
+                                .or_else(|| node.value.clone())
+                                .map(TextContentState::Summary)
+                                .unwrap_or(TextContentState::Unavailable);
+                        }
+                    }
+                }
+            }
+            if safe_local_patch {
+                self.patch_metrics.local_patches += 1;
+                return;
+            }
+        }
+        self.pending_sources.clear();
+        self.structural_rebuild_required = false;
+        let previous_ids: std::collections::HashSet<_> = self
+            .catalog
+            .models()
+            .flat_map(|model| model.blocks.ids())
+            .collect();
         let replacement = ContentCatalog::analyze(semantic);
         let live_sources: std::collections::HashSet<_> = replacement
             .models()
@@ -105,12 +234,40 @@ impl ContentRuntime {
         }
         self.catalog = replacement;
         self.virtual_collections = analyze_virtual_collections(semantic);
+        self.tables = analyze_tables(semantic);
+        self.text_capabilities
+            .retain(|source, _| semantic.node(*source).is_some());
+        for (source, status) in declared_text_capabilities(semantic) {
+            self.text_capabilities.entry(source).or_insert(status);
+        }
+        self.patch_metrics.catalog_rebuilds += 1;
+        self.patch_metrics.preserved_block_ids += self
+            .catalog
+            .models()
+            .flat_map(|model| model.blocks.ids())
+            .filter(|id| previous_ids.contains(id))
+            .count() as u64;
     }
 
     pub fn invalidate_event(&mut self, semantic: &SemanticCache, event: &NormalizedEvent) -> usize {
-        let invalidated = semantic
-            .runtime_id(event.source())
-            .map_or(0, |source| self.cache.invalidate_source(source));
+        let source_id = semantic.runtime_id(event.source());
+        let invalidated = source_id.map_or(0, |source| self.cache.invalidate_source(source));
+        if let Some(source) = source_id {
+            self.pending_sources.insert(source);
+        }
+        if matches!(
+            event,
+            NormalizedEvent::ChildrenChanged { .. }
+                | NormalizedEvent::WindowCreated { .. }
+                | NormalizedEvent::WindowDestroyed { .. }
+                | NormalizedEvent::CacheAdded { .. }
+                | NormalizedEvent::CacheRemoved { .. }
+        ) {
+            self.structural_rebuild_required = true;
+        }
+        if invalidated > 0 {
+            self.patch_metrics.local_invalidations += 1;
+        }
         if let NormalizedEvent::ActiveDescendantChanged {
             container,
             descendant,
@@ -174,6 +331,7 @@ impl ContentRuntime {
             .iter()
             .filter_map(|id| model.block(*id))
             .filter(|block| matches!(block.text, TextContentState::Unknown))
+            .filter(|block| self.text_capability(block.source).should_probe())
             .map(|block| (block.id, block.source))
             .collect();
         let mut report = MaterializationReport {
@@ -190,36 +348,19 @@ impl ContentRuntime {
                 continue;
             }
             report.backend_text_rpcs += 1;
-            let semantic_block = self
-                .catalog
-                .get(root)
-                .and_then(|model| model.block(base_id))
-                .is_some_and(|block| {
-                    matches!(
-                        block.kind,
-                        ContentBlockKind::Heading { .. }
-                            | ContentBlockKind::Paragraph
-                            | ContentBlockKind::Link
-                            | ContentBlockKind::ListItem
-                            | ContentBlockKind::Quote
-                    )
-                });
-            let read_result = if semantic_block {
-                backend
-                    .read_semantic_text_block(&node.backend_locator)
-                    .await
-                    .map(|range| (range.end, vec![range]))
-            } else {
-                backend
-                    .read_content_paragraphs(
-                        &node.backend_locator,
-                        0,
-                        budget.paragraph_ranges_per_source,
-                    )
-                    .await
-            };
+            let read_result = backend
+                .read_content_paragraphs(
+                    &node.backend_locator,
+                    0,
+                    budget.paragraph_ranges_per_source,
+                )
+                .await;
             match read_result {
                 Ok((_count, ranges)) => {
+                    let status = self
+                        .text_capability(source)
+                        .after_probe(TextProbeOutcome::Verified);
+                    self.text_capabilities.insert(source, status);
                     for range in ranges {
                         let block_id = if range.start == 0 {
                             base_id
@@ -244,9 +385,24 @@ impl ContentRuntime {
                 }
                 Err(BackendError::ContentTextUnsupported(_))
                 | Err(BackendError::NonAdvancingTextRange { .. }) => {
+                    let status = self
+                        .text_capability(source)
+                        .after_probe(TextProbeOutcome::Unsupported);
+                    self.text_capabilities.insert(source, status);
                     report.unavailable_blocks += 1;
                 }
-                Err(error) => return Err(error),
+                Err(error) => {
+                    // A declared Text interface that fails a bounded read is
+                    // not retried automatically in this application runtime.
+                    // This is generic observed-behaviour quarantine, not a
+                    // toolkit allow/deny list.
+                    let status = self
+                        .text_capability(source)
+                        .after_probe(TextProbeOutcome::Failed);
+                    self.text_capabilities.insert(source, status);
+                    tracing::warn!(source = %source, %error, "quarantined unreliable Text capability");
+                    report.unavailable_blocks += 1;
+                }
             }
         }
         let model = self.catalog.get(root).ok_or_else(|| {
@@ -276,12 +432,164 @@ impl ContentRuntime {
         })
     }
 
+    pub fn begin_progressive_search(
+        &mut self,
+        root: RuntimeNodeId,
+        query: String,
+    ) -> Option<ContentSearchSession> {
+        let model = self.catalog.get(root)?;
+        let id = SearchSessionId::new(self.next_search_session_id);
+        self.next_search_session_id = self.next_search_session_id.saturating_add(1);
+        Some(ContentSearchSession::new(id, model, query))
+    }
+
+    pub async fn progressive_search_step(
+        &mut self,
+        backend: &AtspiBackend,
+        semantic: &SemanticCache,
+        session: &mut ContentSearchSession,
+        budget: SearchBudget,
+    ) {
+        if !session.is_running() {
+            return;
+        }
+        let Some(model) = self.catalog.get(session.root) else {
+            session.state = SearchState::Cancelled;
+            return;
+        };
+        let mut block_budget = budget.blocks_per_tick;
+        let mut rpc_budget = budget.text_rpcs_per_tick;
+        while block_budget > 0 && session.cursor < session.order.len() {
+            if !session.is_running() {
+                break;
+            }
+            let id = session.order[session.cursor];
+            block_budget -= 1;
+            let Some(block) = model.block(id).cloned() else {
+                session.cursor += 1;
+                continue;
+            };
+            if semantic
+                .node(block.source)
+                .is_some_and(|node| node.text_input_kind == Some(TextInputKind::Password))
+            {
+                session.cursor += 1;
+                session.progress.scanned_blocks += 1;
+                continue;
+            }
+            let mut searchable = block
+                .label
+                .clone()
+                .or_else(|| block.text.visible_text().map(str::to_owned));
+            let mut block_complete = true;
+            let loaded = self
+                .cache
+                .ranges_for_source(block.source)
+                .map(|range| range.text.clone())
+                .collect::<Vec<_>>();
+            if !loaded.is_empty() {
+                searchable = Some(loaded.join("\n"));
+            } else if matches!(block.text, TextContentState::Unknown)
+                && rpc_budget > 0
+                && self.text_capability(block.source).should_probe()
+            {
+                rpc_budget -= 1;
+                session.progress.text_rpcs += 1;
+                let Some(node) = semantic.node(block.source) else {
+                    continue;
+                };
+                let offset = session
+                    .source_offsets
+                    .get(&block.source)
+                    .copied()
+                    .unwrap_or(0);
+                match backend
+                    .read_content_paragraphs(&node.backend_locator, offset, 1)
+                    .await
+                {
+                    Ok((character_count, ranges)) => {
+                        let status = self
+                            .text_capability(block.source)
+                            .after_probe(TextProbeOutcome::Verified);
+                        self.text_capabilities.insert(block.source, status);
+                        if let Some(range) = ranges.into_iter().next() {
+                            searchable = Some(range.text.clone());
+                            self.cache.insert(LoadedContentRange {
+                                block_id: block.id,
+                                key: ContentRangeKey {
+                                    source: block.source,
+                                    start: range.start,
+                                    end: range.end,
+                                },
+                                text: range.text,
+                            });
+                            block_complete = range.end >= character_count;
+                            session.source_offsets.insert(block.source, range.end);
+                        }
+                    }
+                    Err(BackendError::ContentTextUnsupported(_)) => {
+                        let status = self
+                            .text_capability(block.source)
+                            .after_probe(TextProbeOutcome::Unsupported);
+                        self.text_capabilities.insert(block.source, status);
+                    }
+                    Err(error) => {
+                        let status = self
+                            .text_capability(block.source)
+                            .after_probe(TextProbeOutcome::Failed);
+                        self.text_capabilities.insert(block.source, status);
+                        tracing::warn!(source = %block.source, %error, "quarantined Text source during progressive search");
+                    }
+                }
+            }
+            if let Some(text) = searchable
+                && let Some(result) = match_text(block.id, block.source, &text, &session.query)
+            {
+                session.results.push(result);
+            }
+            if block_complete {
+                session.cursor += 1;
+                session.progress.scanned_blocks += 1;
+            } else if rpc_budget == 0 {
+                break;
+            }
+        }
+        if session.cursor >= session.order.len() {
+            session.state = SearchState::Complete;
+        }
+    }
+
     pub fn displayed_block_text(&self, root: RuntimeNodeId, id: ContentBlockId) -> Option<String> {
         self.catalog
             .get(root)
             .and_then(|model| model.block(id))
             .map(|block| reader_text(block, &self.cache))
     }
+}
+
+fn declared_text_capabilities(
+    semantic: &SemanticCache,
+) -> HashMap<RuntimeNodeId, TextCapabilityStatus> {
+    semantic
+        .nodes()
+        .filter(|node| {
+            node.text_input_kind != Some(TextInputKind::Password)
+                && node
+                    .debug
+                    .interfaces
+                    .iter()
+                    .any(|interface| interface == "Text")
+        })
+        .map(|node| (node.runtime_id, TextCapabilityStatus::Declared))
+        .collect()
+}
+
+fn analyze_tables(semantic: &SemanticCache) -> Vec<super::SemanticTableModel> {
+    semantic
+        .nodes()
+        .filter(|node| node.role == crate::semantic::SemanticRole::Table)
+        .filter_map(|node| super::SemanticTableModel::analyze(semantic, node.runtime_id))
+        .collect()
 }
 
 fn reader_text(block: &super::ContentBlock, cache: &ContentCache) -> String {
@@ -363,5 +671,40 @@ mod tests {
             1
         );
         assert_eq!(runtime.cache.metrics().ranges, 0);
+        let block_id = runtime
+            .catalog()
+            .models()
+            .next()
+            .unwrap()
+            .blocks
+            .blocks_for_source(source_id)[0];
+        runtime.rebuild_semantics(&semantic);
+        assert_eq!(runtime.patch_metrics().local_patches, 1);
+        assert_eq!(runtime.patch_metrics().catalog_rebuilds, 0);
+        assert_eq!(
+            runtime
+                .catalog()
+                .models()
+                .next()
+                .unwrap()
+                .blocks
+                .blocks_for_source(source_id),
+            &[block_id]
+        );
+    }
+
+    #[test]
+    fn text_capability_trust_is_fail_closed_and_quarantine_does_not_retry() {
+        assert_eq!(
+            TextCapabilityStatus::Declared.after_probe(TextProbeOutcome::Verified),
+            TextCapabilityStatus::Verified
+        );
+        let quarantined = TextCapabilityStatus::Declared.after_probe(TextProbeOutcome::Failed);
+        assert_eq!(quarantined, TextCapabilityStatus::Quarantined);
+        assert!(!quarantined.should_probe());
+        assert_eq!(
+            quarantined.after_probe(TextProbeOutcome::Verified),
+            TextCapabilityStatus::Quarantined
+        );
     }
 }

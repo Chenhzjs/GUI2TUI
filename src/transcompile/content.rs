@@ -46,7 +46,7 @@ pub fn audit_content_reachability(
         .filter_map(|element| element.binding.as_ref().map(|binding| binding.runtime_id))
         .collect();
     let mut audit = ContentReachabilityAudit::default();
-    for model in content.models() {
+    for model in content.visible_models() {
         let reader_reachable = reader_roots.contains(&model.root);
         for (kind, ids) in [
             ("heading", &model.navigation.headings),
@@ -105,7 +105,7 @@ pub fn compress_content_scene(
     content: &ContentCatalog,
 ) -> ContentCompressionMetrics {
     let before_elements = scene.elements.len();
-    if content.models().next().is_none() {
+    if content.visible_models().next().is_none() {
         return ContentCompressionMetrics {
             before_elements,
             after_elements: before_elements,
@@ -120,7 +120,7 @@ pub fn compress_content_scene(
         .unwrap_or(0)
         .saturating_add(1);
     let mut summaries = Vec::new();
-    for model in content.models() {
+    for model in content.visible_models() {
         let Some(root) = cache.node(model.root) else {
             continue;
         };
@@ -156,7 +156,7 @@ pub fn compress_content_scene(
     let mut elements = Vec::with_capacity(scene.elements.len() + summaries.len());
     elements.extend(summaries);
     let content_roots: std::collections::HashSet<RuntimeNodeId> =
-        content.models().map(|model| model.root).collect();
+        content.visible_models().map(|model| model.root).collect();
     elements.extend(
         scene
             .elements
@@ -197,7 +197,7 @@ pub fn compress_content_scene(
 }
 
 fn summaries_len(content: &ContentCatalog) -> usize {
-    content.models().count()
+    content.visible_models().count()
 }
 
 #[cfg(test)]

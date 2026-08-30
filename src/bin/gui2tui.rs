@@ -121,6 +121,8 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     futures_lite::pin!(terminal_events);
     let mut liveness = tokio::time::interval(Duration::from_millis(500));
     liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut content_tick = tokio::time::interval(Duration::from_millis(25));
+    content_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         terminal.draw(|frame| app.render(frame))?;
         tokio::select! {
@@ -149,6 +151,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             },
             _ = liveness.tick() => {
                 app.check_application_available().await;
+            },
+            _ = content_tick.tick() => {
+                app.progress_content_operations().await;
             }
         }
     }

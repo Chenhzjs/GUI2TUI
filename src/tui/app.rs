@@ -11,7 +11,10 @@ use crate::{
         AtspiBackend, BackendError, BootstrapStrategy, EventDelivery, EventSubscription,
         InspectOptions,
     },
-    content::{ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget},
+    content::{
+        ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget,
+        SearchBudget, SearchState,
+    },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::{
         BackendLocator, LARGE_TREE_RELATION_CANDIDATE_LIMIT, RelationPriorityContext,
@@ -71,6 +74,7 @@ pub struct TuiApplication {
     choice_overlay: Option<ChoiceOverlay>,
     content: ContentRuntime,
     content_view: Option<ContentViewState>,
+    content_return: Option<ContentViewState>,
 }
 
 #[derive(Clone, Debug)]
@@ -100,18 +104,34 @@ impl TuiApplication {
             .await?;
         // Registration/cache-population signals precede the bootstrap boundary;
         // any subsequent event is buffered and replayed.
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        // Registration is complete when subscribe_events returns. Yield once
+        // so already-ready cache residency signals can enter the bounded
+        // queue, but do not impose a fixed startup delay; later residency
+        // echoes are replayed and filtered against the bootstrap baseline.
+        tokio::task::yield_now().await;
         while event_subscription.try_recv().is_ok() {}
         let _ = event_subscription.take_resync();
         let bootstrap = backend
             .bootstrap_application(&application, inspect_options, bootstrap_strategy)
             .await?;
+        let bootstrap_elapsed = started.elapsed();
         let mut cache = SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let arena_elapsed = started.elapsed();
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
+        let relations_elapsed = started.elapsed();
         let content = ContentRuntime::new(&cache, ContentCacheBudget::default());
+        let content_elapsed = started.elapsed();
         let (scene, scopes, commands, choices) =
             build_contextual_view(&cache, presentation_mode, content.catalog())?;
+        tracing::debug!(
+            bootstrap_ms = bootstrap_elapsed.as_secs_f64() * 1000.0,
+            arena_ms = (arena_elapsed - bootstrap_elapsed).as_secs_f64() * 1000.0,
+            relations_ms = (relations_elapsed - arena_elapsed).as_secs_f64() * 1000.0,
+            content_ms = (content_elapsed - relations_elapsed).as_secs_f64() * 1000.0,
+            scene_ms = (started.elapsed() - content_elapsed).as_secs_f64() * 1000.0,
+            "initial semantic TUI pipeline breakdown"
+        );
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
@@ -147,6 +167,7 @@ impl TuiApplication {
             choice_overlay: None,
             content,
             content_view: None,
+            content_return: None,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -205,6 +226,55 @@ impl TuiApplication {
                     )
                 })
                 .collect();
+            let structure_lines = if let Some(table) = &view.table {
+                let mut lines = Vec::new();
+                if table.completeness != crate::semantic::CollectionCompleteness::Complete {
+                    lines.push("Partial table view — only realized cells are shown.".to_owned());
+                }
+                for cell in &table.cells {
+                    let marker = if table.position.cell == Some(cell.source) {
+                        ">"
+                    } else {
+                        " "
+                    };
+                    lines.push(format!(
+                        "{marker} r{} c{}  {}",
+                        cell.row + 1,
+                        cell.column + 1,
+                        cell.label
+                    ));
+                }
+                lines
+            } else if let Some(collection) = &view.virtual_collection {
+                let mut lines = Vec::new();
+                if collection.completeness != crate::semantic::CollectionCompleteness::Complete {
+                    lines.push(
+                        "Partial collection — only currently exposed items are available."
+                            .to_owned(),
+                    );
+                }
+                lines.extend(collection.realized_items.iter().map(|id| {
+                    let marker = if collection.current == Some(*id) {
+                        ">"
+                    } else {
+                        " "
+                    };
+                    let selected = if collection.selected_items.contains(id) {
+                        "*"
+                    } else {
+                        " "
+                    };
+                    let label = self
+                        .cache
+                        .node(*id)
+                        .and_then(|node| node.name.as_deref())
+                        .unwrap_or("[unnamed item]");
+                    format!("{marker} {selected} {label}")
+                }));
+                lines
+            } else {
+                Vec::new()
+            };
             Some(ContentRender {
                 title: model
                     .metadata
@@ -224,6 +294,11 @@ impl TuiApplication {
                 results: view.results.clone(),
                 result_selected: view.result_selected,
                 partial: model.completeness != ContentCompleteness::Complete,
+                full_search: view
+                    .full_search
+                    .as_ref()
+                    .map(|search| (search.state.clone(), search.progress)),
+                structure_lines,
             })
         });
         let regions = render(
@@ -302,6 +377,14 @@ impl TuiApplication {
             let command = content_view.handle_key(key);
             self.content_view = Some(content_view);
             self.handle_content_view_command(command).await;
+            return false;
+        }
+        if key.code == crossterm::event::KeyCode::Esc
+            && let Some(view) = self.content_return.take()
+        {
+            self.content_view = Some(view);
+            self.status = "Returned to Reader semantic position".to_owned();
+            self.refresh_content_view().await;
             return false;
         }
         if let Some(mut overlay) = self.choice_overlay.take() {
@@ -577,6 +660,10 @@ impl TuiApplication {
             }
             ContentViewCommand::SearchChanged => {
                 if let Some(view) = self.content_view.as_mut() {
+                    if let Some(search) = view.full_search.as_mut() {
+                        search.cancel();
+                    }
+                    view.full_search = None;
                     view.results = self.content.search(view.root, &view.query);
                     view.result_selected = 0;
                 }
@@ -596,6 +683,146 @@ impl TuiApplication {
                 }
                 self.refresh_content_view().await;
             }
+            ContentViewCommand::StartFullSearch => {
+                if let Some(view) = self.content_view.as_mut() {
+                    if view.query.trim().is_empty() {
+                        self.status = "Enter a query before starting full search".to_owned();
+                    } else if let Some(search) = self
+                        .content
+                        .begin_progressive_search(view.root, view.query.clone())
+                    {
+                        view.results.clear();
+                        view.result_selected = 0;
+                        view.full_search = Some(search);
+                        self.status =
+                            "Full document search started; Esc cancels immediately between bounded RPCs"
+                                .to_owned();
+                    }
+                }
+            }
+            ContentViewCommand::CancelFullSearch => {
+                if let Some(search) = self
+                    .content_view
+                    .as_mut()
+                    .and_then(|view| view.full_search.as_mut())
+                {
+                    search.cancel();
+                    let cache = self.content.cache_metrics();
+                    self.status = format!(
+                        "Full search cancelled after {} blocks and {} text RPCs; cache={} bytes/{} ranges",
+                        search.progress.scanned_blocks,
+                        search.progress.text_rpcs,
+                        cache.bytes,
+                        cache.ranges,
+                    );
+                }
+            }
+            ContentViewCommand::OpenStructure => {
+                let Some((root, position)) = self
+                    .content_view
+                    .as_ref()
+                    .map(|view| (view.root, view.position))
+                else {
+                    return;
+                };
+                let source = self
+                    .content
+                    .model(root)
+                    .and_then(|model| model.block(position))
+                    .map(|block| block.source);
+                let Some(source) = source else { return };
+                let task_source = self
+                    .content
+                    .model(root)
+                    .and_then(|model| model.block(position))
+                    .and_then(|block| block.interactive_sources.first().copied())
+                    .or_else(|| {
+                        self.content
+                            .model(root)
+                            .and_then(|model| model.block(position))
+                            .filter(|block| {
+                                matches!(block.kind, crate::content::ContentBlockKind::Link)
+                            })
+                            .map(|block| block.source)
+                    });
+                if let Some(task_source) = task_source
+                    && let Some(scene_id) = self.scene.scene_id_for_runtime(task_source)
+                {
+                    self.focus.set(&self.scene, scene_id);
+                    self.content_return = self.content_view.take();
+                    self.status =
+                        "Reader task focused; Esc returns to the saved content position".to_owned();
+                    return;
+                }
+                if let Some(table) = self.content.table(source).cloned() {
+                    if let Some(view) = self.content_view.as_mut() {
+                        view.table = Some(table);
+                        view.virtual_collection = None;
+                        view.mode = ContentViewMode::Table;
+                    }
+                    self.status = "Table view uses semantic row/column positions".to_owned();
+                } else if let Some(collection) = self
+                    .content
+                    .virtual_collections()
+                    .iter()
+                    .find(|collection| collection.owner == source)
+                    .cloned()
+                {
+                    if let Some(view) = self.content_view.as_mut() {
+                        view.virtual_collection = Some(collection);
+                        view.table = None;
+                        view.mode = ContentViewMode::VirtualCollection;
+                    }
+                    self.status =
+                        "Collection view is limited to currently realized accessibility items"
+                            .to_owned();
+                } else {
+                    self.status =
+                        "Current content block has no structured navigation task".to_owned();
+                }
+            }
+            ContentViewCommand::StructureMove { rows, columns } => {
+                if let Some(view) = self.content_view.as_mut() {
+                    if let Some(table) = view.table.as_mut() {
+                        table.move_by(rows, columns);
+                    } else if let Some(collection) = view.virtual_collection.as_mut() {
+                        collection.move_realized(rows);
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn progress_content_operations(&mut self) {
+        let Some(mut search) = self
+            .content_view
+            .as_mut()
+            .and_then(|view| view.full_search.take())
+        else {
+            return;
+        };
+        if search.state == SearchState::Running {
+            self.content
+                .progressive_search_step(
+                    &self.backend,
+                    &self.cache,
+                    &mut search,
+                    SearchBudget::default(),
+                )
+                .await;
+        }
+        if let Some(view) = self.content_view.as_mut() {
+            view.results = search.results.clone();
+            if search.state == SearchState::Complete {
+                self.status = format!(
+                    "Full search complete — {} blocks, {} matches, {} text RPCs, cache={} bytes",
+                    search.progress.scanned_blocks,
+                    search.results.len(),
+                    search.progress.text_rpcs,
+                    self.content.cache().metrics().bytes
+                );
+            }
+            view.full_search = Some(search);
         }
     }
 
@@ -1409,6 +1636,26 @@ impl TuiApplication {
             })
         {
             session.mark_external_change();
+        }
+        if let Some(search) = self
+            .content_view
+            .as_mut()
+            .and_then(|view| view.full_search.as_mut())
+        {
+            for event in &events {
+                if let Some(source) = self.cache.runtime_id(event.source()) {
+                    search.invalidate_source(source);
+                    if source == search.root
+                        && matches!(
+                            event,
+                            NormalizedEvent::ChildrenChanged { .. }
+                                | NormalizedEvent::WindowDestroyed { .. }
+                        )
+                    {
+                        search.cancel();
+                    }
+                }
+            }
         }
         for event in &events {
             self.content.invalidate_event(&self.cache, event);

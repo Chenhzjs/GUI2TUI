@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    content::{ContentBlockKind, ContentSearchResult, ReaderBlock},
+    content::{ContentBlockKind, ContentSearchResult, ReaderBlock, SearchProgress, SearchState},
     transcompile::ChoiceOption,
     transcompile::{SceneElement, SceneElementId, SceneElementKind, TuiScene},
     tui::palette::PaletteEntry,
@@ -55,6 +55,8 @@ pub struct ContentRender {
     pub results: Vec<ContentSearchResult>,
     pub result_selected: usize,
     pub partial: bool,
+    pub full_search: Option<(SearchState, SearchProgress)>,
+    pub structure_lines: Vec<String>,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
@@ -147,6 +149,19 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
         }
         ContentViewMode::Search => {
             let mut lines = vec![format!("> {}", content.query)];
+            if let Some((state, progress)) = &content.full_search {
+                let scanned = progress.total_blocks.map_or_else(
+                    || format!("{} blocks scanned", progress.scanned_blocks),
+                    |total| format!("{} / {} blocks scanned", progress.scanned_blocks, total),
+                );
+                lines.push(format!(
+                    "Full search: {:?} — {} — {} matches — {} text RPCs",
+                    state,
+                    scanned,
+                    content.results.len(),
+                    progress.text_rpcs
+                ));
+            }
             if content.results.is_empty() {
                 lines.push("No matches in indexed labels or loaded text.".to_owned());
             } else {
@@ -165,9 +180,19 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
             (
                 format!(" Content search — {} ", content.title),
                 lines,
-                "Type Search | ↑/↓ Navigate | Enter Read | Esc Reader",
+                "Type Search | Ctrl-F Full Search | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader",
             )
         }
+        ContentViewMode::VirtualCollection => (
+            format!(" Realized collection — {} ", content.title),
+            content.structure_lines,
+            "↑/↓ Navigate realized items | Esc Reader",
+        ),
+        ContentViewMode::Table => (
+            format!(" Table — {} ", content.title),
+            content.structure_lines,
+            "↑/↓/←/→ Navigate semantic cells | Esc Reader",
+        ),
     };
     let completeness = if content.partial { " — partial" } else { "" };
     let block = Block::default()

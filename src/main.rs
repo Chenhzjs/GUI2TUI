@@ -159,6 +159,10 @@ struct Cli {
     /// Print progressively realized List/Tree/Table models.
     #[arg(long, requires = "app")]
     dump_virtual_collections: bool,
+
+    /// Probe generic AT-SPI Table metadata and sample realized cells.
+    #[arg(long, requires = "app")]
+    probe_tables: bool,
 }
 
 #[tokio::main]
@@ -375,6 +379,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.dump_outline
         || cli.probe_document
         || cli.dump_virtual_collections
+        || cli.probe_tables
     {
         let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
@@ -422,6 +427,23 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                 "{}",
                 gui2tui::content::format_virtual_collections(&cache, &models)
             );
+        }
+        if cli.probe_tables {
+            let probes = backend.probe_tables(&cache).await;
+            if probes.is_empty() {
+                println!("Table interface nodes: 0");
+            }
+            for probe in probes {
+                println!(
+                    "Table locator={} rows={:?} columns={:?} sampled_cells={} duration={:.3} ms error={:?}",
+                    probe.source,
+                    probe.rows,
+                    probe.columns,
+                    probe.sampled_cells,
+                    probe.duration.as_secs_f64() * 1000.0,
+                    probe.error,
+                );
+            }
         }
         let only_content = !cli.dump_regions
             && !cli.dump_scene

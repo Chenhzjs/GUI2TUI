@@ -11,6 +11,7 @@ pub struct VirtualCollectionModel {
     pub active_descendant: Option<RuntimeNodeId>,
     pub selected_items: Vec<RuntimeNodeId>,
     pub known_total: Option<usize>,
+    pub current: Option<RuntimeNodeId>,
 }
 
 impl VirtualCollectionModel {
@@ -23,7 +24,7 @@ impl VirtualCollectionModel {
             return None;
         }
         let realized_items = node.children.clone();
-        let selected_items = realized_items
+        let selected_items: Vec<RuntimeNodeId> = realized_items
             .iter()
             .filter(|id| {
                 cache.node(**id).is_some_and(|child| {
@@ -33,6 +34,7 @@ impl VirtualCollectionModel {
             })
             .copied()
             .collect();
+        let current = active_or_selected(None, &selected_items, &realized_items);
         Some(Self {
             owner,
             completeness: collection_completeness(node),
@@ -42,6 +44,7 @@ impl VirtualCollectionModel {
             // AT-SPI child count is a realized-object count for managed
             // descendants and is not a generic logical-total contract.
             known_total: None,
+            current,
         })
     }
 
@@ -52,6 +55,11 @@ impl VirtualCollectionModel {
         {
             self.realized_items.push(id);
         }
+        self.current = active_or_selected(
+            self.active_descendant,
+            &self.selected_items,
+            &self.realized_items,
+        );
     }
 
     pub fn rebuild_realized(&mut self, cache: &SemanticCache) {
@@ -61,6 +69,59 @@ impl VirtualCollectionModel {
             self.apply_active_descendant(active.filter(|id| cache.node(*id).is_some()));
         }
     }
+
+    pub fn move_realized(&mut self, delta: isize) {
+        if self.realized_items.is_empty() {
+            self.current = None;
+            return;
+        }
+        let current = self
+            .current
+            .and_then(|id| {
+                self.realized_items
+                    .iter()
+                    .position(|candidate| *candidate == id)
+            })
+            .unwrap_or(0);
+        let next = current
+            .saturating_add_signed(delta)
+            .min(self.realized_items.len() - 1);
+        self.current = self.realized_items.get(next).copied();
+    }
+
+    pub fn remove_realized(&mut self, id: RuntimeNodeId) {
+        let old_index = self
+            .realized_items
+            .iter()
+            .position(|candidate| *candidate == id)
+            .unwrap_or(0);
+        self.realized_items.retain(|candidate| *candidate != id);
+        self.selected_items.retain(|candidate| *candidate != id);
+        if self.active_descendant == Some(id) {
+            self.active_descendant = None;
+        }
+        self.current = active_or_selected(
+            self.active_descendant,
+            &self.selected_items,
+            &self.realized_items,
+        )
+        .or_else(|| {
+            self.realized_items
+                .get(old_index.min(self.realized_items.len().saturating_sub(1)))
+                .copied()
+        });
+    }
+}
+
+fn active_or_selected(
+    active: Option<RuntimeNodeId>,
+    selected: &[RuntimeNodeId],
+    realized: &[RuntimeNodeId],
+) -> Option<RuntimeNodeId> {
+    active
+        .filter(|id| realized.contains(id))
+        .or_else(|| selected.iter().find(|id| realized.contains(id)).copied())
+        .or_else(|| realized.first().copied())
 }
 
 pub fn analyze_virtual_collections(cache: &SemanticCache) -> Vec<VirtualCollectionModel> {
@@ -167,6 +228,32 @@ mod tests {
         model.apply_active_descendant(Some(active));
         assert_eq!(model.active_descendant, Some(active));
         assert!(model.realized_items.contains(&active));
+        assert_eq!(model.known_total, None);
+    }
+
+    #[test]
+    fn realized_navigation_survives_current_item_removal_without_active_descendant() {
+        let mut list = node(1, SemanticRole::List, "Results");
+        list.states
+            .push(SemanticState::Other("manages-descendants".to_owned()));
+        list.children.push(node(2, SemanticRole::ListItem, "A"));
+        list.children.push(node(3, SemanticRole::ListItem, "B"));
+        let cache = SemanticCache::from_snapshot(list).unwrap();
+        let a = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("A"))
+            .unwrap()
+            .runtime_id;
+        let b = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("B"))
+            .unwrap()
+            .runtime_id;
+        let mut model = VirtualCollectionModel::analyze(&cache, cache.root_id()).unwrap();
+        model.move_realized(1);
+        assert_eq!(model.current, Some(b));
+        model.remove_realized(b);
+        assert_eq!(model.current, Some(a));
         assert_eq!(model.known_total, None);
     }
 }
