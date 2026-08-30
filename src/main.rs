@@ -209,8 +209,6 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<(), BackendError> {
-    let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
-
     if cli.modality_capabilities {
         println!("resolution=reference-first,portable-artifact,live-visual-fallback");
         println!("payload_in_semantic_cache=false");
@@ -219,6 +217,8 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         println!("continuous_streaming=false");
         return Ok(());
     }
+
+    let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
 
     if let Some(node_id) = cli.actions {
         let actions = backend.actions(&node_id).await?;
