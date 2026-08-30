@@ -42,7 +42,7 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 | Command hierarchy/search | PASS | PASS | anonymous actions remain excluded | anonymous actions remain excluded |
 | Cache.GetItems bootstrap | PASS when complete; Auto detects partial cache | LEGACY SIGNATURE, EMPTY; Auto walk fallback | PASS, modern, 5,158 items | PARTIAL: modern, 217 items / 27.048 ms; incomplete record triggers walk fallback |
 | Bounded event overflow recovery | NOT TESTED live flood | NOT TESTED live flood | PASS: capacity 4, 197 dropped, one resync | NOT TESTED |
-| Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero | PARTIAL: 227 Collection nodes; root queries returned zero |
+| Collection.GetMatches probe | no Collection in fixture cache | no Collection in fixture cache | PARTIAL: advertised broadly, root queries returned zero | PARTIAL: 248 Collection nodes in the latest probe; root queries returned zero |
 | Semantic content model | PASS: read-only multiline TextView without Document role | PARTIAL: model detected; Qt 6.4 crashed serving Text read | PASS: 76-block fixture | PASS: 52-block fixture |
 | Reader | PASS: 1 block / 170 bytes | FAILED: fixture process segfaulted on Text query | PASS: 18-block viewport | PASS: 18-block viewport |
 | Outline | N/A: no headings in fixture | N/A | PASS: 4 headings | PASS: 4 headings |
