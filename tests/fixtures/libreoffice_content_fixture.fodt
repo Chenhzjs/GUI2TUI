@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+ <office:body>
+  <office:text>
+   <text:h text:outline-level="1">GUI2TUI Semantic Content</text:h>
+   <text:p>This fixture validates terminal-native document reading through AT-SPI only.</text:p>
+   <text:h text:outline-level="2">Architecture</text:h>
+   <text:p>The semantic graph feeds a content analyzer, outline, reader, and bounded search cache.</text:p>
+   <text:list>
+    <text:list-item><text:p>Controls remain task-oriented.</text:p></text:list-item>
+    <text:list-item><text:p>Paragraphs are progressively materialized.</text:p></text:list-item>
+    <text:list-item><text:p>Graphical coordinates are never the primary layout.</text:p></text:list-item>
+   </text:list>
+   <text:p><text:a xlink:href="https://example.invalid/gui2tui">Semantic reference</text:a></text:p>
+   <text:h text:outline-level="2">Evaluation</text:h>
+   <text:p>Reader navigation stores content block identity, so terminal reflow does not lose position.</text:p>
+   <table:table table:name="Results">
+    <table:table-row><table:table-cell><text:p>Application</text:p></table:table-cell><table:table-cell><text:p>Result</text:p></table:table-cell></table:table-row>
+    <table:table-row><table:table-cell><text:p>Writer</text:p></table:table-cell><table:table-cell><text:p>Probe</text:p></table:table-cell></table:table-row>
+   </table:table>
+   <text:h text:outline-level="2">Conclusion</text:h>
+   <text:p>GUI semantics become a task plus content interface in the terminal.</text:p>
+  </office:text>
+ </office:body>
+</office:document>

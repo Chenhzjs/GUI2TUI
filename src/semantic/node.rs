@@ -112,6 +112,17 @@ pub enum SemanticRole {
     RadioButton,
     Text,
     TextInput,
+    Document,
+    Heading,
+    Paragraph,
+    Link,
+    Image,
+    Quote,
+    Landmark,
+    Form,
+    Comment,
+    Audio,
+    Video,
     ComboBox,
     MenuBar,
     Menu,
@@ -153,15 +164,32 @@ impl From<Role> for SemanticRole {
             | Role::ScrollPane
             | Role::Viewport
             | Role::Grouping
-            | Role::Form
-            | Role::Section => Self::Container,
-            Role::Label | Role::Static | Role::Caption | Role::Heading => Self::Label,
+            | Role::Section
+            | Role::Article => Self::Container,
+            Role::Form => Self::Form,
+            Role::Label | Role::Static | Role::Caption => Self::Label,
             Role::Button | Role::PushButtonMenu => Self::Button,
             Role::ToggleButton => Self::ToggleButton,
             Role::CheckBox | Role::CheckMenuItem => Self::CheckBox,
             Role::RadioButton | Role::RadioMenuItem => Self::RadioButton,
-            Role::Text | Role::Paragraph | Role::Terminal => Self::Text,
+            Role::Text | Role::Terminal => Self::Text,
+            Role::Paragraph => Self::Paragraph,
             Role::Entry | Role::PasswordText | Role::DateEditor | Role::Editbar => Self::TextInput,
+            Role::DocumentFrame
+            | Role::DocumentSpreadsheet
+            | Role::DocumentPresentation
+            | Role::DocumentText
+            | Role::DocumentWeb
+            | Role::DocumentEmail
+            | Role::HTMLContainer => Self::Document,
+            Role::Heading | Role::Header => Self::Heading,
+            Role::Link => Self::Link,
+            Role::Image | Role::ImageMap | Role::Icon => Self::Image,
+            Role::BlockQuote => Self::Quote,
+            Role::Landmark => Self::Landmark,
+            Role::Comment | Role::Footnote => Self::Comment,
+            Role::Audio => Self::Audio,
+            Role::Video => Self::Video,
             Role::ComboBox => Self::ComboBox,
             Role::MenuBar => Self::MenuBar,
             Role::Menu | Role::PopupMenu => Self::Menu,
@@ -207,6 +235,17 @@ impl fmt::Display for SemanticRole {
             Self::RadioButton => f.write_str("RadioButton"),
             Self::Text => f.write_str("Text"),
             Self::TextInput => f.write_str("TextInput"),
+            Self::Document => f.write_str("Document"),
+            Self::Heading => f.write_str("Heading"),
+            Self::Paragraph => f.write_str("Paragraph"),
+            Self::Link => f.write_str("Link"),
+            Self::Image => f.write_str("Image"),
+            Self::Quote => f.write_str("Quote"),
+            Self::Landmark => f.write_str("Landmark"),
+            Self::Form => f.write_str("Form"),
+            Self::Comment => f.write_str("Comment"),
+            Self::Audio => f.write_str("Audio"),
+            Self::Video => f.write_str("Video"),
             Self::ComboBox => f.write_str("ComboBox"),
             Self::MenuBar => f.write_str("MenuBar"),
             Self::Menu => f.write_str("Menu"),
@@ -412,10 +451,12 @@ mod tests {
             SemanticRole::from_atspi(Role::Text, false),
             SemanticRole::Text
         );
+        assert_eq!(SemanticRole::from(Role::Image), SemanticRole::Image);
         assert_eq!(
-            SemanticRole::from(Role::Image),
-            SemanticRole::Unknown("image".to_owned())
+            SemanticRole::from(Role::DocumentWeb),
+            SemanticRole::Document
         );
+        assert_eq!(SemanticRole::from(Role::Heading), SemanticRole::Heading);
     }
 
     #[test]

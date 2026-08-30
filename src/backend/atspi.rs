@@ -10,12 +10,13 @@ use std::{
 };
 
 use atspi::{
-    AccessibilityConnection, CoordType, Interface, MatchType, ObjectMatchRule, ObjectRef,
-    ObjectRefOwned, Role, SortOrder, State,
+    AccessibilityConnection, CoordType, Granularity, Interface, MatchType, ObjectMatchRule,
+    ObjectRef, ObjectRefOwned, Role, SortOrder, State,
     events::{CacheEvents, Event, ObjectEvents, WindowEvents},
     proxy::{
         accessible::ObjectRefExt, action::ActionProxy, collection::CollectionProxy,
-        component::ComponentProxy, proxy_ext::ProxyExt, text::TextProxy, value::ValueProxy,
+        component::ComponentProxy, document::DocumentProxy, hypertext::HypertextProxy,
+        proxy_ext::ProxyExt, text::TextProxy, value::ValueProxy,
     },
 };
 use futures_lite::StreamExt;
@@ -135,6 +136,16 @@ pub enum BackendError {
     TextEditUnsupported(String),
     #[error("password editing is disabled by GUI2TUI for AT-SPI object {0}")]
     PasswordEditDisabled(String),
+    #[error("password/secret content reading is disabled by GUI2TUI for AT-SPI object {0}")]
+    SecretContentDisabled(String),
+    #[error("AT-SPI object {0} does not expose readable Text content")]
+    ContentTextUnsupported(String),
+    #[error("AT-SPI text range did not advance for {node_id}: {start}..{end}")]
+    NonAdvancingTextRange {
+        node_id: String,
+        start: i32,
+        end: i32,
+    },
     #[error("application rejected text update for AT-SPI object {0}")]
     TextUpdateRejected(String),
     #[error(
@@ -218,6 +229,27 @@ pub struct CollectionProbe {
     pub collection_nodes: usize,
     pub source: Option<BackendLocator>,
     pub queries: Vec<CollectionQueryProbe>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DocumentProbe {
+    pub locator: Option<BackendLocator>,
+    pub document_interface: bool,
+    pub text_interface: bool,
+    pub hypertext_interface: bool,
+    pub locale: Option<String>,
+    pub current_page: Option<i32>,
+    pub page_count: Option<i32>,
+    pub attributes: std::collections::HashMap<String, String>,
+    pub character_count: Option<i32>,
+    pub hyperlink_count: Option<i32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextRangeRead {
+    pub start: i32,
+    pub end: i32,
+    pub text: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -768,6 +800,241 @@ impl AtspiBackend {
             text.get_text(0, count.max(0)),
         )
         .await
+    }
+
+    /// Read document metadata without making it a tree-membership or toolkit contract.
+    pub async fn probe_document(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<DocumentProbe, BackendError> {
+        let (encoded_id, object, interfaces, role) = self.validate_content_object(locator).await?;
+        let mut result = DocumentProbe {
+            locator: Some(locator.clone()),
+            document_interface: interfaces.contains(Interface::Document),
+            text_interface: interfaces.contains(Interface::Text),
+            hypertext_interface: interfaces.contains(Interface::Hypertext),
+            ..Default::default()
+        };
+        if role == Role::PasswordText {
+            return Err(BackendError::SecretContentDisabled(encoded_id));
+        }
+        if interfaces.contains(Interface::Document) {
+            let proxy = DocumentProxy::builder(self.connection.connection())
+                .destination(locator.bus_name())
+                .and_then(|builder| builder.path(locator.object_path()))
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .build()
+                .await
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+            result.locale = dbus_operation(
+                self.operation_timeout,
+                "read Document locale",
+                &encoded_id,
+                proxy.get_locale(),
+            )
+            .await
+            .ok()
+            .and_then(nonempty);
+            result.current_page = dbus_operation(
+                self.operation_timeout,
+                "read Document current page",
+                &encoded_id,
+                proxy.current_page_number(),
+            )
+            .await
+            .ok();
+            result.page_count = dbus_operation(
+                self.operation_timeout,
+                "read Document page count",
+                &encoded_id,
+                proxy.page_count(),
+            )
+            .await
+            .ok();
+            result.attributes = dbus_operation(
+                self.operation_timeout,
+                "read Document attributes",
+                &encoded_id,
+                proxy.get_attributes(),
+            )
+            .await
+            .unwrap_or_default();
+        }
+        if interfaces.contains(Interface::Text) {
+            let proxy = TextProxy::builder(self.connection.connection())
+                .destination(locator.bus_name())
+                .and_then(|builder| builder.path(locator.object_path()))
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .build()
+                .await
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+            result.character_count = dbus_operation(
+                self.operation_timeout,
+                "read content character count",
+                &encoded_id,
+                proxy.character_count(),
+            )
+            .await
+            .ok();
+        }
+        if interfaces.contains(Interface::Hypertext) {
+            let proxy = HypertextProxy::builder(self.connection.connection())
+                .destination(locator.bus_name())
+                .and_then(|builder| builder.path(locator.object_path()))
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .build()
+                .await
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+            result.hyperlink_count = dbus_operation(
+                self.operation_timeout,
+                "read Hypertext link count",
+                &encoded_id,
+                proxy.get_n_links(),
+            )
+            .await
+            .ok();
+        }
+        drop(object);
+        Ok(result)
+    }
+
+    /// Read one already-semantic non-password block without re-segmenting it.
+    pub async fn read_semantic_text_block(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<TextRangeRead, BackendError> {
+        let (encoded_id, _object, interfaces, _) = self.validate_content_object(locator).await?;
+        if !interfaces.contains(Interface::Text) {
+            return Err(BackendError::ContentTextUnsupported(encoded_id));
+        }
+        let proxy = TextProxy::builder(self.connection.connection())
+            .destination(locator.bus_name())
+            .and_then(|builder| builder.path(locator.object_path()))
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+            .build()
+            .await
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let character_count = dbus_operation(
+            self.operation_timeout,
+            "read semantic block character count",
+            &encoded_id,
+            proxy.character_count(),
+        )
+        .await?
+        .max(0);
+        let text = dbus_operation(
+            self.operation_timeout,
+            "read semantic block text",
+            &encoded_id,
+            proxy.get_text(0, character_count),
+        )
+        .await?;
+        Ok(TextRangeRead {
+            start: 0,
+            end: character_count,
+            text,
+        })
+    }
+
+    /// Progressively read paragraph ranges from one non-password Text object.
+    pub async fn read_content_paragraphs(
+        &self,
+        locator: &BackendLocator,
+        start_offset: i32,
+        max_ranges: usize,
+    ) -> Result<(i32, Vec<TextRangeRead>), BackendError> {
+        let (encoded_id, _object, interfaces, _) = self.validate_content_object(locator).await?;
+        if !interfaces.contains(Interface::Text) {
+            return Err(BackendError::ContentTextUnsupported(encoded_id));
+        }
+        let proxy = TextProxy::builder(self.connection.connection())
+            .destination(locator.bus_name())
+            .and_then(|builder| builder.path(locator.object_path()))
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+            .build()
+            .await
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let character_count = dbus_operation(
+            self.operation_timeout,
+            "read content character count",
+            &encoded_id,
+            proxy.character_count(),
+        )
+        .await?
+        .max(0);
+        let mut offset = start_offset.clamp(0, character_count);
+        let mut ranges = Vec::new();
+        while offset < character_count && ranges.len() < max_ranges {
+            let (text, start, end) = dbus_operation(
+                self.operation_timeout,
+                "read semantic paragraph",
+                &encoded_id,
+                proxy.get_string_at_offset(offset, Granularity::Paragraph),
+            )
+            .await?;
+            if end <= offset {
+                // GTK TextView can advertise paragraph granularity while
+                // returning a non-advancing range. Fall back to a bounded
+                // character chunk; never spin and never fetch an unbounded
+                // whole document.
+                let chunk_end = offset.saturating_add(4096).min(character_count);
+                if chunk_end <= offset {
+                    return Err(BackendError::NonAdvancingTextRange {
+                        node_id: encoded_id,
+                        start,
+                        end,
+                    });
+                }
+                let text = dbus_operation(
+                    self.operation_timeout,
+                    "read bounded content chunk",
+                    &encoded_id,
+                    proxy.get_text(offset, chunk_end),
+                )
+                .await?;
+                ranges.push(TextRangeRead {
+                    start: offset,
+                    end: chunk_end,
+                    text,
+                });
+                offset = chunk_end;
+                continue;
+            }
+            ranges.push(TextRangeRead { start, end, text });
+            offset = end;
+        }
+        Ok((character_count, ranges))
+    }
+
+    async fn validate_content_object(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(String, ObjectRefOwned, atspi::InterfaceSet, Role), BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "validate content role",
+            &encoded_id,
+            proxy.get_role(),
+        )
+        .await?;
+        if role == Role::PasswordText {
+            return Err(BackendError::SecretContentDisabled(encoded_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "read content interfaces",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        drop(proxy);
+        Ok((encoded_id, object, interfaces, role))
     }
 
     /// Atomically replace a plain editable text control through AT-SPI.

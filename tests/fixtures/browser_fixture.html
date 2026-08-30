@@ -6,6 +6,43 @@
 </head>
 <body>
   <h1>GUI2TUI Browser Fixture</h1>
+  <nav aria-label="Fixture navigation">
+    <a href="#architecture">Architecture</a>
+    <a href="#evaluation">Evaluation</a>
+  </nav>
+  <main>
+    <article aria-label="Semantic content article">
+      <h2 id="architecture">Semantic architecture</h2>
+      <p>GUI2TUI turns accessibility semantics into terminal-native tasks and readable content.</p>
+      <p>The reader deliberately reflows paragraphs instead of copying graphical coordinates.</p>
+      <h3>Progressive materialization</h3>
+      <ul>
+        <li>Load the visible semantic viewport.</li>
+        <li>Keep a small look-ahead window.</li>
+        <li>Invalidate only content changed by accessibility events.</li>
+      </ul>
+      <blockquote>Graphical layout is not the semantic contract.</blockquote>
+      <h2 id="evaluation">Evaluation</h2>
+      <p id="dynamic-paragraph">Status: original article paragraph.</p>
+      <a href="https://example.invalid/semantic-reference">Semantic reference</a>
+      <img alt="Architecture diagram with semantic graph and terminal reader"
+           src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2'%3E%3C/svg%3E">
+    </article>
+  </main>
+
+  <section aria-label="Content mutation controls">
+    <button id="replace-paragraph">Replace article paragraph</button>
+    <button id="insert-heading">Insert article heading</button>
+    <button id="remove-paragraph">Remove article paragraph</button>
+  </section>
+
+  <div id="active-list" role="listbox" aria-label="Virtual semantic results"
+       aria-activedescendant="active-alpha" tabindex="0">
+    <div id="active-alpha" role="option" aria-selected="true">Active Alpha</div>
+    <div id="active-beta" role="option">Active Beta</div>
+    <div id="active-gamma" role="option">Active Gamma</div>
+  </div>
+  <button id="advance-active">Advance active descendant</button>
 
   <label>
     Username
@@ -114,6 +151,31 @@
     document.querySelector('#toggle-hidden').onclick = () => {
       const section = document.querySelector('#hidden-section');
       section.hidden = !section.hidden;
+    };
+
+    document.querySelector('#replace-paragraph').onclick = () => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'dynamic-paragraph';
+      paragraph.textContent = 'Status: replaced article paragraph.';
+      document.querySelector('#dynamic-paragraph').replaceWith(paragraph);
+    };
+
+    document.querySelector('#insert-heading').onclick = () => {
+      const heading = document.createElement('h3');
+      heading.textContent = 'Dynamically inserted heading';
+      document.querySelector('article').append(heading);
+    };
+
+    document.querySelector('#remove-paragraph').onclick = () => {
+      document.querySelector('#dynamic-paragraph')?.remove();
+    };
+
+    document.querySelector('#advance-active').onclick = () => {
+      const list = document.querySelector('#active-list');
+      list.setAttribute('aria-activedescendant', 'active-beta');
+      document.querySelector('#active-alpha').setAttribute('aria-selected', 'false');
+      document.querySelector('#active-beta').setAttribute('aria-selected', 'true');
+      list.focus();
     };
   </script>
 </body>

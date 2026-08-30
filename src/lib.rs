@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod content;
 pub mod events;
 pub mod inspect;
 pub mod semantic;

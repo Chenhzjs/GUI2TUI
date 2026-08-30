@@ -134,6 +134,16 @@ class LiveFixture(Gtk.Application):
         item_list.update_property([Gtk.AccessibleProperty.LABEL], ["Demo items"])
         content.append(item_list)
 
+        rich_text = Gtk.TextView()
+        rich_text.set_editable(False)
+        rich_text.get_buffer().set_text(
+            "GTK semantic content first paragraph.\n\n"
+            "Second paragraph is loaded through the generic AT-SPI Text interface.\n\n"
+            "Third paragraph proves that a Document role is not required."
+        )
+        rich_text.update_property([Gtk.AccessibleProperty.LABEL], ["GTK rich text article"])
+        content.append(rich_text)
+
         window.set_child(content)
         window.present()
 
