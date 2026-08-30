@@ -5,6 +5,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::{Duration, Instant},
 };
 
 use sha2::{Digest, Sha256};
@@ -48,6 +49,8 @@ pub enum TransferError {
     TooLarge(u64),
     #[error("artifact transfer was cancelled")]
     Cancelled,
+    #[error("artifact transfer exceeded configured timeout of {0:?}")]
+    Timeout(Duration),
     #[error("artifact length mismatch: expected {expected}, received {actual}")]
     LengthMismatch { expected: u64, actual: u64 },
     #[error("artifact SHA-256 mismatch")]
@@ -60,6 +63,7 @@ pub enum TransferError {
 pub struct ArtifactTransport {
     pub max_size: u64,
     pub chunk_size: usize,
+    pub timeout: Duration,
 }
 
 impl Default for ArtifactTransport {
@@ -67,6 +71,7 @@ impl Default for ArtifactTransport {
         Self {
             max_size: 512 * 1024 * 1024,
             chunk_size: 64 * 1024,
+            timeout: Duration::from_secs(300),
         }
     }
 }
@@ -115,6 +120,7 @@ impl ArtifactTransport {
         cancellation: &CancellationToken,
     ) -> Result<u64, TransferError> {
         let mut output = File::create(partial)?;
+        let started = Instant::now();
         let mut hasher = Sha256::new();
         let mut received = 0_u64;
         let mut buffer = vec![0_u8; self.chunk_size.max(1)];
@@ -122,7 +128,13 @@ impl ArtifactTransport {
             if cancellation.is_cancelled() {
                 return Err(TransferError::Cancelled);
             }
+            if started.elapsed() > self.timeout {
+                return Err(TransferError::Timeout(self.timeout));
+            }
             let count = payload.read(&mut buffer)?;
+            if started.elapsed() > self.timeout {
+                return Err(TransferError::Timeout(self.timeout));
+            }
             if count == 0 {
                 break;
             }
@@ -344,6 +356,36 @@ mod tests {
         ));
         assert!(!broker.artifact_partial_path(&descriptor).exists());
         drop(broker);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cooperative_timeout_removes_partial() {
+        struct SlowReader;
+        impl Read for SlowReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(Duration::from_millis(3));
+                buffer[0] = 1;
+                Ok(1)
+            }
+        }
+        let (mut broker, descriptor, recording, root) = broker_and_descriptor(&[1]);
+        let transport = ArtifactTransport {
+            timeout: Duration::from_millis(1),
+            ..Default::default()
+        };
+        assert!(matches!(
+            transport.transfer(
+                &mut broker,
+                &descriptor,
+                SlowReader,
+                AuthorizationDecision::Once,
+                &CancellationToken::default(),
+            ),
+            Err(TransferError::Timeout(_))
+        ));
+        assert!(!broker.artifact_partial_path(&descriptor).exists());
+        assert!(recording.invocations().is_empty());
         let _ = fs::remove_dir_all(root);
     }
 }

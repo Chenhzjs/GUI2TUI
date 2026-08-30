@@ -29,8 +29,12 @@ output removes URI fragments and redacts the full query.
 `PortableArtifact` is a separate, bounded payload plane. Authorization happens
 before the first payload read or partial file creation. Transfers enforce a
 configurable maximum (512 MiB by default), fixed-size chunks, declared length,
-SHA-256, cancellation and partial-file cleanup. Remote display names are never
+SHA-256, a five-minute cooperative stream timeout, cancellation and partial-file cleanup. Remote display names are never
 used as local filenames.
+
+The current synchronous `Read` transport checks its deadline before and after
+each read. It cannot interrupt a permanently blocked third-party `Read`
+implementation; a future socket adapter must also apply an OS/I/O timeout.
 
 Static visual acquisition, continuous capture, remote desktop, media streaming,
 round-trip editing, directory synchronization, and executable/script handoff
