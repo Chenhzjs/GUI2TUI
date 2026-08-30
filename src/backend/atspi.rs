@@ -15,8 +15,9 @@ use atspi::{
     events::{CacheEvents, Event, ObjectEvents, WindowEvents},
     proxy::{
         accessible::ObjectRefExt, action::ActionProxy, collection::CollectionProxy,
-        component::ComponentProxy, document::DocumentProxy, hypertext::HypertextProxy,
-        proxy_ext::ProxyExt, table::TableProxy, text::TextProxy, value::ValueProxy,
+        component::ComponentProxy, document::DocumentProxy, hyperlink::HyperlinkProxy,
+        hypertext::HypertextProxy, proxy_ext::ProxyExt, table::TableProxy, text::TextProxy,
+        value::ValueProxy,
     },
 };
 use futures_lite::StreamExt;
@@ -253,6 +254,16 @@ pub struct DocumentProbe {
     pub attributes: std::collections::HashMap<String, String>,
     pub character_count: Option<i32>,
     pub hyperlink_count: Option<i32>,
+}
+
+/// Generic accessibility metadata used by the external-modality resolver.
+/// It deliberately contains protocol facts, not application-specific meaning.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModalityMetadataProbe {
+    pub locator: Option<BackendLocator>,
+    pub accessible_attributes: std::collections::HashMap<String, String>,
+    pub document_attributes: std::collections::HashMap<String, String>,
+    pub hyperlink_uris: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1034,6 +1045,86 @@ impl AtspiBackend {
         }
         drop(object);
         Ok(result)
+    }
+
+    /// Read only generic AT-SPI metadata that may carry a resource reference.
+    pub async fn probe_modality_metadata(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<ModalityMetadataProbe, BackendError> {
+        let (encoded_id, object, interfaces, _role) = self.validate_content_object(locator).await?;
+        let accessible = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let accessible_attributes = dbus_operation(
+            self.operation_timeout,
+            "read modality accessible attributes",
+            &encoded_id,
+            accessible.get_attributes(),
+        )
+        .await
+        .unwrap_or_default();
+        drop(accessible);
+
+        let document_attributes = if interfaces.contains(Interface::Document) {
+            let proxy = DocumentProxy::builder(self.connection.connection())
+                .destination(locator.bus_name())
+                .and_then(|builder| builder.path(locator.object_path()))
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .build()
+                .await
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+            dbus_operation(
+                self.operation_timeout,
+                "read modality document attributes",
+                &encoded_id,
+                proxy.get_attributes(),
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+
+        let mut hyperlink_uris = Vec::new();
+        if interfaces.contains(Interface::Hyperlink) {
+            let proxy = HyperlinkProxy::builder(self.connection.connection())
+                .destination(locator.bus_name())
+                .and_then(|builder| builder.path(locator.object_path()))
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .build()
+                .await
+                .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+            let anchors = dbus_operation(
+                self.operation_timeout,
+                "read modality hyperlink anchor count",
+                &encoded_id,
+                proxy.n_anchors(),
+            )
+            .await
+            .unwrap_or(0)
+            .clamp(0, 32);
+            for index in 0..i32::from(anchors) {
+                if let Ok(uri) = dbus_operation(
+                    self.operation_timeout,
+                    "read modality hyperlink URI",
+                    &encoded_id,
+                    proxy.get_uri(index),
+                )
+                .await
+                    && !uri.is_empty()
+                {
+                    hyperlink_uris.push(uri);
+                }
+            }
+        }
+        Ok(ModalityMetadataProbe {
+            locator: Some(locator.clone()),
+            accessible_attributes,
+            document_attributes,
+            hyperlink_uris,
+        })
     }
 
     /// Read one already-semantic non-password block without re-segmenting it.

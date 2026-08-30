@@ -163,6 +163,22 @@ struct Cli {
     /// Probe generic AT-SPI Table metadata and sample realized cells.
     #[arg(long, requires = "app")]
     probe_tables: bool,
+
+    /// Discover and resolve external modality resources from generic AT-SPI metadata.
+    #[arg(long, requires = "app")]
+    dump_modalities: bool,
+
+    /// Resolve one modality owner identified by its backend NODE_ID.
+    #[arg(long, value_name = "NODE_ID", requires = "app")]
+    resolve_modality: Option<String>,
+
+    /// Print the redacted resource reference for one modality owner.
+    #[arg(long, value_name = "NODE_ID", requires = "app")]
+    dump_resource_reference: Option<String>,
+
+    /// Print the server-side modality protocol capabilities (never local executable paths).
+    #[arg(long)]
+    modality_capabilities: bool,
 }
 
 #[tokio::main]
@@ -194,6 +210,15 @@ async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> Result<(), BackendError> {
     let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
+
+    if cli.modality_capabilities {
+        println!("resolution=reference-first,portable-artifact,live-visual-fallback");
+        println!("payload_in_semantic_cache=false");
+        println!("server_executable_selection=false");
+        println!("static_visual_artifact=false");
+        println!("continuous_streaming=false");
+        return Ok(());
+    }
 
     if let Some(node_id) = cli.actions {
         let actions = backend.actions(&node_id).await?;
@@ -380,10 +405,67 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.probe_document
         || cli.dump_virtual_collections
         || cli.probe_tables
+        || cli.dump_modalities
+        || cli.resolve_modality.is_some()
+        || cli.dump_resource_reference.is_some()
     {
         let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
         let content = gui2tui::content::ContentCatalog::analyze(&cache);
+        if cli.dump_modalities
+            || cli.resolve_modality.is_some()
+            || cli.dump_resource_reference.is_some()
+        {
+            let requested = cli
+                .resolve_modality
+                .as_deref()
+                .or(cli.dump_resource_reference.as_deref())
+                .map(gui2tui::semantic::BackendLocator::decode)
+                .transpose()?;
+            let candidates = gui2tui::modality::ModalityResolver::discover(&cache);
+            let mut matched = 0_usize;
+            for candidate in candidates {
+                if requested
+                    .as_ref()
+                    .is_some_and(|locator| locator != &candidate.locator)
+                {
+                    continue;
+                }
+                matched += 1;
+                let mut metadata = Vec::new();
+                for locator in &candidate.evidence_locators {
+                    if let Ok(probe) = backend.probe_modality_metadata(locator).await {
+                        metadata.push(gui2tui::modality::ModalityMetadata {
+                            accessible_attributes: probe.accessible_attributes,
+                            document_attributes: probe.document_attributes,
+                            hyperlink_uris: probe.hyperlink_uris,
+                        });
+                    }
+                }
+                let modality =
+                    gui2tui::modality::ModalityResolver::default().resolve(&candidate, &metadata);
+                if cli.dump_resource_reference.is_some() {
+                    match &modality.resolution {
+                        gui2tui::modality::ModalityResolution::ReferencedResource(resource) => {
+                            println!(
+                                "{} provenance={:?}",
+                                gui2tui::modality::redact_reference(&resource.reference),
+                                resource.provenance
+                            );
+                        }
+                        _ => println!("UNRESOLVED"),
+                    }
+                } else {
+                    println!("{}", gui2tui::modality::format_external_modality(&modality));
+                }
+            }
+            if requested.is_some() && matched == 0 {
+                return Err(BackendError::SemanticCache(
+                    "requested node is not an external modality owner in this application"
+                        .to_owned(),
+                ));
+            }
+        }
         if cli.dump_content {
             for model in content.models() {
                 print!(

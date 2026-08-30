@@ -17,12 +17,18 @@ clap = { version = "4.6", features = ["derive"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
 futures-lite = "2.6.1"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+sha2 = "0.11"
 thiserror = "2.0"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus = "5.19"
+url = "2.5.8"
 
 [[bin]]
 name = "gui2tui"
 path = "src/bin/gui2tui.rs"
+
+[[bin]]
+name = "gui2tui-local"
+path = "src/bin/gui2tui-local.rs"
