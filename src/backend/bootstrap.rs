@@ -274,6 +274,7 @@ fn semantic_capabilities(
         && record.interfaces.contains(atspi::Interface::EditableText)
         && record.interfaces.contains(atspi::Interface::Text)
         && record.states.contains(atspi::State::Editable)
+        && !record.states.contains(atspi::State::MultiLine)
     {
         capabilities.push(SemanticCapability::EditText);
     }
@@ -329,6 +330,24 @@ mod tests {
         assert_eq!(tree.children[0].backend_locator.object_path(), "/a");
         assert_eq!(tree.children[1].backend_locator.object_path(), "/b");
         assert_eq!(stats.orphans_ignored, 0);
+    }
+
+    #[test]
+    fn bulk_multiline_documents_cannot_receive_atomic_edit_capability() {
+        let mut text = record("/text", Some("/root"), Some(0));
+        text.role = Role::Entry;
+        text.interfaces.insert(Interface::Text);
+        text.interfaces.insert(Interface::EditableText);
+        text.states.insert(atspi::State::Editable);
+        assert_eq!(
+            semantic_capabilities(&text, &SemanticRole::TextInput, Some(TextInputKind::Plain)),
+            vec![SemanticCapability::EditText]
+        );
+        text.states.insert(atspi::State::MultiLine);
+        assert!(
+            semantic_capabilities(&text, &SemanticRole::TextInput, Some(TextInputKind::Plain))
+                .is_empty()
+        );
     }
 
     #[test]

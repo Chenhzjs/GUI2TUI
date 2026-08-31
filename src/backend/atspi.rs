@@ -1549,6 +1549,7 @@ impl AtspiBackend {
             || !interfaces.contains(Interface::EditableText)
             || !interfaces.contains(Interface::Text)
             || !states.contains(State::Editable)
+            || states.contains(State::MultiLine)
         {
             return Err(BackendError::TextEditUnsupported(encoded_id));
         }
@@ -2635,6 +2636,8 @@ fn semantic_capabilities(
         && interfaces.contains(Interface::EditableText)
         && interfaces.contains(Interface::Text)
         && states.contains(&SemanticState::Editable)
+        // Atomic single-line editing must not replace an entire document buffer.
+        && !states.contains(&SemanticState::Other("multi-line".to_owned()))
     {
         capabilities.push(SemanticCapability::EditText);
     }
@@ -2881,6 +2884,24 @@ mod tests {
                 &[],
                 SemanticRole::TextInput,
                 Some(TextInputKind::Plain)
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn multiline_editable_document_is_not_atomic_editable() {
+        let mut interfaces = atspi::InterfaceSet::new(Interface::EditableText);
+        interfaces.insert(Interface::Text);
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &[
+                    SemanticState::Editable,
+                    SemanticState::Other("multi-line".to_owned())
+                ],
+                SemanticRole::TextInput,
+                Some(TextInputKind::Plain),
             )
             .is_empty()
         );

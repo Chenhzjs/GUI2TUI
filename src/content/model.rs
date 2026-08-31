@@ -418,8 +418,7 @@ fn is_content_root(node: &CachedSemanticNode) -> bool {
             || (matches!(node.role, SemanticRole::Text | SemanticRole::TextInput)
                 && node.text_input_kind != Some(TextInputKind::Password)
                 && has_interface(node, "Text")
-                && (node.role == SemanticRole::Text
-                    || (has_state(node, "multi-line") && has_state(node, "read-only")))
+                && (node.role == SemanticRole::Text || has_state(node, "multi-line"))
                 && (is_readable_text(node)
                     || node.children.is_empty()
                     || node.name.as_deref().is_some_and(|name| name.len() > 80))))
@@ -625,7 +624,6 @@ fn is_readable_text(node: &CachedSemanticNode) -> bool {
     node.role == SemanticRole::TextInput
         && node.text_input_kind != Some(TextInputKind::Password)
         && has_state(node, "multi-line")
-        && has_state(node, "read-only")
         && has_interface(node, "Text")
 }
 
@@ -925,5 +923,26 @@ mod tests {
         assert_eq!(model.kind, ContentKind::RichText);
         assert!(matches!(model.blocks[0].kind, ContentBlockKind::Text));
         assert!(model.navigation.form_fields.is_empty());
+    }
+
+    #[test]
+    fn editable_multiline_document_is_readable_but_not_a_form_field() {
+        let mut text = node(7, SemanticRole::TextInput, "Document buffer");
+        text.text_input_kind = Some(TextInputKind::Plain);
+        text.states.extend([
+            SemanticState::Editable,
+            SemanticState::Other("multi-line".to_owned()),
+        ]);
+        text.debug.interfaces = vec!["Text".to_owned(), "EditableText".to_owned()];
+        let cache = SemanticCache::from_snapshot(text.clone()).unwrap();
+        let catalog = ContentCatalog::analyze(&cache);
+        let model = catalog.models().next().unwrap();
+        assert_eq!(model.kind, ContentKind::RichText);
+        assert!(matches!(model.blocks[0].kind, ContentBlockKind::Text));
+        assert!(model.navigation.form_fields.is_empty());
+
+        text.text_input_kind = Some(TextInputKind::Password);
+        let cache = SemanticCache::from_snapshot(text).unwrap();
+        assert_eq!(ContentCatalog::analyze(&cache).models().count(), 0);
     }
 }
