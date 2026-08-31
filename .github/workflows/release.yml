@@ -51,6 +51,8 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "VERSION_GATE=PASS version=$version ref=$GITHUB_REF"
+      - name: Test assembly rejection gates
+        run: python3 -m unittest discover -s tests -p test_release_assembly.py
 
   build:
     needs: version

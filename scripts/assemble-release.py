@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import json
 import pathlib
-import re
 import tarfile
 
 parser = argparse.ArgumentParser()
@@ -15,6 +14,9 @@ args = parser.parse_args()
 root = args.directory.resolve()
 artifacts = []
 expected = {"x86_64", "aarch64"}
+expected_archives = {f"gui2tui-{args.version}-linux-{arch}.tar.gz" for arch in expected}
+if {path.name for path in root.glob("*.tar.gz")} != expected_archives:
+    raise SystemExit("assembly gate failed: expected exactly the two native archives")
 for architecture in sorted(expected):
     archive = root / f"gui2tui-{args.version}-linux-{architecture}.tar.gz"
     abi_path = root / f"gui2tui-{args.version}-linux-{architecture}.abi.json"
