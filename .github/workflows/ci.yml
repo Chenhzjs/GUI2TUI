@@ -7,11 +7,14 @@ on:
 jobs:
   rust:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt,clippy
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check all targets
@@ -20,3 +23,5 @@ jobs:
         run: cargo test --all-targets
       - name: Lint all targets
         run: cargo clippy --all-targets -- -D warnings
+      - name: Check patch whitespace
+        run: git diff --check

@@ -1,0 +1,177 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      attest:
+        description: Generate GitHub provenance attestations (required for a validated run)
+        type: boolean
+        default: true
+      publish:
+        description: Publish only when dispatching an existing matching v* tag
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: version
+        name: Validate Cargo and tag version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
+          test -n "$version"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "${GITHUB_REF_NAME#v}" = "$version" || {
+              echo "tag $GITHUB_REF_NAME does not match Cargo.toml $version" >&2
+              exit 1
+            }
+          elif [[ "${{ inputs.publish || false }}" == true ]]; then
+            echo 'publish=true requires workflow_dispatch from an existing matching tag' >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "VERSION_GATE=PASS version=$version ref=$GITHUB_REF"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            architecture: x86_64
+          - runner: ubuntu-22.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm native runner and baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "${{ matrix.architecture }}"
+          . /etc/os-release
+          test "$VERSION_ID" = 22.04
+          ldd --version | head -1
+      - name: Install smoke and ABI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            at-spi2-core binutils dbus-x11 file gir1.2-gtk-4.0 jq \
+            python3-gi python3-pexpect python3-pyte xvfb
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Build native release bundle
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/candidate
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_RUNNER_BASELINE: ${{ matrix.runner }}
+          RELEASE_MAX_GLIBC: '2.35'
+          CARGO_INCREMENTAL: '0'
+        run: ./scripts/package-linux.sh
+      - name: Validate and smoke extracted package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/candidate/gui2tui-${{ needs.version.outputs.version }}-linux-${{ matrix.architecture }}.tar.gz"
+          ./scripts/validate-release.sh "$archive" --smoke | tee "${archive%.tar.gz}.smoke.txt"
+          (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+      - name: Upload native candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.architecture }}
+          path: |
+            ${{ runner.temp }}/candidate/gui2tui-${{ needs.version.outputs.version }}-linux-${{ matrix.architecture }}.tar.gz
+            ${{ runner.temp }}/candidate/gui2tui-${{ needs.version.outputs.version }}-linux-${{ matrix.architecture }}.tar.gz.sha256
+            ${{ runner.temp }}/candidate/gui2tui-${{ needs.version.outputs.version }}-linux-${{ matrix.architecture }}.abi.json
+            ${{ runner.temp }}/candidate/gui2tui-${{ needs.version.outputs.version }}-linux-${{ matrix.architecture }}.smoke.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    needs: [version, build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+      - name: Assemble and verify exactly two architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/assemble-release.py "${RUNNER_TEMP}/release" \
+            --version '${{ needs.version.outputs.version }}' --commit '${{ github.sha }}'
+          (cd "${RUNNER_TEMP}/release" && sha256sum -c SHA256SUMS)
+      - name: Attest final archives and manifest
+        if: ${{ github.event_name == 'push' || inputs.attest }}
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release/*.tar.gz
+            ${{ runner.temp }}/release/SHA256SUMS
+            ${{ runner.temp }}/release/RELEASE-MANIFEST.json
+      - name: Upload assembled release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui2tui-${{ needs.version.outputs.version }}-release-candidate
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [version, assemble]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.publish) }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: gui2tui-${{ needs.version.outputs.version }}-release-candidate
+          path: ${{ runner.temp }}/release
+      - name: Publish complete matching tag only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          test "$GITHUB_REF_NAME" = "v${{ needs.version.outputs.version }}"
+          gh release create "$GITHUB_REF_NAME" "${RUNNER_TEMP}/release/"* \
+            --verify-tag --title "GUI2TUI $GITHUB_REF_NAME" \
+            --notes-file docs/release-notes-v0.1.md

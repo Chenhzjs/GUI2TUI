@@ -50,7 +50,7 @@ descriptions, and keybindings were empty. Explicit low-level
 the status to `Status: activated`. The conservative semantic resolver does not turn anonymous
 index 0 into Activate, so browser TUI activation remains unavailable rather than guessing.
 
-The password sentinel `browser-phase-secret` occurred zero times in:
+The fixture password sentinel occurred zero times in:
 
 - normal inspector output;
 - verbose inspector output;

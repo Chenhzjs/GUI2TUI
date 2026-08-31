@@ -33,6 +33,21 @@ For developers, `scripts/package-linux.sh` builds a native archive with three bi
 licenses, documentation, an example config and a self-contained release smoke test.
 `gui2tui-inspect` remains a diagnostic tool; it is not the primary user interface.
 
+### Binary release pipeline
+
+The release-candidate workflow builds native Linux `x86_64` and `aarch64` tarballs on fixed
+Ubuntu 22.04 runners, measures their actual ELF/GLIBC requirements, runs each extracted package's
+fresh-home smoke, and assembles `SHA256SUMS` plus `RELEASE-MANIFEST.json`. Manual dispatch defaults
+to validation only and never publishes a GitHub Release. Public v0.1.0 release is pending.
+
+```bash
+sha256sum -c SHA256SUMS
+gh attestation verify gui2tui-0.1.0-linux-x86_64.tar.gz --repo Chenhzjs/GUI2TUI
+```
+
+Attestation verifies build provenance, not general software security. See
+[binary release verification](docs/release-pipeline.md).
+
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
 This repository contains the validated inspector, cross-toolkit semantic TUI, container operations,

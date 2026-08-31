@@ -10,17 +10,40 @@ mkdir -p "$output"
 output=$(cd "$output" && pwd)
 cargo build --locked --release --bins
 version=$("$target/release/gui2tui" --version | awk '{print $2}')
-name="gui2tui-${version}-linux-$(uname -m)"
+architecture=$(uname -m)
+case "$architecture" in x86_64|aarch64) ;; *) echo "Unsupported release architecture: $architecture" >&2; exit 1;; esac
+name="gui2tui-${version}-linux-${architecture}"
 stage=$(mktemp -d "$output/package-XXXXXX")
-trap 'rmdir "$stage" 2>/dev/null || true' EXIT
+trap 'rm -rf -- "$stage"' EXIT
 mkdir -p "$stage/$name/bin" "$stage/$name/smoke"
 install -m 755 "$target/release/gui2tui" "$target/release/gui2tui-inspect" "$target/release/gui2tui-local" "$stage/$name/bin/"
 cp README.md LICENSE-MIT LICENSE-APACHE config.example.toml "$stage/$name/"
 cp -R docs "$stage/$name/docs"
 install -m 755 scripts/release-smoke.sh "$stage/$name/smoke/run.sh"
 cp tests/live/release_smoke.py tests/fixtures/release_smoke_gtk.py "$stage/$name/smoke/"
-ldd "$stage/$name/bin/gui2tui" "$stage/$name/bin/gui2tui-inspect" "$stage/$name/bin/gui2tui-local" > "$stage/$name/DEPENDENCIES.txt"
-tar -C "$stage" -czf "$output/$name.tar.gz" "$name"
+commit=${RELEASE_COMMIT:-$(git rev-parse HEAD)}
+baseline=${RELEASE_RUNNER_BASELINE:-$(. /etc/os-release; printf '%s %s' "$ID" "$VERSION_ID")}
+VERSION="$version" COMMIT="$commit" ARCHITECTURE="$architecture" BASELINE="$baseline" \
+python3 - "$stage/$name/BUILD-INFO.json" <<'PY'
+import json, os, sys
+json.dump({"schema_version": 1, "version": os.environ["VERSION"], "commit": os.environ["COMMIT"],
+           "architecture": os.environ["ARCHITECTURE"], "runner_baseline": os.environ["BASELINE"],
+           "profile": "release", "cargo_locked": True}, open(sys.argv[1], "w"), indent=2, sort_keys=True)
+open(sys.argv[1], "a").write("\n")
+PY
+abi_args=()
+[[ -n "${RELEASE_MAX_GLIBC:-}" ]] && abi_args+=(--max-glibc "$RELEASE_MAX_GLIBC")
+python3 scripts/release-abi.py "$stage/$name" "$stage/$name/ABI.json" "${abi_args[@]}"
+cp "$stage/$name/ABI.json" "$output/$name.abi.json"
+python3 - "$stage/$name/ABI.json" "$stage/$name/DEPENDENCIES.txt" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1])); lines=[f"architecture={d['architecture']}", f"elf_machine={d['elf_machine']}",
+f"runner_baseline={d['runner_baseline']}", f"glibc_max={d['glibc_max']}", f"glibcxx_max={d['glibcxx_max'] or 'none'}"]
+for b in d['binaries']: lines.append(f"{b['name']}: " + ", ".join(b['dependencies']))
+open(sys.argv[2], 'w').write("\n".join(lines)+"\n")
+PY
+epoch=${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}
+tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner -C "$stage" -cf - "$name" | gzip -n > "$output/$name.tar.gz"
 (cd "$output" && sha256sum "$name.tar.gz") > "$output/$name.tar.gz.sha256"
 echo "ARCHIVE=$output/$name.tar.gz"
-echo "STAGING=$stage/$name (retained for inspection)"
+echo "ABI_REPORT=$output/$name.abi.json"
