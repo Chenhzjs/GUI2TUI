@@ -8,6 +8,10 @@ This repository contains the validated inspector, cross-toolkit semantic TUI, co
 event-driven cache, bulk semantic bootstrap, atomic plain-text editing, and the application-agnostic
 semantic transcompiler:
 
+Phase 4A runtime/recovery hardening is now validated and the v0.1 core architecture is frozen.
+See the [30-minute soak and recovery evidence](docs/phase4a-completion.md) and
+[freeze boundary / Phase 4B scope](docs/architecture-freeze.md).
+
 ```text
 GUI application
       ↓

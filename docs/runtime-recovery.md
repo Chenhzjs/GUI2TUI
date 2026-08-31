@@ -1,7 +1,7 @@
 # Phase 4A runtime and recovery model
 
-This document records implemented facts. It does not claim that all Phase 4A live gates have
-passed yet. The relational Semantic IR, content IR, Scene, capability and modality resource
+Phase 4A runtime and recovery hardening is validated; see the linked completion evidence below.
+The relational Semantic IR, content IR, Scene, capability and modality resource
 types are unchanged: lifecycle ownership wraps their bindings instead of entering those IRs.
 
 ```text
@@ -56,8 +56,12 @@ capabilities; a completed/lost handoff invalidates that lease so a later Open re
 negotiation. Endpoint disconnect cannot kill `RuntimeSession`. Cross-host production transport is
 **NOT IMPLEMENTED**; `EndpointProfileId` is configuration identity only, not a remote-auth scheme.
 
-Broker receive operations use a same-UID private root, random operation directory, ownership JSON,
-exclusive lease and registered fixed files. Startup examines at most 4096 candidate directories;
+Broker receive operations and standalone materialization share a same-UID private root,
+random operation directory, ownership JSON, shared live lease and registered fixed files.
+Filename ownership is fsynced and atomically renamed before payload creation; the directory is
+synced too. Recovery requires an exclusive lease. A standalone TTL reaper acknowledges its
+shared lease before the producer releases ownership (five-second startup bound). Startup examines
+at most 4096 candidate directories;
 it skips locked live sessions and refuses unregistered files, hard links, symlinks, wrong UID/mode
 or malformed manifests. It never recursively deletes a `/tmp/gui2tui*` glob. Private socket stale
 recovery similarly requires the owner lock plus a failed connectivity check. Session grants remain
@@ -111,9 +115,8 @@ operation namespace, a second live broker namespace remained intact, the stale s
 and fresh capabilities changed from `image/*` to `application/pdf`. SIGTERM then removed sockets
 and owned artifacts. This proves bounded local recovery, not cross-host transport.
 
-Remaining Phase 4A live gates are tracked honestly: real AT-SPI daemon loss/reconnect is
-**NOT TESTED** (bounded reconnect is implemented and unit/build covered); cross-host endpoint is
-**NOT IMPLEMENTED**; a 30–60 minute soak is **NOT TESTED**; standalone materializer crash residue
-before its manifest is complete is **NOT IMPLEMENTED**; Electron remains **BLOCKED** by its current
-accessibility exposure. Until all phase criteria have real evidence, the project status is
-`PHASE 4A NOT YET VALIDATED`.
+Completion evidence, including two independent thirty-minute runs and final regression review,
+is recorded in [phase4a-completion.md](phase4a-completion.md).
+The [v0.1 core architecture freeze](architecture-freeze.md) now applies.
+New-TTY attachment and production cross-host transport remain **NOT IMPLEMENTED**, deliberately
+outside the v0.1 hard gates. Same-process, same-PTY detach/resume is the supported contract.
