@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::NamedTempFile;
 
 use thiserror::Error;
 
@@ -206,7 +206,7 @@ pub struct LocalModalityBroker {
     capabilities: LocalModalityCapabilities,
     registry: HandlerRegistry,
     mappings: Vec<PathMapping>,
-    temp_root: TempDir,
+    temp_root: crate::runtime::artifacts::OwnedArtifactDirectory,
     temporary_artifacts: Vec<(NamedTempFile, Instant)>,
     session_authorized: HashSet<(ModalityKind, String)>,
     metrics: HandoffMetrics,
@@ -221,9 +221,8 @@ impl LocalModalityBroker {
         let temp_root = temp_root.into();
         fs::create_dir_all(&temp_root)?;
         // Never reuse a predictable server ID or client PID directory for data.
-        let temp_root = tempfile::Builder::new()
-            .prefix("gui2tui-session-")
-            .tempdir_in(temp_root)?;
+        let temp_root =
+            crate::runtime::artifacts::OwnedArtifactDirectory::new_in(&temp_root, 1800)?;
         capabilities
             .mime_patterns
             .retain(|mime| registry.handler(mime).is_some());
@@ -388,13 +387,12 @@ impl LocalModalityBroker {
     }
 
     pub(crate) fn artifact_file(
-        &self,
+        &mut self,
         descriptor: &ArtifactDescriptor,
     ) -> Result<NamedTempFile, BrokerError> {
-        Ok(tempfile::Builder::new()
-            .prefix("artifact-")
-            .suffix(&format!(".{}", safe_extension(&descriptor.mime)))
-            .tempfile_in(self.temp_root.path())?)
+        Ok(self
+            .temp_root
+            .create_file(&format!(".{}", safe_extension(&descriptor.mime)))?)
     }
 
     pub(crate) fn record_bytes(&mut self, count: usize) {

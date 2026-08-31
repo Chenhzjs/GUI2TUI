@@ -14,6 +14,10 @@ use std::{
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializationMetadata {
+    pub ownership_marker: String,
+    pub session_id: crate::runtime::RuntimeSessionId,
+    pub operation_id: u64,
+    pub created_unix: u64,
     pub descriptor: ArtifactDescriptor,
     pub region: Option<ScreenRegion>,
     pub quality: Option<CaptureQuality>,
@@ -23,6 +27,7 @@ pub struct MaterializationMetadata {
 
 pub struct MaterializedArtifact {
     directory: tempfile::TempDir,
+    _lease: fs::File,
     pub metadata: MaterializationMetadata,
 }
 
@@ -98,6 +103,14 @@ impl ArtifactMaterializer {
             builder.permissions(fs::Permissions::from_mode(0o700));
         }
         let directory = builder.tempdir()?;
+        use std::os::unix::fs::OpenOptionsExt;
+        let lease = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(directory.path().join("lease"))?;
+        rustix::fs::flock(&lease, rustix::fs::FlockOperation::NonBlockingLockExclusive)?;
         let filename = format!("artifact.{extension}");
         let mut file = tempfile::NamedTempFile::new_in(directory.path())?;
         let mut hash = sha2::Sha256::new();
@@ -128,6 +141,10 @@ impl ArtifactMaterializer {
         file.persist_noclobber(directory.path().join(&filename))
             .map_err(|e| e.error)?;
         let metadata = MaterializationMetadata {
+            ownership_marker: "GUI2TUI-MATERIALIZATION-v1".into(),
+            session_id: Default::default(),
+            operation_id: 1,
+            created_unix: unix_now(),
             descriptor,
             region: snapshot.map(|x| x.0),
             quality: snapshot.map(|x| x.1),
@@ -141,6 +158,7 @@ impl ArtifactMaterializer {
         serde_json::to_writer(&mut manifest, &metadata)?;
         Ok(MaterializedArtifact {
             directory,
+            _lease: lease,
             metadata,
         })
     }
@@ -170,6 +188,11 @@ impl ArtifactMaterializer {
         }
         let metadata: MaterializationMetadata =
             serde_json::from_reader(fs::File::open(&manifest)?.take(65536))?;
+        if metadata.ownership_marker != "GUI2TUI-MATERIALIZATION-v1"
+            || metadata.created_unix > metadata.expires_unix
+        {
+            return Err(io::Error::other("invalid materialization ownership"));
+        }
         if ![
             "artifact.png",
             "artifact.jpg",
@@ -187,6 +210,7 @@ impl ArtifactMaterializer {
         std::thread::sleep(Duration::from_secs(wait));
         fs::remove_file(directory.join(metadata.filename))?;
         fs::remove_file(manifest)?;
+        fs::remove_file(directory.join("lease"))?;
         fs::remove_dir(directory)
     }
 }

@@ -192,7 +192,16 @@ mod tests {
 
     fn assert_no_staged_files(root: &std::path::Path) {
         for entry in fs::read_dir(root).unwrap() {
-            assert_eq!(fs::read_dir(entry.unwrap().path()).unwrap().count(), 0);
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                assert_no_staged_files(&entry.path());
+            } else {
+                assert!(
+                    matches!(entry.file_name().to_str(), Some("lease" | "ownership.json")),
+                    "unexpected staged file: {:?}",
+                    entry.path()
+                );
+            }
         }
     }
 

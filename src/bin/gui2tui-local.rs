@@ -154,6 +154,10 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+    let recovered = gui2tui::runtime::artifacts::recover_abandoned()?;
+    if recovered != 0 {
+        eprintln!("recovered_artifact_namespaces={recovered}");
+    }
     if matches!(cli.command, Command::Capabilities) {
         println!("No connected broker; handlers must be explicitly configured with serve.");
         println!("reference_schemes=[] mime_patterns=[] artifact_receive=false");
@@ -211,8 +215,17 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let signal = stop.clone();
             let runtime = tokio::runtime::Runtime::new()?;
             runtime.spawn(async move {
-                let _ = tokio::signal::ctrl_c().await;
-                signal.cancel();
+                if let Ok(mut signals) = gui2tui::runtime::signals::RuntimeSignals::new() {
+                    loop {
+                        if matches!(
+                            signals.recv().await,
+                            gui2tui::runtime::signals::RuntimeSignal::Stop
+                        ) {
+                            signal.cancel();
+                            break;
+                        }
+                    }
+                }
             });
             let transport = ArtifactTransport {
                 max_size: max_bytes,

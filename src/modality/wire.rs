@@ -13,7 +13,7 @@ use std::{
     io::{self, Read, Write},
     net::Shutdown,
     os::unix::{
-        fs::PermissionsExt,
+        fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
         net::{UnixListener, UnixStream},
     },
     path::{Path, PathBuf},
@@ -79,26 +79,78 @@ pub fn read_control<T: DeserializeOwned>(stream: &mut impl Read) -> io::Result<T
 pub struct LocalSocket {
     listener: UnixListener,
     path: PathBuf,
+    _lock: std::fs::File,
+    inode: u64,
 }
 
 impl LocalSocket {
     /// The caller creates/owns a private (0700) directory. Never unlink an
-    /// existing socket; bind failure must not replace another broker.
+    /// active socket. A private ownership lock serializes stale recovery.
     pub fn bind(path: &Path) -> io::Result<Self> {
         let parent = path
             .parent()
             .ok_or_else(|| io::Error::other("socket needs a parent directory"))?;
-        let metadata = std::fs::metadata(parent)?;
-        if metadata.permissions().mode() & 0o077 != 0 {
+        let metadata = std::fs::symlink_metadata(parent)?;
+        if !metadata.is_dir()
+            || metadata.uid() != rustix::process::geteuid().as_raw()
+            || metadata.permissions().mode() & 0o077 != 0
+        {
             return Err(io::Error::other(
                 "broker socket directory must be private (0700)",
             ));
         }
+        let filename = path
+            .file_name()
+            .ok_or_else(|| io::Error::other("socket requires filename"))?;
+        let lock_path = parent.join(format!(".{}.lock", filename.to_string_lossy()));
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
+            .open(lock_path)?;
+        let stat = lock.metadata()?;
+        if !stat.is_file()
+            || stat.nlink() != 1
+            || stat.uid() != metadata.uid()
+            || stat.mode() & 0o077 != 0
+        {
+            return Err(io::Error::other("unsafe broker lock"));
+        }
+        rustix::fs::flock(&lock, rustix::fs::FlockOperation::NonBlockingLockExclusive)
+            .map_err(|_| io::Error::other("broker socket is owned by a live process"))?;
+        match std::fs::symlink_metadata(path) {
+            Ok(stale) => {
+                if !stale.file_type().is_socket()
+                    || stale.uid() != metadata.uid()
+                    || stale.mode() & 0o077 != 0
+                {
+                    return Err(io::Error::other("refusing to replace foreign socket path"));
+                }
+                match UnixStream::connect(path) {
+                    Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {
+                        std::fs::remove_file(path)?
+                    }
+                    _ => {
+                        return Err(io::Error::other(
+                            "existing broker socket is not proven stale",
+                        ));
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
         let listener = UnixListener::bind(path)?;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        let inode = std::fs::symlink_metadata(path)?.ino();
         Ok(Self {
             listener,
             path: path.to_owned(),
+            _lock: lock,
+            inode,
         })
     }
 
@@ -136,7 +188,11 @@ impl LocalSocket {
 
 impl Drop for LocalSocket {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if std::fs::symlink_metadata(&self.path)
+            .is_ok_and(|m| m.ino() == self.inode && m.file_type().is_socket())
+        {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
