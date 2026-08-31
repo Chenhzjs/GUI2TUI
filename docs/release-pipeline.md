@@ -1,5 +1,8 @@
 # Binary release pipeline
 
+The dual-native pipeline is [live validated](release-pipeline-validation.md).
+Public v0.1.0 release remains pending; workflow artifacts are validation candidates.
+
 The normal CI workflow checks formatting, all targets, tests, Clippy, and patch whitespace.
 It does not package or publish releases. The separate release workflow supports manual validation
 and matching `v*` tags. Manual dispatch defaults to `publish=false`; publication additionally
