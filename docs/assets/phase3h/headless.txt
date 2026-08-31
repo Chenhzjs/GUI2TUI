@@ -1,0 +1,7 @@
+Bootstrap: 3 nodes via AT-SPI Cache in 0.514 ms (cache_rpc=0.245 ms enrichment=0.235 ms reconstruction=0.029 ms enrichment_rpcs=1 orphans=0)
+initial_resource_dispositions=[Unavailable]
+Modality id=modality-1 owner=3 kind=Image label=Some("Architecture diagram") policy=PreferReference unavailable reason="accessibility metadata exposes no trustworthy resource reference"
+acquired_resource=RenderedSnapshot dispositions=[MaterializeOnHost]
+materialized={"descriptor":{"origin":"RenderedSnapshot","id":1,"kind":"Image","mime":"image/png","size":6419,"hash":[46,195,106,38,39,91,54,174,35,2,12,124,8,113,76,90,55,192,208,203,136,252,98,137,2,143,90,222,201,34,115,171],"display_name":"RenderedSnapshot — screen composite; may be occluded","lifetime":{"Temporary":{"ttl":{"secs":120,"nanos":0}}}},"region":{"x":0,"y":0,"width":480,"height":180},"quality":"CompositedScreenSnapshot","expires_unix":1788150118,"filename":"artifact.png"}
+artifact_path=/tmp/gui2tui-artifact-lXiRI6/artifact.png
+metrics={"reference_resolved":0,"original_artifact":0,"snapshot_attempt":1,"snapshot_success":1,"snapshot_unavailable":0,"capture_source_bytes":345600,"final_artifact_bytes":6419,"headless_materialization":1,"same_host_open":0,"remote_transfer":0}; network_payload_bytes=0

@@ -1,5 +1,12 @@
 # External modality handoff
 
+This document records the Phase 3G broker/transport contract. Phase 3H adds a separate
+[explicit static acquisition and headless materialization path](static-acquisition.md).
+Below, statements that static acquisition is not implemented describe Phase 3G only.
+The current resource variants are `OriginalArtifact` and `RenderedSnapshot` (formerly
+`PortableArtifact` and the unimplemented `StaticVisualArtifact` variant); producer structs
+retain their names for compatibility. Artifact descriptors now carry `origin`.
+
 GUI2TUI remains semantic-first. Images, PDFs, audio/video files and portable
 models are represented by `ExternalModality`; their bytes never enter
 `SemanticCache`, `ContentArena`, or `TuiScene`.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GTK4 image fixture; production discovery may use AT-SPI evidence only."""
 import pathlib
+import os
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -19,7 +20,14 @@ class Fixture(Gtk.Application):
         image = Gtk.Picture.new_for_filename(str(RESOURCE))
         image.update_property([Gtk.AccessibleProperty.LABEL], ["Architecture diagram"])
         box.append(image)
-        window.set_child(box)
+        # Dedicated visual-only client is also a real Image. This variant makes
+        # its bounds independently checkable against the native X11 client.
+        # The original mixed layout remains a negative coordinate-safety probe.
+        if os.environ.get("VISUAL_ONLY") == "1":
+            box.remove(image)
+            window.set_child(image)
+        else:
+            window.set_child(box)
         window.present()
 
 Fixture().run(None)

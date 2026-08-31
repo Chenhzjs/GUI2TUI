@@ -31,6 +31,19 @@ root.joinpath("modalities.txt").write_text(modalities)
 print(modalities)
 assert "browser-phase-secret" not in tree + modalities
 
+# Phase 3H: a materialization request must keep a trustworthy reference, even
+# without any broker. No screenshot/download/endpoint is needed for this path.
+for line in tree.splitlines():
+    if re.search(r'^\W*Image\b.*atspi1_', line) and "Architecture diagram" in line:
+        node = re.search(r'atspi1_[A-Za-z0-9_-]+', line).group()
+        reference = inspect("--app", app, "--dump-resource-reference", node)
+        if "UNRESOLVED" not in reference:
+            headless = inspect("--app", app, "--materialize-modality", node)
+            assert "payload_bytes=0" in headless and '"snapshot_attempt":0' in headless
+            root.joinpath("headless-reference.txt").write_text(headless)
+            print("HEADLESS_REFERENCE=PASS; snapshot_attempt=0; payload_bytes=0")
+        break
+
 socket = root / "broker.sock"
 viewer = os.environ.get("VIEWER_PROGRAM")
 with root.joinpath("broker.log").open("w") as log:

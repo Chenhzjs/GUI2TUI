@@ -33,12 +33,20 @@ Ratatui keyboard/mouse interaction
 AT-SPI action → original GUI
 ```
 
-It does not reconstruct GUI pixels or map GUI screen coordinates into terminal coordinates. It also does not contain raster capture, a Wayland compositor, or SSH session plumbing.
+It does not reconstruct GUI pixels or map GUI screen coordinates into terminal coordinates.
+The semantic renderer does not use screenshots. Phase 3H adds a separate, explicit single-frame
+Image acquisition provider; it is not a Wayland compositor or SSH session framework.
 
 When a semantic task genuinely needs an original image, document, video, or
 portable model, Phase 3G uses a reference-first, user-authorized local handoff.
 See [External modality handoff](docs/modality-handoff.md). It is not a remote
 desktop, file-sync service, or continuous media stream.
+
+For an Image with no resource reference, an explicit request can produce an honestly labelled
+**RenderedSnapshot**, subject to strict coordinate checks. A viewer is optional: headless users
+can materialize a bounded, hashed, expiring file on the GUI2TUI host. See
+[Static acquisition and deployment topology](docs/static-acquisition.md) and
+[live GUI → TUI examples](docs/gui-to-tui-examples.md).
 
 ## Interactive prototype
 

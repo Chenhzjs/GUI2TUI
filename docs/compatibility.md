@@ -1,5 +1,20 @@
 # Compatibility matrix
 
+## Static acquisition and topology (Phase 3H, 2026-08-31)
+
+| Capability | GTK Picture | LibreOffice embedded Image | Chrome / Firefox references |
+| --- | --- | --- | --- |
+| No-reference semantic visual | PASS | PASS, actual inline embedded Image | reference-first preserved |
+| Generic RenderedSnapshot | PASS, visual-only native client, 480×180 | UNAVAILABLE: native/AT-SPI geometry mismatch | not needed; reference path does not capture |
+| Ambiguous coordinates | PASS safe refusal for Picture-under-Label layout | PASS safe refusal | NOT TESTED for acquisition |
+| Headless materialization | PASS, 6,419-byte PNG, SHA-256, TTL cleanup | unavailable without reliable bounds | Chrome reference inspect: PASS, 0 bytes |
+| Same-host actual viewer | PASS, EOG PNG visually verified, 0 payload bytes | unavailable | Phase 3G reference handoff regression PASS |
+| TUI without endpoint | PASS: startup/F4 0 captures; explicit m 1 capture; Esc/Quit | NOT TESTED this phase | descriptor/reference resolution independent of endpoint |
+| Wayland / remote snapshot companion | NOT IMPLEMENTED / NOT TESTED | NOT IMPLEMENTED / NOT TESTED | NOT TESTED |
+
+See [coordinate limits, deployment matrix and evidence](static-acquisition.md).
+RenderedSnapshot is not an original embedded artifact and does not promise an unoccluded image.
+
 Validated through 2026-08-30 in Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI 2.52, GTK 4.14.5,
 Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 

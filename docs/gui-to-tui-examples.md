@@ -238,6 +238,38 @@ radio/list/combo presentation         →  terminal Choice overlay
 buttons/inputs inside documents       →  separate reachable tasks
 ```
 
-Unsupported graphical content remains an explicit opaque/media placeholder. No example uses
-framebuffer capture, GUI coordinate scaling, raster conversion, toolkit-private APIs, DOM/CDP, or
-document-file parsers.
+Unsupported graphical content remains an explicit opaque/media placeholder. The semantic TUI
+examples above do not use framebuffer conversion, GUI-to-terminal coordinate scaling,
+toolkit-private APIs, DOM/CDP, or document-file parsers.
+
+## 6. No-reference GTK Image → headless snapshot → optional viewer (Phase 3H)
+
+This separate 2026-08-31 path does **not** render pixels as TUI widgets. F4 preserves the
+fidelity-required visual as a modality task. With no broker/endpoint, pressing `m` explicitly
+acquires a single minimal rendered representation. Excerpt from the real 140×38 terminal frame:
+
+```text
+┌ External modality — references / explicit static snapshots ───────────────────────────┐
+│> Image: "Architecture diagram"                                                       │
+│                                                                                     │
+│RenderedSnapshot on host; not original bytes; o Same-host viewer if configured        │
+│RenderedSnapshot (may be occluded): /tmp/gui2tui-artifact-.../artifact.png              │
+│↑/↓ Choose | Enter Reference | m Materialize | o Same-host viewer | Esc Return         │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Only the ephemeral directory suffix and blank rows/borders are shortened here; the full
+[actual exported frame](assets/phase3h/tui-materialized.txt) is retained. Its path has expired.
+The produced **RenderedSnapshot**, not the source SVG, is this 480×180 PNG (6,419 bytes):
+
+![Actual minimal GTK Picture RenderedSnapshot](assets/phase3h/rendered-snapshot.png)
+
+The snapshot then opened in an actual, separately authorized EOG process. This screenshot is
+test evidence of the viewer; **it is not the artifact sent/materialized by GUI2TUI**:
+
+![EOG displaying the 480×180 rendered PNG](assets/phase3h/viewer.png)
+
+No endpoint was present for the first capture/materialization. Same-host opening used only the
+temporary file path (`artifact_bytes=0`). Startup/F4 browsing made zero capture calls. The
+original mixed GTK Label/Picture layout had unreliable AT-SPI offsets and is now explicitly
+refused rather than incorrectly including its Label. See [the full validation](static-acquisition.md).
