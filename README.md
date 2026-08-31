@@ -2,6 +2,37 @@
 
 GUI2TUI explores **GUI semantics → terminal-native semantics**. It is not a framebuffer-to-ASCII-art converter.
 
+## Install and start (v0.1 preview)
+
+Linux is the supported runtime. Use the same user/session as your GUI applications;
+SSH/headless terminals work when they can reach that desktop's accessibility bus.
+A separate viewer is **optional**. macOS is a build/development platform, not a live AT-SPI desktop.
+
+Extract the native Linux tarball from your trusted build/distribution, then:
+
+```bash
+tar -xzf gui2tui-0.1.0-linux-aarch64.tar.gz
+cd gui2tui-0.1.0-linux-aarch64
+./bin/gui2tui doctor
+./bin/gui2tui
+```
+
+No config file, root privilege, broker, or first-run wizard is required. Select an application
+with arrows/Enter, `/` filters, `r` refreshes. Press `?` for contextual help; **F1 works during
+text editing/search**, where `?` remains input. `gui2tui --app NAME` opens one application directly.
+The app must already be running; GUI2TUI does not launch arbitrary executable names.
+
+- [Getting started / manual installation / 2-minute demo](docs/getting-started.md)
+- [Optional configuration](docs/configuration.md)
+- [Troubleshooting and contents-free reports](docs/troubleshooting.md)
+- [Headless / same-host deployment](docs/deployment.md)
+- [Supported scope and limitations](docs/limitations.md)
+- [Real GUI → TUI examples](docs/gui-to-tui-examples.md) (captured output, not mockups)
+
+For developers, `scripts/package-linux.sh` builds a native archive with three binaries,
+licenses, documentation, an example config and a self-contained release smoke test.
+`gui2tui-inspect` remains a diagnostic tool; it is not the primary user interface.
+
 The long-term goal is to make GTK, Qt, Chromium/Electron, and similar applications operable from a terminal or SSH session by translating accessibility objects such as buttons, text inputs, menus, lists, trees, and tables into native terminal controls.
 
 This repository contains the validated inspector, cross-toolkit semantic TUI, container operations,

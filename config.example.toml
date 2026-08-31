@@ -1,0 +1,11 @@
+# Optional user configuration. Missing files use these defaults.
+# Copy to the path printed by `gui2tui config path`, or run `gui2tui config init`.
+# Unknown fields and unsupported versions are errors. CLI overrides the file.
+version = 1
+
+[runtime]
+backend_timeout_ms = 5000
+event_queue_capacity = 2048
+
+[terminal]
+mouse = true
