@@ -118,7 +118,8 @@ def node_for(tree, pattern):
 
 
 def artifact_count():
-    owned = result / f"gui2tui-owned-{os.geteuid()}"
+    runtime = pathlib.Path(env["XDG_RUNTIME_DIR"]) / "gui2tui"
+    owned = runtime / f"gui2tui-owned-{os.geteuid()}"
     if not owned.exists():
         return 0
     return sum(1 for path in owned.glob("operation-*/*") if path.name.startswith("artifact-"))

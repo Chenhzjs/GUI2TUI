@@ -36,7 +36,9 @@ def receive(stream):
 
 with tempfile.TemporaryDirectory(prefix="g4a-") as directory:
     root = pathlib.Path(directory)
-    env = {**os.environ, "TMPDIR": directory}
+    runtime = root / "runtime"
+    runtime.mkdir(mode=0o700)
+    env = {**os.environ, "TMPDIR": directory, "XDG_RUNTIME_DIR": str(runtime)}
     processes = []
 
     def start(name, mime):
@@ -57,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix="g4a-") as directory:
     try:
         first = start("a", "image/*")
         other = start("b", "video/*")
-        owned = root / f"gui2tui-owned-{os.geteuid()}"
+        owned = runtime / "gui2tui" / f"gui2tui-owned-{os.geteuid()}"
         active_before = set(owned.iterdir())
         assert len(active_before) == 2
         stream = connect("a")

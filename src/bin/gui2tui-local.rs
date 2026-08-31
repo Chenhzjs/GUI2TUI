@@ -16,7 +16,10 @@ use gui2tui::modality::{
 };
 
 #[derive(Debug, Parser)]
-#[command(about = "User-controlled local broker for GUI2TUI modality handoff")]
+#[command(
+    version,
+    about = "User-controlled local broker for GUI2TUI modality handoff"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -165,7 +168,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let temp_root = std::env::temp_dir().join(format!("gui2tui-local-{}", std::process::id()));
+    let temp_root = gui2tui::product::paths::runtime_dir()?;
     match cli.command {
         Command::Capabilities => unreachable!(),
         Command::Serve {
@@ -202,7 +205,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 mime_patterns: registry.mime_patterns(),
                 artifact_receive: true,
             };
-            let mut broker = LocalModalityBroker::new(caps, registry, std::env::temp_dir())?;
+            let mut broker = LocalModalityBroker::new(caps, registry, temp_root)?;
             for mapping in map {
                 let (source, destination) = mapping
                     .split_once('=')
@@ -370,7 +373,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let _ = fs::remove_dir_all(temp_root);
+    // OwnedArtifactDirectory cleans its operation namespace only. The runtime
+    // root can be shared by live sessions and must never be recursively removed.
     Ok(())
 }
 

@@ -3,6 +3,7 @@ pub mod content;
 pub mod events;
 pub mod inspect;
 pub mod modality;
+pub mod product;
 pub mod runtime;
 pub mod semantic;
 pub mod transcompile;

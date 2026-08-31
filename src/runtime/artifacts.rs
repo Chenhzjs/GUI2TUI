@@ -70,7 +70,7 @@ pub struct OwnedArtifactDirectory {
 }
 impl OwnedArtifactDirectory {
     pub fn new(ttl_seconds: u64) -> io::Result<Self> {
-        Self::new_in(&std::env::temp_dir(), ttl_seconds)
+        Self::new_in(&crate::product::paths::runtime_dir()?, ttl_seconds)
     }
     pub fn new_in(base: &Path, ttl_seconds: u64) -> io::Result<Self> {
         Self::new_owned_in(base, ttl_seconds, RuntimeSessionId::default(), 1)
@@ -80,7 +80,12 @@ impl OwnedArtifactDirectory {
         session: RuntimeSessionId,
         operation: u64,
     ) -> io::Result<Self> {
-        Self::new_owned_in(&std::env::temp_dir(), ttl_seconds, session, operation)
+        Self::new_owned_in(
+            &crate::product::paths::runtime_dir()?,
+            ttl_seconds,
+            session,
+            operation,
+        )
     }
     pub fn new_owned_in(
         base: &Path,
@@ -260,7 +265,44 @@ pub(crate) fn debug_crash_failpoint(_: &str) {}
 /// Run once at startup. Active leases are always skipped, even past TTL.
 /// A crashed namespace is reclaimed on the next startup, not by a scan loop.
 pub fn recover_abandoned() -> io::Result<usize> {
-    recover_in(&root_in(&std::env::temp_dir())?)
+    let count = recover_in(&root_in(&crate::product::paths::runtime_dir()?)?)?;
+    // Upgrade compatibility: inspect only the exact previous owned namespace,
+    // with the same marker/lease/UID rules. Never scan arbitrary temp entries.
+    let legacy = std::env::temp_dir().join(format!(
+        "gui2tui-owned-{}",
+        rustix::process::geteuid().as_raw()
+    ));
+    if legacy.exists() {
+        Ok(count + recover_in(&legacy)?)
+    } else {
+        Ok(count)
+    }
+}
+
+/// Read-only, contents-free diagnostics. No payload/manifest bodies, no cleanup.
+/// The lease count is a point-in-time observation, not permission to scavenge.
+pub fn health_counts(base: &Path) -> io::Result<(usize, usize)> {
+    let root = base.join(format!(
+        "gui2tui-owned-{}",
+        rustix::process::geteuid().as_raw()
+    ));
+    if !root.exists() {
+        return Ok((0, 0));
+    }
+    private_owned(&root, true)?;
+    let mut namespaces = 0;
+    let mut leased = 0;
+    for entry in fs::read_dir(root)?.take(4096) {
+        let path = entry?.path();
+        private_owned(&path, true)?;
+        private_owned(&path.join("lease"), false)?;
+        let lease = nofollow(&path.join("lease"), true)?;
+        if flock(&lease, FlockOperation::NonBlockingLockExclusive).is_err() {
+            leased += 1;
+        }
+        namespaces += 1;
+    }
+    Ok((namespaces, leased))
 }
 #[cfg(test)]
 pub(crate) fn recover_abandoned_in(base: &Path) -> io::Result<usize> {

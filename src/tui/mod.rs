@@ -4,6 +4,7 @@ pub mod choice_overlay;
 pub mod content_view;
 pub mod edit;
 pub mod focus;
+pub mod help;
 pub mod hit_test;
 pub mod input;
 pub mod modality_view;

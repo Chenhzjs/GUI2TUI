@@ -52,6 +52,8 @@ pub struct TuiApplication {
     runtime: crate::runtime::RuntimeSession,
     modality_ticket: Option<crate::runtime::OperationTicket>,
     runtime_status_visible: bool,
+    help_visible: Option<super::help::HelpContext>,
+    help_scroll: u16,
     modality_socket: Option<std::path::PathBuf>,
     modality_view: Option<super::modality_view::ModalityView>,
     modality_task: Option<tokio::task::JoinHandle<String>>,
@@ -105,7 +107,7 @@ struct CaptureCompletion {
 
 impl TuiApplication {
     pub fn is_available(&self) -> bool {
-        self.application_available
+        self.application_available && self.backend_available
     }
     pub fn has_pending_work(&self) -> bool {
         self.capture_task.is_some()
@@ -187,7 +189,7 @@ impl TuiApplication {
         self.command_palette = None;
         self.materialized_artifacts.clear();
         self.hit_map = HitMap::default();
-        self.status = "Application is no longer available. Tasks discarded. F5: fresh generation; b: applications; q: quit.".into();
+        self.status = "Application is no longer available. Tasks discarded. F5: search again; b: applications; d: diagnostics; q: quit.".into();
         tracing::debug!(status = %self.runtime_status(), "application generation invalidated");
     }
 
@@ -228,7 +230,11 @@ impl TuiApplication {
     pub async fn select_fresh_application(&mut self, name: String) {
         self.application_gone();
         self.app_selector = name;
-        self.open_fresh_generation().await;
+        if self.backend_available {
+            self.open_fresh_generation().await;
+        } else {
+            self.reconnect_backend().await;
+        }
     }
 
     pub fn configure_modality_client(&mut self, socket: Option<std::path::PathBuf>) {
@@ -358,7 +364,10 @@ impl TuiApplication {
                 Ok(crate::modality::wire::Response::Opened { artifact_bytes, .. }) => format!(
                     "Local handler accepted resource; reference-only; artifact_bytes={artifact_bytes}"
                 ),
-                Ok(_) => "Local handoff denied or failed; GUI unchanged".to_owned(),
+                Ok(crate::modality::wire::Response::Failed { reason, .. }) => {
+                    crate::modality::wire::user_failure_message(&reason).to_owned()
+                }
+                Ok(_) => "Unexpected local viewer response; no Open confirmed".to_owned(),
                 Err(_) => "Local modality client unavailable; GUI unchanged".to_owned(),
             }
         }));
@@ -532,7 +541,10 @@ impl TuiApplication {
                 Ok(crate::modality::wire::Response::Opened {
                     artifact_bytes: 0, ..
                 }) => "Same-host viewer accepted RenderedSnapshot; network_payload_bytes=0".into(),
-                _ => "Same-host viewer unavailable or denied; no pixels transported".into(),
+                Ok(crate::modality::wire::Response::Failed { reason, .. }) => {
+                    crate::modality::wire::user_failure_message(&reason).to_owned()
+                }
+                _ => "Same-host viewer unavailable; no pixels transported".into(),
             }
         }));
         self.status = "Awaiting same-host viewer authorization (local path only)".into();
@@ -596,6 +608,8 @@ impl TuiApplication {
             runtime,
             modality_ticket: None,
             runtime_status_visible: false,
+            help_visible: None,
+            help_scroll: 0,
             modality_socket: None,
             modality_view: None,
             modality_task: None,
@@ -655,6 +669,21 @@ impl TuiApplication {
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
+        if let Some(context) = self.help_visible {
+            use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+            frame.render_widget(
+                Paragraph::new(format!("{}{}", context.text(), super::help::GLOBAL))
+                    .wrap(Wrap { trim: true })
+                    .scroll((self.help_scroll, 0))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title("GUI2TUI Help — Esc return"),
+                    ),
+                frame.area(),
+            );
+            return;
+        }
         if self.runtime_status_visible {
             use ratatui::widgets::{Block, Borders, Paragraph};
             frame.render_widget(
@@ -670,13 +699,18 @@ impl TuiApplication {
             );
             return;
         }
-        if !self.application_available {
-            use ratatui::widgets::{Block, Borders, Paragraph};
+        if !self.application_available || !self.backend_available {
+            use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+            let message = if !self.backend_available {
+                "Desktop accessibility service unavailable.\nCached controls are read-only.\n\nF5: retry\nb: applications\nd: diagnostics\nq: quit"
+            } else {
+                self.status.as_str()
+            };
             frame.render_widget(
-                Paragraph::new(self.status.as_str()).block(
+                Paragraph::new(message).wrap(Wrap { trim: true }).block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Application unavailable — old generation is not interactive"),
+                        .title("Application unavailable — F5 retry | b Apps | d Diagnose"),
                 ),
                 frame.area(),
             );
@@ -898,6 +932,47 @@ impl TuiApplication {
         {
             return true;
         }
+        if self.help_visible.is_some() {
+            match key.code {
+                KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('?') => self.help_visible = None,
+                KeyCode::Down => self.help_scroll = self.help_scroll.saturating_add(1).min(30),
+                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
+                _ => {}
+            }
+            return false;
+        }
+        let typing = self.edit_session.is_some()
+            || self.command_palette.is_some()
+            || self
+                .content_view
+                .as_ref()
+                .is_some_and(|view| view.mode == ContentViewMode::Search);
+        if key.code == KeyCode::F(1) || (key.code == KeyCode::Char('?') && !typing) {
+            use super::help::HelpContext as H;
+            self.help_visible = Some(if !self.application_available || !self.backend_available {
+                H::Unavailable
+            } else if self.edit_session.is_some() {
+                H::Edit
+            } else if self.modality_view.is_some() {
+                H::Modality
+            } else if self.command_palette.is_some() {
+                H::Command
+            } else if self.choice_overlay.is_some() {
+                H::Choice
+            } else if let Some(view) = &self.content_view {
+                match view.mode {
+                    ContentViewMode::Reader => H::Reader,
+                    ContentViewMode::Outline => H::Outline,
+                    ContentViewMode::Search => H::Search,
+                    ContentViewMode::Table => H::Table,
+                    ContentViewMode::VirtualCollection => H::Collection,
+                }
+            } else {
+                H::Scene
+            });
+            self.help_scroll = 0;
+            return false;
+        }
         if key.code == KeyCode::F(12) {
             self.runtime_status_visible = !self.runtime_status_visible;
             tracing::debug!(status = %self.runtime_status(), "runtime status requested");
@@ -1091,7 +1166,11 @@ impl TuiApplication {
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
-        if !self.application_available || !self.backend_available || self.runtime_status_visible {
+        if !self.application_available
+            || !self.backend_available
+            || self.runtime_status_visible
+            || self.help_visible.is_some()
+        {
             return;
         }
         if self.modality_view.is_some() {
@@ -2230,7 +2309,7 @@ impl TuiApplication {
         }
         self.event_stream_available = false;
         self.status =
-            "Accessibility service is unavailable. Existing semantic view is read-only; F5 retries; q quits."
+            "Desktop accessibility service unavailable. Existing view is read-only. F5: retry; b: applications; d: diagnostics; q: quit."
                 .into();
     }
 

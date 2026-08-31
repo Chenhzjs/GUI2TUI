@@ -60,6 +60,23 @@ pub struct ContentRender {
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
+    let hints = if context.edit_session.is_some() {
+        "F1 Help | Enter Commit | Esc Cancel"
+    } else if context.choice.is_some() {
+        "? Help | ↑/↓ Choose | Enter Select | Esc Cancel"
+    } else if context.palette.is_some() {
+        "F1 Help | F2 Scope | Enter Choose | Esc Back"
+    } else if let Some(content) = &context.content {
+        match content.mode {
+            ContentViewMode::Reader => "? Help | j/k Blocks | / Search | Esc Back",
+            ContentViewMode::Search => "F1 Help | Ctrl-F Search more | Enter Go | Esc Back",
+            ContentViewMode::Table => "? Help | Arrows Cells | Esc Back",
+            ContentViewMode::Outline => "? Help | ↑/↓ Headings | Enter Go | Esc Back",
+            ContentViewMode::VirtualCollection => "? Help | ↑/↓ Items | Esc Back",
+        }
+    } else {
+        "? Help | Tab Focus | Enter Use"
+    };
     let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(frame.area());
     let main_area = areas[0];
     let footer_area = areas[1];
@@ -73,7 +90,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         render_elements(frame, content_area, &context, &mut hit_regions);
     } else {
         frame.render_widget(
-            Paragraph::new("Application is no longer available. Press r to retry or q to quit."),
+            Paragraph::new("Application is no longer available. F5: retry; b: applications; d: diagnostics; q: quit."),
             content_area,
         );
     }
@@ -86,10 +103,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     if let Some(content) = context.content {
         render_content(frame, content_area, content);
     }
-    let footer = format!(
-        "{} | Tab Focus | Enter Operate | : Commands | F4 Modality | r Refresh | q Quit",
-        context.status
-    );
+    let footer = format!("{hints} | {}", context.status);
     frame.render_widget(
         Paragraph::new(footer).style(Style::default().fg(Color::Cyan)),
         footer_area,

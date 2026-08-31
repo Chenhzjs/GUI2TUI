@@ -619,7 +619,7 @@ fn reader_text(block: &super::ContentBlock, cache: &ContentCache) -> String {
         .text
         .visible_text()
         .or(block.label.as_deref())
-        .unwrap_or("[content unavailable]")
+        .unwrap_or("[text unavailable through the application's accessibility interface]")
         .to_owned()
 }
 

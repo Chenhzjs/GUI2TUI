@@ -1,6 +1,6 @@
 use std::{error::Error, io, process::ExitCode, time::Duration};
 
-use clap::Parser;
+use clap::{Parser, Subcommand, ValueEnum};
 use crossterm::{
     cursor::{Hide, Show},
     event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream},
@@ -9,10 +9,7 @@ use crossterm::{
 };
 use futures_lite::StreamExt;
 use gui2tui::{
-    backend::{
-        AtspiBackend, BackendError, BootstrapStrategy, DEFAULT_EVENT_BUFFER_CAPACITY,
-        InspectOptions,
-    },
+    backend::{AtspiBackend, BootstrapStrategy, InspectOptions},
     runtime::signals::{RuntimeSignal, RuntimeSignals},
     transcompile::PresentationMode,
     tui::{
@@ -31,55 +28,95 @@ use tracing_subscriber::EnvFilter;
     about = "Interact with a GUI application through a terminal-native semantic UI"
 )]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
     /// Debug-build-only terminal restoration failpoint used by the lifecycle harness.
     #[cfg(debug_assertions)]
     #[arg(long, hide = true)]
     test_panic_after_attach: bool,
 
     /// Accessible application name or an unambiguous substring.
-    #[arg(long, value_name = "NAME")]
+    #[arg(long, value_name = "NAME", global = true)]
     app: Option<String>,
 
     /// Maximum accessibility-tree depth per snapshot.
-    #[arg(long, default_value_t = 64)]
+    #[arg(long, default_value_t = 64, hide = true)]
     max_depth: usize,
 
     /// Maximum accessibility objects per snapshot.
-    #[arg(long, default_value_t = 10_000)]
+    #[arg(long, default_value_t = 10_000, hide = true)]
     max_nodes: usize,
 
     /// Per-operation D-Bus/AT-SPI timeout in milliseconds.
-    #[arg(long, default_value_t = 5_000, value_parser = clap::value_parser!(u64).range(1..))]
-    timeout_ms: u64,
+    #[arg(long, hide = true)]
+    timeout_ms: Option<u64>,
 
     /// Maximum wait for a related AT-SPI event before fallback refresh.
-    #[arg(long, default_value_t = 500, value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, default_value_t = 500, hide = true, value_parser = clap::value_parser!(u64).range(1..))]
     settle_ms: u64,
 
     /// Initial semantic bootstrap strategy.
-    #[arg(long, value_enum, default_value_t = BootstrapStrategy::Auto)]
+    #[arg(long, value_enum, default_value_t = BootstrapStrategy::Auto, hide = true)]
     bootstrap: BootstrapStrategy,
 
     /// Maximum buffered AT-SPI events before a correctness resync.
-    #[arg(long, default_value_t = DEFAULT_EVENT_BUFFER_CAPACITY)]
-    event_buffer_capacity: usize,
+    #[arg(long, hide = true)]
+    event_buffer_capacity: Option<usize>,
 
     /// Frontend projection pipeline; legacy preserves the Phase 3B flat mapping.
-    #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled)]
+    #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled, hide = true)]
     presentation: PresentationMode,
 
     /// Private local modality broker socket; absent means safe read-only fallback.
-    #[arg(long)]
+    #[arg(long, global = true)]
     modality_socket: Option<std::path::PathBuf>,
+
+    /// Disable terminal mouse capture (keyboard remains available).
+    #[arg(long, global = true)]
+    no_mouse: bool,
+
+    /// Write contents-free product lifecycle diagnostics to a private runtime log.
+    #[arg(long, value_enum, default_value_t = LogLevel::Off, global = true)]
+    log_level: LogLevel,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Open the application selector (also the default with no command).
+    Run,
+    /// Check dependencies and session access without reading GUI contents.
+    Doctor {
+        #[arg(long)]
+        verbose: bool,
+        #[arg(long)]
+        json: bool,
+        /// Save a contents-free JSON report to a new private file (never overwrite).
+        #[arg(long, value_name = "FILE")]
+        report: Option<std::path::PathBuf>,
+    },
+    /// Inspect or explicitly initialize the optional XDG configuration.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+#[derive(Debug, Subcommand)]
+enum ConfigCommand {
+    Path,
+    Check,
+    Show,
+    Init,
+}
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum LogLevel {
+    Off,
+    Info,
+    Debug,
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_writer(io::stderr)
-        .try_init();
-    match run(Cli::parse()).await {
+    match dispatch(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
@@ -88,15 +125,105 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
+async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
+    use gui2tui::product::{config::Config, doctor, paths};
+    match cli.command.take() {
+        Some(Command::Doctor {
+            verbose,
+            json,
+            report,
+        }) => {
+            let result = doctor::run(cli.modality_socket.as_deref()).await;
+            if let Some(path) = report {
+                result.write_private(&path)?;
+                eprintln!(
+                    "Contents-free report saved; GUI text, input, queries, payloads and URIs excluded."
+                );
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                print!("{}", result.text(verbose));
+            }
+            if !result.healthy() {
+                return Err("Diagnostics found a blocking issue; see FAIL guidance above".into());
+            }
+            return Ok(());
+        }
+        Some(Command::Config { command }) => {
+            let path = paths::config_path()?;
+            match command {
+                ConfigCommand::Path => println!("{}", path.display()),
+                ConfigCommand::Init => {
+                    Config::init(&path)?;
+                    println!("Created {}", path.display());
+                }
+                ConfigCommand::Check => {
+                    Config::load(&path)?;
+                    println!("PASS: {} (defaults when absent)", path.display());
+                }
+                ConfigCommand::Show => {
+                    let mut config = Config::load(&path)?;
+                    config.apply_overrides(
+                        cli.timeout_ms,
+                        cli.event_buffer_capacity,
+                        cli.no_mouse,
+                    )?;
+                    print!("{}", toml::to_string_pretty(&config)?);
+                }
+            }
+            return Ok(());
+        }
+        Some(Command::Run) | None => {}
+    }
+    let mut config = Config::load(&paths::config_path()?)?;
+    config.apply_overrides(cli.timeout_ms, cli.event_buffer_capacity, cli.no_mouse)?;
+    if !matches!(cli.log_level, LogLevel::Off) {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        let path = paths::runtime_dir()?.join("product.log");
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
+            .open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != rustix::process::geteuid().as_raw()
+            || metadata.mode() & 0o077 != 0
+        {
+            return Err("Unsafe diagnostic log path".into());
+        }
+        file.set_len(0)?;
+        // General AT-SPI tracing may include payloads. Deliberately allow only
+        // this contents-free product target, never arbitrary RUST_LOG filters.
+        let filter = match cli.log_level {
+            LogLevel::Debug => "off,gui2tui::product=debug",
+            _ => "off,gui2tui::product=info",
+        };
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_env_filter(EnvFilter::new(filter))
+            .with_writer(file)
+            .try_init();
+    }
+    tracing::info!(target: "gui2tui::product", version=env!("CARGO_PKG_VERSION"), "session starting");
+    let result = run(cli, config).await;
+    tracing::info!(target: "gui2tui::product", success=result.is_ok(), "session stopped");
+    result
+}
+
+async fn run(cli: Cli, config: gui2tui::product::config::Config) -> Result<(), Box<dyn Error>> {
+    let timeout = Duration::from_millis(config.runtime.backend_timeout_ms);
     let recovered = gui2tui::runtime::artifacts::recover_abandoned()?;
     tracing::debug!(
         recovered_artifact_namespaces = recovered,
         "runtime startup recovery"
     );
     let mut signals = RuntimeSignals::new()?;
-    let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
-    let mut guard = TerminalGuard::attach()?;
+    let mut guard = TerminalGuard::attach(config.terminal.mouse)?;
     let previous_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         restore_terminal();
@@ -115,16 +242,12 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     let app_selector = match cli.app {
         Some(name) => name,
         None => {
-            let applications = backend.applications().await?;
-            if applications.is_empty() {
-                return Err(BackendError::NoApplications.into());
-            }
-            let names = applications.into_iter().map(|app| app.name).collect();
             let Some(name) = run_selector(
                 &mut terminal,
-                ApplicationSelector::new(names),
                 &mut signals,
                 &mut terminal_events,
+                timeout,
+                config.terminal.mouse,
             )
             .await?
             else {
@@ -134,6 +257,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         }
     };
 
+    let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Desktop accessibility service unavailable. Run gui2tui doctor; use the same desktop session/user.")?;
+
+    terminal.draw(|frame| frame.render_widget(ratatui::widgets::Paragraph::new("Loading the application's accessible interface... Large applications may take a few seconds."), frame.area()))?;
     let mut app = TuiApplication::new(
         backend,
         app_selector,
@@ -144,7 +270,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         },
         Duration::from_millis(cli.settle_ms),
         cli.bootstrap,
-        cli.event_buffer_capacity,
+        config.runtime.event_queue_capacity,
         cli.presentation,
     )
     .await?;
@@ -178,7 +304,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                         tracing::debug!("reattachment signal received");
                         if !guard.attached {
                             app.begin_terminal_reattach();
-                            guard = TerminalGuard::attach()?;
+                            guard = TerminalGuard::attach(config.terminal.mouse)?;
                             tracing::debug!("terminal modes restored for reattachment");
                             // Terminal::clear queries remote cursor position
                             // (DSR), which may block on a PTY without replies.
@@ -214,13 +340,13 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 match terminal_event? {
                     Event::Key(key) => {
                         if !app.is_available() && key.code == crossterm::event::KeyCode::Char('b') {
-                            if let Ok(backend) = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await
-                                && let Ok(applications) = backend.applications().await {
-                                let selector = ApplicationSelector::new(applications.into_iter().map(|a| a.name).collect());
-                                if let Some(name) = run_selector(&mut terminal, selector, &mut signals, &mut terminal_events).await? {
+                                if let Some(name) = run_selector(&mut terminal, &mut signals, &mut terminal_events, timeout, config.terminal.mouse).await? {
                                     app.select_fresh_application(name).await;
                                 }
-                            }
+                            continue;
+                        }
+                        if !app.is_available() && key.code == crossterm::event::KeyCode::Char('d') {
+                            show_diagnostics(&mut terminal, &mut terminal_events).await?;
                             continue;
                         }
                         if app.handle_key_event(key).await {
@@ -228,7 +354,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                         }
                     }
                     Event::Mouse(mouse) => {
-                        if let Some(intent) = mouse_to_intent(mouse) {
+                        if config.terminal.mouse && let Some(intent) = mouse_to_intent(mouse) {
                             app.handle_mouse(intent).await;
                         }
                     }
@@ -259,10 +385,13 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 
 async fn run_selector(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    mut selector: ApplicationSelector,
     signals: &mut RuntimeSignals,
     events: &mut EventStream,
+    timeout: Duration,
+    mouse_enabled: bool,
 ) -> Result<Option<String>, io::Error> {
+    let mut selector = ApplicationSelector::new(Vec::new());
+    refresh_selector(&mut selector, timeout).await;
     loop {
         terminal.draw(|frame| selector.render(frame))?;
         let event = tokio::select! {
@@ -274,6 +403,20 @@ async fn run_selector(
         };
         match event {
             Event::Key(key) => {
+                if selector.filter_key(key) {
+                    continue;
+                }
+                if matches!(
+                    key.code,
+                    crossterm::event::KeyCode::Char('r') | crossterm::event::KeyCode::F(5)
+                ) {
+                    refresh_selector(&mut selector, timeout).await;
+                    continue;
+                }
+                if key.code == crossterm::event::KeyCode::Char('d') {
+                    show_diagnostics(terminal, events).await?;
+                    continue;
+                }
                 if let Some(intent) = key_to_selector_intent(key) {
                     if intent == SelectorIntent::Quit {
                         return Ok(None);
@@ -284,7 +427,8 @@ async fn run_selector(
                 }
             }
             Event::Mouse(mouse) => {
-                if let Some((x, y)) = mouse_click(mouse)
+                if mouse_enabled
+                    && let Some((x, y)) = mouse_click(mouse)
                     && let Some(name) = selector.click(x, y)
                 {
                     return Ok(Some(name));
@@ -295,15 +439,73 @@ async fn run_selector(
     }
 }
 
+async fn refresh_selector(selector: &mut ApplicationSelector, timeout: Duration) {
+    let result = tokio::time::timeout(timeout, async {
+        AtspiBackend::connect(timeout).await?.applications().await
+    })
+    .await;
+    match result {
+        Ok(Ok(apps)) => selector.replace(apps.into_iter().map(|app| app.name).collect(), None),
+        _ => selector.replace(Vec::new(), Some("Desktop accessibility service unavailable. Use the same desktop session/user; press d for diagnostics.".into())),
+    }
+}
+
+async fn show_diagnostics(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    events: &mut EventStream,
+) -> io::Result<()> {
+    use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+    terminal.draw(|frame| {
+        frame.render_widget(
+            Paragraph::new("Checking session access (bounded probes)..."),
+            frame.area(),
+        )
+    })?;
+    let report = gui2tui::product::doctor::run(None).await;
+    let text = report.text(false);
+    let mut scroll = 0;
+    loop {
+        terminal.draw(|frame| {
+            frame.render_widget(
+                Paragraph::new(text.as_str())
+                    .wrap(Wrap { trim: true })
+                    .scroll((scroll, 0))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title("Diagnostics — ↑/↓ scroll | Esc return"),
+                    ),
+                frame.area(),
+            )
+        })?;
+        match events.next().await {
+            Some(Ok(Event::Key(key))) => match key.code {
+                crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Char('q') => {
+                    return Ok(());
+                }
+                crossterm::event::KeyCode::Down => scroll = scroll.saturating_add(1),
+                crossterm::event::KeyCode::Up => scroll = scroll.saturating_sub(1),
+                _ => {}
+            },
+            None => return Ok(()),
+            Some(Err(error)) => return Err(error),
+            _ => {}
+        }
+    }
+}
+
 struct TerminalGuard {
     attached: bool,
 }
 
 impl TerminalGuard {
-    fn attach() -> io::Result<Self> {
+    fn attach(mouse: bool) -> io::Result<Self> {
         enable_raw_mode()?;
         let guard = Self { attached: true };
-        execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, Hide)?;
+        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+        if mouse {
+            execute!(io::stdout(), EnableMouseCapture)?;
+        }
         Ok(guard)
     }
     fn detach(&mut self) {

@@ -23,6 +23,76 @@ use std::{
 const MAX_CONTROL: usize = 64 * 1024;
 const IO_POLL: Duration = Duration::from_millis(100);
 
+fn broker_failure(error: super::BrokerError) -> &'static str {
+    use super::BrokerError;
+    match error {
+        BrokerError::Denied => "Local authorization denied",
+        BrokerError::Unsupported | BrokerError::SchemeDenied(_) => {
+            "Resource type or scheme unsupported"
+        }
+        BrokerError::HandlerUnavailable(_) => "Local handler unavailable",
+        BrokerError::UnsafePath(_)
+        | BrokerError::PathOutsideMapping(_)
+        | BrokerError::UntrustedReference => "Resource access blocked by safety policy",
+        BrokerError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            "Resource permission denied"
+        }
+        BrokerError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
+            "Referenced resource disappeared"
+        }
+        _ => "Local handler failed",
+    }
+}
+
+/// Never render arbitrary endpoint error strings: they may contain URIs or
+/// untrusted terminal escapes. Keep established wire shape, allowlist messages.
+pub fn user_failure_message(reason: &str) -> &'static str {
+    match reason {
+        "Local authorization denied" => {
+            "Permission denied by local viewer. GUI unchanged; approval is required."
+        }
+        "Resource permission denied" => {
+            "Permission denied while accessing the resource. Check local file permissions."
+        }
+        "Resource type or scheme unsupported" => {
+            "Resource type or scheme is unsupported by this local viewer (read-only)."
+        }
+        "Local handler unavailable" => {
+            "Local viewer handler unavailable. Configure a matching handler and reconnect."
+        }
+        "Resource access blocked by safety policy" => {
+            "Resource access blocked by safety policy. No resource opened."
+        }
+        "Referenced resource disappeared" => {
+            "Referenced resource is no longer available. Resolve it again explicitly."
+        }
+        "Artifact size limit exceeded" => {
+            "Artifact exceeds the configured size limit; no payload requested."
+        }
+        _ => "Local handoff failed. Check the local viewer; no successful Open was confirmed.",
+    }
+}
+
+#[cfg(test)]
+mod user_message_tests {
+    use super::*;
+    #[test]
+    fn permission_unsupported_missing_and_unknown_failures_stay_distinct_and_redacted() {
+        let denied = broker_failure(super::super::BrokerError::Denied);
+        assert!(user_failure_message(denied).contains("Permission denied"));
+        assert!(
+            user_failure_message("Resource type or scheme unsupported").contains("unsupported")
+        );
+        assert!(
+            user_failure_message("Referenced resource disappeared").contains("no longer available")
+        );
+        assert!(
+            !user_failure_message("https://user:secret@example.invalid/?token=secret")
+                .contains("secret")
+        );
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "request", deny_unknown_fields)]
 pub enum Request {
@@ -229,12 +299,12 @@ pub fn serve_connection(
         Request::Reference { kind, resource } => broker
             .handoff_reference(kind, &resource, decision)
             .map(|_| true)
-            .map_err(|_| "Reference denied, unsupported, or local handler failed"),
+            .map_err(broker_failure),
         Request::Artifact { descriptor } => {
-            if descriptor.size > transport.max_size
-                || broker.authorize_artifact(&descriptor, decision).is_err()
-            {
-                Err("Artifact denied or unavailable; payload not requested")
+            if descriptor.size > transport.max_size {
+                Err("Artifact size limit exceeded")
+            } else if let Err(error) = broker.authorize_artifact(&descriptor, decision) {
+                Err(broker_failure(error))
             } else {
                 write_control(&mut stream, &Response::Approved)?;
                 let reader = DeadlineReader::new(&stream, transport.timeout, stop);

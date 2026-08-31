@@ -23,6 +23,9 @@ struct SelectorHitRegion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApplicationSelector {
     applications: Vec<String>,
+    query: String,
+    filtering: bool,
+    message: Option<String>,
     selected: usize,
     hit_regions: Vec<SelectorHitRegion>,
 }
@@ -31,6 +34,9 @@ impl ApplicationSelector {
     pub fn new(applications: Vec<String>) -> Self {
         Self {
             applications,
+            query: String::new(),
+            filtering: false,
+            message: None,
             selected: 0,
             hit_regions: Vec::new(),
         }
@@ -41,18 +47,80 @@ impl ApplicationSelector {
     }
 
     pub fn selected_name(&self) -> Option<&str> {
-        self.applications.get(self.selected).map(String::as_str)
+        self.filtered().nth(self.selected).map(String::as_str)
+    }
+
+    fn filtered(&self) -> impl Iterator<Item = &String> {
+        self.applications
+            .iter()
+            .filter(|name| name.to_lowercase().contains(&self.query.to_lowercase()))
+    }
+
+    pub fn replace(&mut self, applications: Vec<String>, message: Option<String>) {
+        let selected = self.selected_name().map(str::to_owned);
+        self.applications = applications;
+        self.message = message;
+        let index = self
+            .filtered()
+            .position(|name| Some(name) == selected.as_ref())
+            .unwrap_or(0);
+        self.selected = index;
+        self.hit_regions.clear();
+    }
+
+    /// Text input takes precedence over navigation shortcuts while filtering.
+    pub fn filter_key(&mut self, key: KeyEvent) -> bool {
+        if key.code == KeyCode::Char('c')
+            && key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+        {
+            return false;
+        }
+        if key.kind == KeyEventKind::Release {
+            return true;
+        }
+        if key.code == KeyCode::Char('/') && !self.filtering {
+            self.filtering = true;
+            return true;
+        }
+        if !self.filtering {
+            return false;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.filtering = false;
+                self.query.clear();
+            }
+            KeyCode::Enter => {
+                self.filtering = false;
+            }
+            KeyCode::Backspace => {
+                self.query.pop();
+            }
+            KeyCode::Char(character)
+                if key.modifiers.is_empty()
+                    || key.modifiers == crossterm::event::KeyModifiers::SHIFT =>
+            {
+                self.query.push(character)
+            }
+            _ => {}
+        }
+        self.selected = 0;
+        self.hit_regions.clear();
+        true
     }
 
     pub fn handle(&mut self, intent: SelectorIntent) -> Option<String> {
+        let count = self.filtered().count();
         match intent {
-            SelectorIntent::Next if !self.applications.is_empty() => {
-                self.selected = (self.selected + 1) % self.applications.len();
+            SelectorIntent::Next if count > 0 => {
+                self.selected = (self.selected + 1) % count;
                 None
             }
-            SelectorIntent::Previous if !self.applications.is_empty() => {
+            SelectorIntent::Previous if count > 0 => {
                 self.selected = if self.selected == 0 {
-                    self.applications.len() - 1
+                    count - 1
                 } else {
                     self.selected - 1
                 };
@@ -79,22 +147,43 @@ impl ApplicationSelector {
         let main = areas[0];
         let footer = areas[1];
         let block = Block::default()
-            .title(" Select application ")
+            .title(if self.query.is_empty() && !self.filtering {
+                " Select application ".to_owned()
+            } else {
+                format!(
+                    " Select application /{}{} ",
+                    self.query,
+                    if self.filtering { " [filtering]" } else { "" }
+                )
+            })
             .borders(Borders::ALL);
         let inner = block.inner(main);
         frame.render_widget(block, main);
 
         self.hit_regions.clear();
-        for (index, name) in self
-            .applications
+        let start = self
+            .selected
+            .saturating_sub(inner.height.saturating_sub(1) as usize);
+        let names: Vec<_> = self.filtered().cloned().collect();
+        if names.is_empty() {
+            let message = self.message.as_deref().unwrap_or(if self.query.is_empty() {
+                "No accessible applications found. Start a GUI application in the same desktop session.\n\n[d] diagnostics  [r] refresh  [q] quit"
+            } else { "No applications match this filter. Press / then Esc to clear." });
+            frame.render_widget(
+                Paragraph::new(message).wrap(ratatui::widgets::Wrap { trim: true }),
+                inner,
+            );
+        }
+        for (index, name) in names
             .iter()
-            .take(inner.height as usize)
             .enumerate()
+            .skip(start)
+            .take(inner.height as usize)
         {
             let selected = index == self.selected;
             let row = Rect::new(
                 inner.x,
-                inner.y.saturating_add(index as u16),
+                inner.y.saturating_add((index - start) as u16),
                 inner.width,
                 1,
             );
@@ -111,8 +200,12 @@ impl ApplicationSelector {
                 .push(SelectorHitRegion { index, rect: row });
         }
         frame.render_widget(
-            Paragraph::new("↑/↓ or j/k Select | Enter/Click Open | q/Esc Quit")
-                .style(Style::default().fg(Color::Cyan)),
+            Paragraph::new(if self.filtering {
+                "Type filter | Enter Apply | Esc Clear"
+            } else {
+                "↑/↓ Select | Enter Open | / Filter | r/F5 Refresh | d Diagnose | q Quit"
+            })
+            .style(Style::default().fg(Color::Cyan)),
             footer,
         );
     }
@@ -121,6 +214,13 @@ impl ApplicationSelector {
 pub fn key_to_selector_intent(event: KeyEvent) -> Option<SelectorIntent> {
     if event.kind == KeyEventKind::Release {
         return None;
+    }
+    if event.code == KeyCode::Char('c')
+        && event
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        return Some(SelectorIntent::Quit);
     }
     match event.code {
         KeyCode::Down | KeyCode::Char('j') => Some(SelectorIntent::Next),
@@ -147,6 +247,30 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+
+    #[test]
+    fn selector_filter_shortcuts_and_refresh_preserve_selection() {
+        use crossterm::event::KeyModifiers;
+        let mut selector = ApplicationSelector::new(vec!["GTK".into(), "Browser".into()]);
+        for character in ['/', 'r'] {
+            assert!(
+                selector.filter_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+            );
+        }
+        assert_eq!(selector.selected_name(), Some("Browser"));
+        selector.filter_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        selector.replace(vec!["Other".into(), "Browser".into()], None);
+        assert_eq!(selector.selected_name(), Some("Browser"));
+    }
+
+    #[test]
+    fn selector_scroll_keeps_last_item_visible() {
+        let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
+        let mut selector = ApplicationSelector::new((0..30).map(|i| format!("App{i}")).collect());
+        selector.handle(SelectorIntent::Previous);
+        terminal.draw(|frame| selector.render(frame)).unwrap();
+        assert!(selector.hit_regions.iter().any(|region| region.index == 29));
+    }
 
     #[test]
     fn selector_navigation_wraps_and_opens_the_selected_application() {
