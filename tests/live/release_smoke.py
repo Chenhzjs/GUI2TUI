@@ -39,6 +39,15 @@ def frame(child, seconds=.5):
 def save(name, text):
     (result / name).write_text(text)
 
+def wait_for(child, needle, timeout=10):
+    deadline = time.monotonic() + timeout
+    text = ""
+    while time.monotonic() < deadline:
+        text = frame(child, .15)
+        if needle in text:
+            return text
+    raise AssertionError(f"timed out waiting for {needle!r}\n{text}")
+
 screen = pyte.Screen(130, 38)
 stream = pyte.Stream(screen)
 for command in ["gui2tui", "gui2tui-inspect", "gui2tui-local"]:
@@ -51,8 +60,7 @@ run(["config", "check"])
 run(["config", "show"])
 assert not config.exists()
 child = launch([])
-initial = frame(child, 1.2)
-assert "No accessible applications" in initial, initial
+initial = wait_for(child, "No accessible applications")
 save("no-apps.txt", initial)
 child.send(b"q")
 child.expect(pexpect.EOF, timeout=5)
@@ -62,7 +70,14 @@ assert child.exitstatus == 0
 fixture = subprocess.Popen(["python3", str(bundle / "smoke/release_smoke_gtk.py")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 broker = None
 try:
-    time.sleep(1.5)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        apps = subprocess.run([str(binary / "gui2tui-inspect"), "--list"], capture_output=True, text=True, timeout=5)
+        if "gui2tui-release-demo" in apps.stdout:
+            break
+        time.sleep(.15)
+    else:
+        raise AssertionError("GTK fixture did not register with AT-SPI")
     healthy = run(["doctor", "--json", "--report", str(result / "report.json")])
     report = json.loads(healthy.stdout)
     assert not any(c["level"] == "FAIL" for c in report["checks"]), report
@@ -79,14 +94,13 @@ try:
     save("doctor-no-bus.json", run(["doctor", "--json"], ok=False, env=env).stdout)
 
     child = launch(["--log-level", "debug"])
-    selector = frame(child, 1)
-    assert "gui2tui-release-demo" in selector
+    selector = wait_for(child, "gui2tui-release-demo")
     save("selector.txt", selector)
     child.send(b"/release\rr")  # filter accepted, refresh preserves it
     frame(child)
     child.send(b"\r")
-    scene = frame(child, 1)
-    assert "Activate safely" in scene and "alice" in scene
+    scene = wait_for(child, "Activate safely")
+    assert "alice" in scene
     save("scene.txt", scene)
     button_y = next(i for i, line in enumerate(scene.splitlines()) if "[ Activate safely ]" in line)
     button_x = scene.splitlines()[button_y].index("Activate safely")
@@ -107,8 +121,8 @@ try:
     else:
         raise AssertionError("button not focusable")
     child.send(b"\r")
-    after = frame(child, 1)
-    assert "Status: activated" in after and "[x] Enable feature" in after, after
+    after = wait_for(child, "Status: activated")
+    assert "[x] Enable feature" in after, after
     tree = subprocess.check_output([str(binary / "gui2tui-inspect"), "--app", "gui2tui-release-demo"], text=True, timeout=10)
     assert 'CheckBox "Enable feature" [checked' in tree and 'Status: activated' in tree
     assert sentinel not in tree
@@ -125,9 +139,16 @@ try:
     fixture.terminate()
     fixture.wait(timeout=5)
     fixture = subprocess.Popen(["python3", str(bundle / "smoke/release_smoke_gtk.py")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        apps = subprocess.run([str(binary / "gui2tui-inspect"), "--list"], capture_output=True, text=True, timeout=5)
+        if "gui2tui-release-demo" in apps.stdout:
+            break
+        time.sleep(.15)
+    else:
+        raise AssertionError("restarted GTK fixture did not register with AT-SPI")
     child = launch(["--app", "gui2tui-release-demo", "--no-mouse"])
-    no_mouse_frame = frame(child, 1)
+    no_mouse_frame = wait_for(child, "Activate safely")
     child.send(f"\x1b[<0;{button_x + 1};{button_y + 1}M\x1b[<0;{button_x + 1};{button_y + 1}m".encode())
     frame(child)
     unchanged = subprocess.check_output([str(binary / "gui2tui-inspect"), "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
