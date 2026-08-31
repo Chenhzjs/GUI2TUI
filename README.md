@@ -495,6 +495,11 @@ The renderer remains semantic-first and does not consume AT-SPI geometry for lay
 refresh remains a correctness escape hatch when an event cannot be resolved or a cache invariant
 fails.
 
+## Release readiness
+
+Current release readiness is recorded in [Phase 4C validation](docs/phase4c-validation.md).
+The real-application gate is still incomplete; no v0.1.0 public release has been published.
+
 ## License
 
 GUI2TUI is licensed under either of:

@@ -1,0 +1,50 @@
+┌ GUI2TUI — /var/tmp/gui2tui-p4c-1WOogQ/work/review.txt - Mousepad ────────────────────────────────────────────────────────────────────────────────────────────┐
+│> Document: Document                                                                                                                                          │
+│    1 blocks | 0 headings | 0 links | 0 forms                                                                                                                 │
+│    completeness: Complete                                                                                                                                    │
+│    [ Enter: Read document ]                                                                                                                                  │
+│    o Outline | / Content search                                                                                                                              │
+│  Commands (218 available — press : to browse/search):                                                                                                        │
+│  Commands (15 available — press : to browse/search):                                                                                                         │
+│  <Unsupported: TabList>                                                                                                                                      │
+│  <Unsupported: Tab>                                                                                                                                          │
+│  <Unsupported: Slider>                                                                                                                                       │
+│  <Unsupported: Slider>                                                                                                                                       │
+│  Status                                                                                                                                                      │
+│  About Mousepad:                                                                                                                                             │
+│  <Unsupported: Image>                                                                                                                                        │
+│  Mousepad · 0.6.1 · Mousepad is a simple text editor for the Xfce desktop environment · Website · Copyright © 2005-2023 - the Mousepad developers · This prog│
+│  [  Credits]                                                                                                                                                 │
+│  [  License]                                                                                                                                                 │
+│  [ Close ]                                                                                                                                                   │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Full refresh fallback: application dirty — 338 nodes via AT-SPI Cache in 14 ms full_snapshots=2

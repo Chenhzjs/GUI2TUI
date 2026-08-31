@@ -1,0 +1,50 @@
+┌ GUI2TUI — GUI2TUI Qt Fixture ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Commands (1 available — press : to browse/search):                                                                                                          │
+│  Phase 2 Qt compatibility                                                                                                                                    │
+│  Username: alice-p4c                                                                                                                                         │
+│  Long input: LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL│
+│  Password: [password]  (read-only)                                                                                                                           │
+│  [ ] Enable feature                                                                                                                                          │
+│  [ Theme: Light ▼ ]                                                                                                                                          │
+│> [ Choice: Beta ▼ ]                                                                                                                                          │
+│  Status: activated                                                                                                                                           │
+│  [ Activate safely ]                                                                                                                                         │
+│  [ Change username externally ]                                                                                                                              │
+│  [ Replace username control ]                                                                                                                                │
+│  [ Open modal dialog ]                                                                                                                                       │
+│  [ Demo items (current value unavailable) ▼ ]                                                                                                                │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Selected "Beta" via Toggle (GUI disclosure calls=0) — events=1 dirty=1 refreshed=1 nodes cache_nodes=31 reconciled=0 new_ids=0

@@ -1,0 +1,50 @@
+┌ GUI2TUI — review.fodt — LibreOffice Writer ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Content search — review - LibreOffice Document  — partial──────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││Type Search | Ctrl-F Full Search | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader                                                                            ││
+││> semantic                                                                                                                                                  ││
+││Full search: Complete — 17 blocks scanned — 4 matches — 0 text RPCs                                                                                         ││
+││> GUI2TUI Semantic Content                                                                                                                                  ││
+││  The semantic graph feeds a content analyzer, outline, reader,                                                                                             ││
+││  Semantic reference                                                                                                                                        ││
+││  GUI semantics become a task plus content interface in the term                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+F1 Help | Ctrl-F Search more | Enter Go | Esc Back | Full search complete — 17 blocks, 4 matches, 0 text RPCs, cache=547 bytes

@@ -1,0 +1,50 @@
+┌ GUI2TUI — Preferences ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Preferences:                                                                                                                                                │
+│> [ Selection: Behavior ▼ ]                                                                                                                                   │
+│  <Unsupported: Unknown(layered pane)>                                                                                                                        │
+│  Browsing:                                                                                                                                                   │
+│  [ ] Open files with single click                                                                                                                            │
+│  Delay of auto-selection in single click mode:                                                                                                               │
+│  <Unsupported: Browsing>                                                                                                                                     │
+│  [ ] Show folder context menu with Ctrl + right click                                                                                                        │
+│  Bookmarks menu:                                                                                                                                             │
+│  [ Choice: Open in current tab ▼ ]                                                                                                                           │
+│  Default view mode:                                                                                                                                          │
+│  [ Choice: Icon View ▼ ]                                                                                                                                     │
+│  File Operations:                                                                                                                                            │
+│  [x] Confirm before deleting files                                                                                                                           │
+│  [ ] Move deleted files to "trash bin" instead of erasing from disk.                                                                                         │
+│  [ ] Erase files on removable media instead of "trash can" creation                                                                                          │
+│  [ ] Confirm before moving files into "trash can"                                                                                                            │
+│  [ ] Launch executable files without prompt                                                                                                                  │
+│  [ ] Select newly created files                                                                                                                              │
+│  [ ] Single window mode                                                                                                                                      │
+│  Number of recent files:                                                                                                                                     │
+│  <Unsupported: File Operations>                                                                                                                              │
+│  Icons:                                                                                                                                                      │
+│  Icon theme:                                                                                                                                                 │
+│  [ Choice: Adwaita ▼ ]                                                                                                                                       │
+│  Size of big icons:                                                                                                                                          │
+│  [ Choice: 48 x 48 ▼ ]                                                                                                                                       │
+│  Size of small icons:                                                                                                                                        │
+│  [ Choice: 24 x 24 ▼ ]                                                                                                                                       │
+│  Size of thumbnails:                                                                                                                                         │
+│  [ Choice: 128 x 128 ▼ ]                                                                                                                                     │
+│  Size of side pane icons:                                                                                                                                    │
+│  [ Choice: 24 x 24 ▼ ]                                                                                                                                       │
+│  User interface:                                                                                                                                             │
+│  [ ] Use SI decimal prefixes instead of IEC binary prefixes                                                                                                  │
+│  [ ] Treat backup files as hidden                                                                                                                            │
+│  [x] Always show real file names                                                                                                                             │
+│  [x] Show icons of hidden files shadowed                                                                                                                     │
+│  [ ] Do not show file tooltips                                                                                                                               │
+│  [ ] Disable smooth scrolling                                                                                                                                │
+│  Minimum item margins in icon view:                                                                                                                          │
+│  <Unsupported: User interface>                                                                                                                               │
+│  x                                                                                                                                                           │
+│  <Unsupported: User interface>                                                                                                                               │
+│  [ ] Lock                                                                                                                                                    │
+│  Window:                                                                                                                                                     │
+│  [x] Always show the tab bar                                                                                                                                 │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Loaded 176 semantic nodes via recursive walk in 138 ms

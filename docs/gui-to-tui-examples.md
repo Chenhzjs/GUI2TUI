@@ -273,3 +273,29 @@ No endpoint was present for the first capture/materialization. Same-host opening
 temporary file path (`artifact_bytes=0`). Startup/F4 browsing made zero capture calls. The
 original mixed GTK Label/Picture layout had unreliable AT-SPI offsets and is now explicitly
 refused rather than incorrectly including its Label. See [the full validation](static-acquisition.md).
+
+## Phase 4C: real desktop applications (2026-09-01)
+
+These links are **actual 160-column PTY frames**, not mockups; only trailing
+space padding is trimmed. The
+documents are controlled test inputs opened in real applications. A frame alone
+does not establish every operation: see [workflow assertions and limitations](phase4c-validation.md).
+
+- [Mousepad document → read-only Reader](validation/phase4c/mousepad-reader.txt),
+  [About dialog](validation/phase4c/mousepad-about.txt).
+- [LibreOffice Writer → Reader](validation/phase4c/writer-reader.txt),
+  [explicit progressive search](validation/phase4c/writer-search.txt).
+- [Chrome → terminal table](validation/phase4c/chrome-table.txt),
+  [application-gone recovery view](validation/phase4c/chrome-gone.txt).
+- [Firefox → terminal table](validation/phase4c/firefox-table.txt),
+  [cancelled search](validation/phase4c/firefox-cancelled.txt).
+- [Qt Choice after authoritative Beta selection](validation/phase4c/qt-choice.txt).
+- [PCManFM-Qt Preferences](validation/phase4c/pcmanfm-settings-probe.txt):
+  **probe only**, repeatable interaction workflow not yet established.
+- [Real VS Code search](validation/phase4c/vscode-search.txt) and
+  [safe anonymous-action refusal](validation/phase4c/vscode-refusal.txt).
+
+The new GTK no-reference acquisition returned this 480×180 cropped **RenderedSnapshot**,
+not original image bytes. It was materialized headlessly and opened by EOG on the same host:
+
+![Actual explicit GTK rendered snapshot](validation/phase4c/rendered-snapshot.png)

@@ -188,3 +188,18 @@ Chrome 5,158 nodes issued only 256 relation RPCs (8.860–9.244 ms) and reached 
 in 491–496 ms internally, while LibreOffice exposed 478 reachable safe leaves without rendering
 them as 478 default scene rows. Complete cross-family counts and the safe cross-toolkit Choice
 results are in [relations.md](relations.md).
+
+## Phase 4C real-application revalidation (2026-09-01)
+
+See [the current report](phase4c-validation.md): **PHASE 4C NOT YET VALIDATED**.
+Mousepad Reader/search/About/restart, Writer visible Reader/Outline/search/About,
+Chrome and Firefox Reader/search/cancel/table/dynamic read-back, GTK/Qt controls,
+Qt Choice, and headless/static-image/EOG paths have fresh evidence. Qt Designer
+has a limited dialog/command workflow; PCManFM-Qt has probes but a repeatable
+workflow remains blocked. The frozen architecture is unchanged.
+
+Historical Chrome 5K cache timing is not a current fresh-profile guarantee:
+both the previous and current binaries fell back to walk on incomplete cache
+inventories (~4 s first frame). Do not infer complete document coverage from
+Writer's `PartialRealized` visible content. Full matrix, current limitations and
+unaccepted P1 findings are in the linked report/ledger.

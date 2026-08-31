@@ -22,3 +22,9 @@
 
 See [compatibility evidence](compatibility.md), [runtime recovery](phase4a-completion.md),
 [real examples](gui-to-tui-examples.md) and [architecture freeze](architecture-freeze.md).
+
+Phase 4C real-application evidence is [tracked separately](phase4c-validation.md).
+Fresh Chrome profiles currently can force a multi-second walk when Cache.GetItems
+is incomplete; the old fast-bootstrap measurement is not universally reproducible.
+Multi-line editor buffers are Reader-only, never atomic single-line edit targets.
+Writer long-document realized subsets do not imply complete-document search.

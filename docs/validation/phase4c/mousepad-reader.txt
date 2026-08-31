@@ -1,0 +1,50 @@
+┌ GUI2TUI — /var/tmp/gui2tui-p4c-1WOogQ/work/review.txt - Mousepad ────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Reader — Document ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││j/k Move | PageUp/PageDown | o Outline | / Search | Esc Back                                                                                                ││
+││GUI2TUI real editor review                                                                                                                                  ││
+││Section 0: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 1: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 2: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 3: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 4: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 5: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 6: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 7: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 8: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 9: accessibility workflow paragraph for semantic navigation.                                                                                        ││
+││Section 10: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 11: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 12: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 13: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 14: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 15: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 16: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 17: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 18: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 19: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 20: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 21: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 22: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 23: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 24: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 25: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 26: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 27: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 28: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 29: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 30: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 31: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 32: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 33: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 34: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 35: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 36: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 37: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 38: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 39: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 40: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 41: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+││Section 42: accessibility workflow paragraph for semantic navigation.                                                                                       ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | j/k Blocks | / Search | Esc Back | Reader loaded 1 blocks (text_rpcs=1 ranges=2 cache=7016 bytes) in 2.129 ms

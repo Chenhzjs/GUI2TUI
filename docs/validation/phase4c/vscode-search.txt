@@ -1,0 +1,50 @@
+┌ GUI2TUI — review.txt - Visual Studio Code ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Content search — review.txt - Visual Studio Code ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││Type Search | Ctrl-F Full Search | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader                                                                            ││
+││> review                                                                                                                                                    ││
+││Full search: Complete — 253 / 253 blocks scanned — 13 matches — 11 text RPCs                                                                                ││
+││> review.txt                                                                                                                                                ││
+││  ar/tmp/gui2tui-p4c-34wu6I/work/review.txt                                                                                                                 ││
+││  review.txt                                                                                                                                                ││
+││  ar/tmp/gui2tui-p4c-34wu6I/work/review.txt                                                                                                                 ││
+││  review.txt                                                                                                                                                ││
+││  review.txt                                                                                                                                                ││
+││  GUI2TUI real editor review                                                                                                                                ││
+││  GUI2TUI real editor review                                                                                                                                ││
+││  GUI2TUI real editor review Section 0: accessibility workflow paragraph for s                                                                              ││
+││  Suggested context, file, review.txt file:///var/tmp/gui2tui-p4c-34wu6I/work                                                                               ││
+││  Add file:review.txt to context                                                                                                                            ││
+││  ar/tmp/gui2tui-p4c-34wu6I/work/review.txt                                                                                                                 ││
+││  review.txt                                                                                                                                                ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+F1 Help | Ctrl-F Search more | Enter Go | Esc Back | Full search complete — 253 blocks, 13 matches, 11 text RPCs, cache=115 bytes

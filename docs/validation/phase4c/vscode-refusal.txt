@@ -1,0 +1,50 @@
+┌ GUI2TUI — review.txt - Visual Studio Code ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Document: review.txt - Visual Studio Code                                                                                                                   │
+│    253 blocks | 0 headings | 1 links | 35 forms                                                                                                              │
+│    completeness: Complete                                                                                                                                    │
+│    [ Enter: Read document ]                                                                                                                                  │
+│    o Outline | / Content search                                                                                                                              │
+│  [ Minimize ]  (read-only)                                                                                                                                   │
+│  [ Maximize ]  (read-only)                                                                                                                                   │
+│  [ Restore ]  (read-only)                                                                                                                                    │
+│  [ Close ]  (read-only)                                                                                                                                      │
+│> [ Manage ]  (read-only)                                                                                                                                     │
+│  [ Learn More ]  (read-only)                                                                                                                                 │
+│  [ Selection (options unavailable) ▼ ]  (read-only)                                                                                                          │
+│  • Item  (read-only)                                                                                                                                         │
+│  • Item  (read-only)                                                                                                                                         │
+│  • Item  (read-only)                                                                                                                                         │
+│  • Item  (read-only)                                                                                                                                         │
+│  • Item  (read-only)                                                                                                                                         │
+│  review.txt: [empty]  (read-only)                                                                                                                            │
+│  [ Add file:review.txt to context ]  (read-only)                                                                                                             │
+│  Chat Input (Agent), edit files in your workspace. Press Enter to send out the request. Use Shift+Alt+F1 for Chat Accessibility Help.: [empty]  (read-only)  │
+│  Status                                                                                                                                                      │
+│  remote:                                                                                                                                                     │
+│  [ remote ]  (read-only)                                                                                                                                     │
+│  Restricted Mode: Some features are disabled because this window is not trusted.:                                                                            │
+│  [ Restricted Mode: Some features are disabled because this window is not trusted. ]  (read-only)                                                            │
+│  No Problems:                                                                                                                                                │
+│  [ No Problems ]  (read-only)                                                                                                                                │
+│  Notifications:                                                                                                                                              │
+│  [ Notifications ]  (read-only)                                                                                                                              │
+│  Copilot status:                                                                                                                                             │
+│  [ Copilot status ]  (read-only)                                                                                                                             │
+│  Plain Text:                                                                                                                                                 │
+│  [ Plain Text ]  (read-only)                                                                                                                                 │
+│  Editor Language Status: $(copilot) No inline suggestion available, Inline suggestions:                                                                      │
+│  [ Editor Language Status: $(copilot) No inline suggestion available, Inline suggestions ]  (read-only)                                                      │
+│  LF:                                                                                                                                                         │
+│  [ LF ]  (read-only)                                                                                                                                         │
+│  UTF-8:                                                                                                                                                      │
+│  [ UTF-8 ]  (read-only)                                                                                                                                      │
+│  Spaces: 4:                                                                                                                                                  │
+│  [ Spaces: 4 ]  (read-only)                                                                                                                                  │
+│  Ln 1, Col 1:                                                                                                                                                │
+│  [ Ln 1, Col 1 ]  (read-only)                                                                                                                                │
+│  Screen Reader Optimized:                                                                                                                                    │
+│  [ Screen Reader Optimized ]  (read-only)                                                                                                                    │
+│  <Unsupported: Unknown(notification)>                                                                                                                        │
+│  [ Info: All installed extensions are temporarily disabled., notification (options unavailable) ▼ ]  (read-only)                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | No compatible semantic action for "Manage"

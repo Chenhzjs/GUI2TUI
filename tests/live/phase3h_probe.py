@@ -18,7 +18,7 @@ import pexpect
 import pyte
 
 root = pathlib.Path(os.environ["RESULT_DIR"])
-binary = pathlib.Path(os.environ["TARGET_DIR"]) / "debug"
+binary = pathlib.Path(os.environ["GUI2TUI_BIN"]) if "GUI2TUI_BIN" in os.environ else pathlib.Path(os.environ["TARGET_DIR"]) / "debug"
 app = os.environ["APP_SELECTOR"]
 
 

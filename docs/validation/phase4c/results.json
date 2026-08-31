@@ -1,0 +1,444 @@
+[
+  {
+    "application": "mousepad",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "multiline_reader": "PASS",
+      "command_dialog_close": "PASS",
+      "reader_death_restart_stale_generation": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Mousepad",
+    "snapshot_wall_ms": 35.68,
+    "nodes": 319,
+    "cache_forced_exit": 0,
+    "first_frame_ms": 120.08,
+    "resources_bootstrap": {
+      "rss_kib": 12856,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 16244,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-1WOogQ",
+    "advertised_action_nodes": 233
+  },
+  {
+    "application": "gtk",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "edit_cancel_button_password": "PASS",
+      "choice_or_safe_degradation": "PASS"
+    },
+    "result": "PASS",
+    "selector": "gui2tui-live-fixture",
+    "snapshot_wall_ms": 30.99,
+    "nodes": 44,
+    "cache_forced_exit": 0,
+    "first_frame_ms": 117.72,
+    "resources_bootstrap": {
+      "rss_kib": 10880,
+      "fd": 18
+    },
+    "resources_after_workflow": {
+      "rss_kib": 11216,
+      "fd": 18
+    },
+    "evidence_directory": "gui2tui-p4c-DYItY0",
+    "advertised_action_nodes": 31
+  },
+  {
+    "application": "qt",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "edit_cancel_button_password": "PASS",
+      "choice_or_safe_degradation": "PASS"
+    },
+    "result": "PASS",
+    "selector": "gui2tui-qt-fixture",
+    "snapshot_wall_ms": 16.17,
+    "nodes": 31,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 105.27,
+    "resources_bootstrap": {
+      "rss_kib": 10724,
+      "fd": 18
+    },
+    "resources_after_workflow": {
+      "rss_kib": 10808,
+      "fd": 18
+    },
+    "evidence_directory": "gui2tui-p4c-YZYTmC",
+    "advertised_action_nodes": 19
+  },
+  {
+    "application": "designer",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "startup_dialog_close_commands": "PASS"
+    },
+    "result": "PASS",
+    "selector": "designer",
+    "snapshot_wall_ms": 246.53,
+    "nodes": 311,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 330.75,
+    "resources_bootstrap": {
+      "rss_kib": 12632,
+      "fd": 18
+    },
+    "resources_after_workflow": {
+      "rss_kib": 13244,
+      "fd": 18
+    },
+    "evidence_directory": "gui2tui-p4c-WMHxGh",
+    "advertised_action_nodes": 165
+  },
+  {
+    "application": "chrome",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "progressive_cancellation": "PASS",
+      "reader_outline_search_frames": "PASS",
+      "external_content_mutation": "PASS",
+      "table_navigation": "PASS",
+      "reader_death_restart_stale_generation": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "snapshot_wall_ms": 307.07,
+    "nodes": 391,
+    "advertised_action_nodes": 391,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 343.05,
+    "tui_bootstrap": {
+      "nodes": 391,
+      "strategy": "recursive walk",
+      "ms": 307
+    },
+    "resources_bootstrap": {
+      "rss_kib": 13548,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 13688,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-KkM2s8"
+  },
+  {
+    "application": "firefox",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "progressive_cancellation": "PASS",
+      "reader_outline_search_frames": "PASS",
+      "external_content_mutation": "PASS",
+      "table_navigation": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Firefox",
+    "snapshot_wall_ms": 195.52,
+    "nodes": 289,
+    "advertised_action_nodes": 235,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 315.4,
+    "resources_bootstrap": {
+      "rss_kib": 13308,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 13328,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-9jZlSI"
+  },
+  {
+    "application": "firefox",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "progressive_cancellation": "PASS",
+      "reader_outline_search_frames": "PASS",
+      "external_content_mutation": "PASS",
+      "table_navigation": "PASS",
+      "headless_modality_no_fake_open": "PASS",
+      "headless_reference_payload_zero": "NOT VERIFIED"
+    },
+    "result": "PASS",
+    "selector": "Firefox",
+    "snapshot_wall_ms": 217.87,
+    "nodes": 289,
+    "advertised_action_nodes": 235,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 328.4,
+    "resources_bootstrap": {
+      "rss_kib": 13232,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 13272,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-oDZ39F"
+  },
+  {
+    "application": "writer",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "reader_outline_search_frames": "PASS",
+      "command_dialog_close": "PASS"
+    },
+    "result": "PASS",
+    "selector": "soffice",
+    "snapshot_wall_ms": 1533.89,
+    "nodes": 1978,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 1659.55,
+    "resources_bootstrap": {
+      "rss_kib": 19828,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 35760,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-d3asz4",
+    "advertised_action_nodes": 1431
+  },
+  {
+    "application": "writer-long",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "reader_outline_search_frames": "PASS",
+      "command_dialog_close": "PASS"
+    },
+    "result": "PASS",
+    "selector": "soffice",
+    "snapshot_wall_ms": 1357.08,
+    "nodes": 1984,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 1704.42,
+    "resources_bootstrap": {
+      "rss_kib": 20012,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 36096,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-22gTfG",
+    "advertised_action_nodes": 1431
+  },
+  {
+    "application": "pcmanfm-settings",
+    "mode": "probe",
+    "checks": {
+      "discovery_tree": "PASS"
+    },
+    "result": "PROBE PASS",
+    "selector": "pcmanfm-qt",
+    "snapshot_wall_ms": 156.25,
+    "nodes": 176,
+    "advertised_action_nodes": 124,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 224.86,
+    "tui_bootstrap": {
+      "nodes": 176,
+      "strategy": "recursive walk",
+      "ms": 138
+    },
+    "resources_bootstrap": {
+      "rss_kib": 11792,
+      "fd": 18
+    },
+    "evidence_directory": "gui2tui-p4c-8UOdLt"
+  },
+  {
+    "application": "pcmanfm-settings",
+    "mode": "workflow",
+    "checks": {},
+    "result": "BLOCKED",
+    "selector": "pcmanfm-qt",
+    "error_type": "AssertionError",
+    "evidence_directory": "gui2tui-p4c-gWmE6P"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "benchmark",
+    "checks": {
+      "discovery_tree": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "snapshot_wall_ms": 5037.77,
+    "nodes": 5158,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 4156.93,
+    "resources_bootstrap": {
+      "rss_kib": 38744,
+      "fd": 19
+    },
+    "benchmark": [
+      {
+        "first_frame_ms": 4055.06,
+        "rss_kib": 39132,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 3699.31,
+        "rss_kib": 38560,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 4238.46,
+        "rss_kib": 39240,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 4202.45,
+        "rss_kib": 39160,
+        "fd": 19
+      }
+    ],
+    "warm_first_frame_median_ms": 4202.45,
+    "evidence_directory": "gui2tui-p4c-P2B5b2",
+    "advertised_action_nodes": 5158
+  },
+  {
+    "application": "chrome-large",
+    "mode": "benchmark",
+    "checks": {
+      "discovery_tree": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "snapshot_wall_ms": 3315.67,
+    "nodes": 5158,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 3630.3,
+    "resources_bootstrap": {
+      "rss_kib": 38920,
+      "fd": 19
+    },
+    "benchmark": [
+      {
+        "first_frame_ms": 3697.61,
+        "rss_kib": 38472,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 4042.27,
+        "rss_kib": 38560,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 4054.31,
+        "rss_kib": 38988,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 4079.62,
+        "rss_kib": 39032,
+        "fd": 19
+      }
+    ],
+    "warm_first_frame_median_ms": 4054.31,
+    "evidence_directory": "gui2tui-p4c-7iUKrn",
+    "advertised_action_nodes": 5158
+  },
+  {
+    "application": "chrome-large",
+    "mode": "benchmark",
+    "checks": {
+      "discovery_tree": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "snapshot_wall_ms": 3924.38,
+    "nodes": 5166,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 3765.48,
+    "resources_bootstrap": {
+      "rss_kib": 38732,
+      "fd": 19
+    },
+    "benchmark": [
+      {
+        "first_frame_ms": 3783.91,
+        "rss_kib": 39504,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 3771.81,
+        "rss_kib": 39564,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 3852.63,
+        "rss_kib": 39252,
+        "fd": 19
+      },
+      {
+        "first_frame_ms": 3767.19,
+        "rss_kib": 39352,
+        "fd": 19
+      }
+    ],
+    "warm_first_frame_median_ms": 3771.81,
+    "evidence_directory": "gui2tui-p4c-VXZnry",
+    "advertised_action_nodes": 5166
+  },
+  {
+    "application": "static-image",
+    "mode": "modality",
+    "checks": {
+      "discovery_tree": "PASS",
+      "headless_snapshot_same_host": "PASS"
+    },
+    "result": "PASS",
+    "selector": "python3",
+    "snapshot_wall_ms": 6.26,
+    "nodes": 4,
+    "cache_forced_exit": 0,
+    "evidence_directory": "gui2tui-p4c-fdDAgb",
+    "advertised_action_nodes": 3
+  },
+  {
+    "application": "electron",
+    "mode": "workflow",
+    "checks": {
+      "discovery_tree": "PASS",
+      "reader_search_anonymous_refusal": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Code",
+    "snapshot_wall_ms": 237.47,
+    "nodes": 367,
+    "advertised_action_nodes": 367,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 344.48,
+    "tui_bootstrap": {
+      "nodes": 367,
+      "strategy": "recursive walk",
+      "ms": 266
+    },
+    "resources_bootstrap": {
+      "rss_kib": 13616,
+      "fd": 19
+    },
+    "resources_after_workflow": {
+      "rss_kib": 13700,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-34wu6I"
+  }
+]

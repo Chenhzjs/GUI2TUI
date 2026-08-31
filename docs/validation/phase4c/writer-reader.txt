@@ -1,0 +1,50 @@
+┌ GUI2TUI — review.fodt — LibreOffice Writer ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Reader — review - LibreOffice Document  — partial──────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││j/k Move | PageUp/PageDown | o Outline | / Search | Esc Back                                                                                                ││
+││# GUI2TUI Semantic Content                                                                                                                                  ││
+││                                                                                                                                                            ││
+││This fixture validates terminal-native document reading through AT-SPI only.                                                                                ││
+││                                                                                                                                                            ││
+││# Architecture                                                                                                                                              ││
+││                                                                                                                                                            ││
+││The semantic graph feeds a content analyzer, outline, reader, and bounded search cache.                                                                     ││
+││                                                                                                                                                            ││
+││ Controls remain task-oriented.                                                                                                                            ││
+││                                                                                                                                                            ││
+││ Paragraphs are progressively materialized.                                                                                                                ││
+││                                                                                                                                                            ││
+││ Graphical coordinates are never the primary layout.                                                                                                       ││
+││                                                                                                                                                            ││
+││Semantic reference                                                                                                                                          ││
+││                                                                                                                                                            ││
+││# Evaluation                                                                                                                                                ││
+││                                                                                                                                                            ││
+││Reader navigation stores content block identity, so terminal reflow does not lose position.                                                                 ││
+││                                                                                                                                                            ││
+││Results-1                                                                                                                                                   ││
+││                                                                                                                                                            ││
+││A1                                                                                                                                                          ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | j/k Blocks | / Search | Esc Back | Reader loaded 17 blocks (text_rpcs=14 ranges=14 cache=547 bytes) in 7.848 ms

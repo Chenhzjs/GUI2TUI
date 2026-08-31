@@ -9,7 +9,7 @@ import time
 import pexpect
 import pyte
 
-binary = pathlib.Path(os.environ["TARGET_DIR"]) / "debug"
+binary = pathlib.Path(os.environ["GUI2TUI_BIN"]) if "GUI2TUI_BIN" in os.environ else pathlib.Path(os.environ["TARGET_DIR"]) / "debug"
 selector = "gui2tui-qt-rich-text-fixture"
 fixture = None
 
