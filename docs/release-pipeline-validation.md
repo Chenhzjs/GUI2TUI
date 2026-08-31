@@ -1,22 +1,18 @@
 # Phase 4B release pipeline validation
 
-PHASE 4B RELEASE PIPELINE SUPPLEMENT NOT YET VALIDATED
-
-The run below passed build/smoke/provenance but was subsequently superseded:
-an all-bytes audit found embedded checkout paths in ELF files. The text-only
-audit had skipped binaries. Compiler source-path remapping and binary-inclusive
-validation are now required; a fresh complete dual-native run is pending.
+PHASE 4B RELEASE PIPELINE SUPPLEMENT VALIDATED
 
 Core IR structural changes: NONE. CORE ARCHITECTURE FROZEN FOR v0.1.
 Public v0.1.0 release: NOT PUBLISHED. No release tag was created.
 
 ## Source and GitHub evidence
 
-- Validated source: `602839aca6c7660d7d42bfff8926e0d49923cbd5`.
-- [Release validation run 33412224208](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33412224208):
+- Validated source: `eede5077114b048a9bd6230e6112e9e9a71ac109`.
+- [Release validation run 33414098916](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33414098916):
   `workflow_dispatch`, `master`, `publish=false`, attestation enabled, **success**.
-- [Normal CI run 33412195059](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33412195059): **success**.
-- Release run started 2026-08-31 16:06:23 UTC; duration 3m43s.
+- [Normal CI run 33414080972](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33414080972): **success**.
+- Release run created 2026-08-31 16:26:25 UTC and completed 16:32:32 UTC,
+  including concurrency queue time; native jobs took 2m51s (arm) and 3m26s (x86).
 - Both native build jobs and assembly succeeded; the publish job was **skipped**.
 - No shared Cargo cache was configured: both release jobs built on fresh hosted runners.
 - This evidence document is a subsequent documentation-only change, not part of those archive bytes.
@@ -35,14 +31,14 @@ The ABI gate is <=2.35. Actual measured 2.34 improves on the earlier local aarch
 
 | Archive | Bytes | ELF machine |
 | --- | ---: | --- |
-| gui2tui-0.1.0-linux-x86_64.tar.gz | 10,681,199 | Advanced Micro Devices X86-64 |
-| gui2tui-0.1.0-linux-aarch64.tar.gz | 10,482,016 | AArch64 |
+| gui2tui-0.1.0-linux-x86_64.tar.gz | 10,683,326 | Advanced Micro Devices X86-64 |
+| gui2tui-0.1.0-linux-aarch64.tar.gz | 10,485,031 | AArch64 |
 
 Actual combined SHA256SUMS:
 
 ```text
-7fec900a3f69a8684a0981e49c83da1026024b879d1fd9d96990d48731ace551  gui2tui-0.1.0-linux-aarch64.tar.gz
-4ee0ef5039eb8379b6650896a3c835c1a2457b01c6bc3320cbdff9ba0f50f0ff  gui2tui-0.1.0-linux-x86_64.tar.gz
+82c865cdced8f0da1bd1692eb552c5ffeaf478afcd3a0dce970ef3ff913661bd  gui2tui-0.1.0-linux-aarch64.tar.gz
+7c0415cfb04badc75f966a0d028327c966d956a13927e0eb9c28ce399d78df0d  gui2tui-0.1.0-linux-x86_64.tar.gz
 ```
 
 All three binaries on both architectures depend on `libc.so.6`, `libgcc_s.so.1`,
@@ -85,13 +81,15 @@ disabled mouse, fixture restart, and broker capabilities.
 
 GitHub artifacts:
 
-- `native-x86_64` (ID 9765688055).
-- `native-aarch64` (ID 9765670993).
-- `gui2tui-0.1.0-release-candidate` (ID 9765698627).
+- `native-x86_64` (ID 9766496206).
+- `native-aarch64` (ID 9766475017).
+- `gui2tui-0.1.0-release-candidate` (ID 9766502384).
 
 The assembled artifact was downloaded from GitHub to a fresh directory. Both final
 archive checksums passed again locally. Re-running `assemble-release.py` against
 the downloaded files passed metadata/ABI/smoke agreement checks for both architectures.
+An independent scan of every regular tar member, including ELF binary bytes,
+also passed the developer/runner-checkout-path audit for both final archives.
 
 ```bash
 sha256sum -c SHA256SUMS
@@ -102,7 +100,7 @@ gh attestation verify gui2tui-0.1.0-linux-aarch64.tar.gz --repo Chenhzjs/GUI2TUI
 
 Both `gh attestation verify` checks succeeded. The verified statement identifies
 the above source commit, `.github/workflows/release.yml@refs/heads/master`, GitHub-hosted
-execution, and run 33412224208. Its subjects include both archives, SHA256SUMS and
+execution, and run 33414098916. Its subjects include both archives, SHA256SUMS and
 RELEASE-MANIFEST.json. This proves provenance, not absence of software vulnerabilities.
 
 ## Quality and failure investigation
@@ -121,7 +119,9 @@ git diff --check
 Local commands selected those installed compilers with `RUSTUP_TOOLCHAIN=stable`;
 GitHub CI and both release builds used the fixed Rust 1.88.0. Rust tests remain
 223 (218 library + 2 inspector CLI + 3 user CLI), with no new Rust tests in this
-packaging-only supplement. YAML parse, actionlint 1.7.7, shell syntax, Python compile,
+packaging-only supplement. Six new standard-library Python assembly tests additionally
+cover final bytes, missing/extra archives, smoke failure, commit mismatch and bundled
+ABI mismatch (229 tests across both suites). YAML parse, actionlint 1.7.7, shell syntax, Python compile,
 ABI gates, final-package privacy checks, two native live smoke runs and assembly checks passed.
 
 ### Bug analysis: hosted-runner readiness
@@ -146,6 +146,23 @@ successfully after the competing build ended. A separate macOS target directory
 was additionally used for clean validation. This was harness interference, not a
 product-code defect. Use separate CARGO_TARGET_DIR values across OS environments.
 
+### Bug analysis: embedded source paths
+
+- Symptom: an independent all-bytes audit of the downloaded candidate found
+  absolute runner checkout paths in all six ELF binaries despite the text audit passing.
+- Root cause: grep's binary-ignore option omitted the executables; ordinary Rust
+  release builds retain some source locations even without debug info.
+- Minimal fix: the shared packaging command adds a checkout-path remapping flag;
+  archive validation scans binary bytes too and reports filenames only.
+- Negative regression: the new byte scan detects the old candidate's embedded paths.
+  No core/product source or release optimization profile was changed.
+- Prevention: keep binary-inclusive auditing and final-download verification; do not
+  equate a text-only scan or successful smoke with complete release-content validation.
+
+The earlier candidate run 33412224208 is **superseded** because of that path audit
+failure. Run 33413938705 passed the remapping fix; the final run above also includes
+the six assembly regression tests. Do not distribute the superseded candidate.
+
 ## Publication boundary
 
 Manual validation defaults to no publication. Only a matching existing `v*` tag,
@@ -156,3 +173,7 @@ No public release or tag existed when checked after this run.
 musl: NOT PURSUED. deb/rpm/AppImage/Flatpak: NOT IMPLEMENTED, OUT OF SCOPE.
 Remote production endpoint, new-TTY attach and Wayland capture: NOT IMPLEMENTED.
 Phase 4C real-world compatibility sweep remains future work.
+
+GitHub reported Node.js 20 deprecation annotations for official v4 checkout/artifact
+actions, executing them on Node.js 24. They passed in this run; future action-runtime
+updates and Ubuntu 22.04 runner retirement still require routine maintenance.
