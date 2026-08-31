@@ -44,5 +44,8 @@ libreoffice)
 esac
 sleep 8
 python3 tests/live/phase3g_probe.py
+if [[ "${OFFICE_RECOVERY:-0}" == 1 && "$TEST_APP" == libreoffice ]]; then
+  APP_PID="$app_pid" python3 tests/live/phase4a_office.py
+fi
 '
 echo "RESULT_DIR=$RESULT_DIR"

@@ -20,6 +20,10 @@ dbus-update-activation-environment DISPLAY XDG_SESSION_TYPE NO_AT_BRIDGE QT_LINU
 for property in IsEnabled ScreenReaderEnabled; do
   gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus --method org.freedesktop.DBus.Properties.Set org.a11y.Status "$property" "<true>"
 done
-python3 tests/live/phase4a_lifecycle.py
+if [[ "${CONTROLS_ONLY:-0}" == 1 ]]; then
+  python3 tests/live/phase4a_controls.py
+else
+  python3 tests/live/phase4a_lifecycle.py
+fi
 '
 echo "RESULT_DIR=$RESULT_DIR"

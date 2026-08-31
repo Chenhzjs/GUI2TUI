@@ -87,6 +87,7 @@ pub struct TuiApplication {
     content: ContentRuntime,
     content_view: Option<ContentViewState>,
     content_return: Option<ContentViewState>,
+    reader_stale_fallbacks: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -131,6 +132,25 @@ impl TuiApplication {
             .and_then(|el| el.binding.as_ref())
             .map(|b| b.runtime_id.get())
             .into();
+        status["reader"] = self
+            .content_view
+            .as_ref()
+            .map(|view| {
+                serde_json::json!({
+                    "root_runtime": view.root.get(),
+                    "position": view.position.get(),
+                    "mode": format!("{:?}", view.mode),
+                })
+            })
+            .unwrap_or(serde_json::Value::Null);
+        status["reader_stale_fallbacks"] = self.reader_stale_fallbacks.into();
+        let text_capabilities = self.content.text_capability_counts();
+        status["text_capabilities"] = serde_json::json!({
+            "unsupported": text_capabilities[0],
+            "declared": text_capabilities[1],
+            "verified": text_capabilities[2],
+            "quarantined": text_capabilities[3],
+        });
         status
     }
 
@@ -467,6 +487,14 @@ impl TuiApplication {
             return;
         };
         let resource = crate::modality::runtime::materialized_reference(artifact);
+        #[cfg(debug_assertions)]
+        let test_transfer = std::env::var_os("GUI2TUI_TEST_TRANSFER_PROGRESS").map(|progress| {
+            (
+                artifact.path(),
+                artifact.metadata.descriptor.clone(),
+                std::path::PathBuf::from(progress),
+            )
+        });
         self.modality_cancel = Default::default();
         let cancel = self.modality_cancel.clone();
         self.modality_ticket = self
@@ -480,6 +508,21 @@ impl TuiApplication {
             return;
         }
         self.modality_task = Some(tokio::task::spawn_blocking(move || {
+            // Debug-only pacing of the existing artifact protocol, for a real
+            // TUI/broker crash test. Production same-host handoff stays zero-copy.
+            #[cfg(debug_assertions)]
+            if let Some((path, descriptor, progress)) = test_transfer {
+                return match crate::modality::wire::debug_paced_artifact(
+                    &socket, &path, descriptor, &progress, &cancel,
+                ) {
+                    Ok((crate::modality::wire::Response::Opened { .. }, _)) => {
+                        "Test artifact viewer accepted RenderedSnapshot".into()
+                    }
+                    _ => {
+                        "EndpointLost: artifact transfer failed; partial artifact not opened".into()
+                    }
+                };
+            }
             match crate::modality::wire::send_reference_cancellable(
                 &socket,
                 crate::modality::ModalityKind::Image,
@@ -591,6 +634,7 @@ impl TuiApplication {
             content,
             content_view: None,
             content_return: None,
+            reader_stale_fallbacks: 0,
         };
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
@@ -865,6 +909,12 @@ impl TuiApplication {
             }
             return false;
         }
+        if !self.backend_available {
+            if key.code == KeyCode::F(5) {
+                self.reconnect_backend().await;
+            }
+            return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc);
+        }
         if !self.application_available {
             if key.code == KeyCode::F(5) {
                 self.open_fresh_generation().await;
@@ -1041,7 +1091,7 @@ impl TuiApplication {
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
-        if !self.application_available || self.runtime_status_visible {
+        if !self.application_available || !self.backend_available || self.runtime_status_visible {
             return;
         }
         if self.modality_view.is_some() {
@@ -1327,7 +1377,7 @@ impl TuiApplication {
     }
 
     pub async fn progress_content_operations(&mut self) {
-        if !self.application_available {
+        if !self.application_available || !self.backend_available {
             return;
         }
         self.materialized_artifacts.retain(|a| !a.expired());
@@ -2139,9 +2189,16 @@ impl TuiApplication {
         }
         self.runtime.state = crate::runtime::SessionState::Degraded;
         self.backend_available = false;
+        self.runtime.record_backend_loss();
+        self.runtime.invalidate_application();
         self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
+        self.reconnect_backend().await;
+    }
+
+    async fn reconnect_backend(&mut self) {
         let timeout = self.backend.operation_timeout();
         for delay in [100_u64, 200, 400, 800] {
+            self.runtime.record_backend_reconnect_attempt();
             tokio::time::sleep(Duration::from_millis(delay)).await;
             let Ok(backend) = AtspiBackend::connect(timeout).await else {
                 continue;
@@ -2173,7 +2230,7 @@ impl TuiApplication {
         }
         self.event_stream_available = false;
         self.status =
-            "Accessibility service is unavailable. Existing semantic view is read-only; q quits."
+            "Accessibility service is unavailable. Existing semantic view is read-only; F5 retries; q quits."
                 .into();
     }
 
@@ -2498,12 +2555,26 @@ impl TuiApplication {
         );
         self.ensure_focus_visible();
         if self.content_view.is_some() {
+            let mut reader_fallback = false;
             let root_is_live = self
                 .content_view
                 .as_ref()
                 .is_some_and(|view| self.content.model(view.root).is_some());
             if root_is_live {
+                if let Some(view) = self.content_view.as_mut()
+                    && let Some(model) = self.content.model(view.root)
+                    && model.block(view.position).is_none()
+                    && let Some(fallback) = model.reading_order().first().copied()
+                {
+                    view.position = fallback;
+                    self.reader_stale_fallbacks += 1;
+                    reader_fallback = true;
+                }
                 self.refresh_content_view().await;
+                if reader_fallback {
+                    self.status =
+                        "Reader target disappeared; moved to first valid semantic block".into();
+                }
             } else {
                 self.content_view = None;
                 self.status = "Document content disappeared; Reader closed".to_owned();

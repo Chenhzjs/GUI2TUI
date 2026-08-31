@@ -129,6 +129,8 @@ pub struct RuntimeMetrics {
     pub endpoint_disconnects: u64,
     pub endpoint_reconnects: u64,
     pub backend_reconnects: u64,
+    pub backend_losses: u64,
+    pub backend_reconnect_attempts: u64,
     pub owner_loss_cancellations: u64,
     pub rejected_late_results: u64,
 }
@@ -241,7 +243,10 @@ impl RuntimeSession {
         }
         match self.operations.remove(&ticket.id) {
             Some(op) if op.ticket == *ticket && !op.cancel.is_cancelled() => Ok(()),
-            _ => Err(RuntimeError::Cancelled),
+            _ => {
+                self.metrics.rejected_late_results += 1;
+                Err(RuntimeError::Cancelled)
+            }
         }
     }
     pub fn set_terminal_attached(&mut self, attached: bool) {
@@ -265,14 +270,32 @@ impl RuntimeSession {
     pub fn set_endpoint(&mut self, state: EndpointState) {
         if state == EndpointState::Disconnected && self.endpoint != state {
             self.metrics.endpoint_disconnects += 1;
+            self.operations.retain(|_, operation| {
+                if matches!(
+                    operation._kind,
+                    OperationKind::ArtifactTransfer | OperationKind::ReferenceHandoff
+                ) {
+                    operation.cancel.cancel();
+                    self.metrics.owner_loss_cancellations += 1;
+                    false
+                } else {
+                    true
+                }
+            });
         }
-        if state == EndpointState::Available && self.endpoint == EndpointState::Disconnected {
+        if state == EndpointState::Connecting && self.endpoint == EndpointState::Disconnected {
             self.metrics.endpoint_reconnects += 1;
         }
         self.endpoint = state;
     }
     pub fn record_backend_reconnect(&mut self) {
         self.metrics.backend_reconnects += 1;
+    }
+    pub fn record_backend_loss(&mut self) {
+        self.metrics.backend_losses += 1;
+    }
+    pub fn record_backend_reconnect_attempt(&mut self) {
+        self.metrics.backend_reconnect_attempts += 1;
     }
     pub fn shutdown(&mut self) {
         self.state = SessionState::Stopping;
@@ -357,5 +380,42 @@ mod tests {
         s.shutdown();
         assert!(cancel.is_cancelled());
         assert_eq!(s.state, SessionState::Stopped);
+    }
+
+    #[test]
+    fn endpoint_reconnect_is_counted_at_explicit_connect_attempt() {
+        let mut session = RuntimeSession::default();
+        session.set_endpoint(EndpointState::Connecting);
+        session.set_endpoint(EndpointState::Available);
+        assert_eq!(session.metrics.endpoint_reconnects, 0);
+        session.set_endpoint(EndpointState::Disconnected);
+        session.set_endpoint(EndpointState::Connecting);
+        session.set_endpoint(EndpointState::Available);
+        assert_eq!(session.metrics.endpoint_disconnects, 1);
+        assert_eq!(session.metrics.endpoint_reconnects, 1);
+    }
+
+    #[test]
+    fn endpoint_loss_cancels_transfer_and_rejects_late_success_after_reconnect() {
+        let mut session = RuntimeSession::default();
+        session.open_application(BackendLocator::new(":1.2", "/app"));
+        session.set_endpoint(EndpointState::Available);
+        let cancel = CancellationToken::default();
+        let old = session
+            .begin(OperationKind::ArtifactTransfer, cancel.clone())
+            .unwrap();
+        session.set_endpoint(EndpointState::Disconnected);
+        assert!(cancel.is_cancelled());
+        session.set_endpoint(EndpointState::Connecting);
+        session.set_endpoint(EndpointState::Available);
+        assert!(session.complete(&old).is_err());
+        assert_eq!(session.metrics.rejected_late_results, 1);
+        let fresh = session
+            .begin(
+                OperationKind::ArtifactTransfer,
+                CancellationToken::default(),
+            )
+            .unwrap();
+        assert!(session.complete(&fresh).is_ok());
     }
 }

@@ -31,6 +31,11 @@ use tracing_subscriber::EnvFilter;
     about = "Interact with a GUI application through a terminal-native semantic UI"
 )]
 struct Cli {
+    /// Debug-build-only terminal restoration failpoint used by the lifecycle harness.
+    #[cfg(debug_assertions)]
+    #[arg(long, hide = true)]
+    test_panic_after_attach: bool,
+
     /// Accessible application name or an unambiguous substring.
     #[arg(long, value_name = "NAME")]
     app: Option<String>,
@@ -101,6 +106,11 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     let terminal_backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(terminal_backend)?;
     let mut terminal_events = EventStream::new();
+
+    #[cfg(debug_assertions)]
+    if cli.test_panic_after_attach {
+        panic!("controlled Phase 4A terminal restoration failpoint");
+    }
 
     let app_selector = match cli.app {
         Some(name) => name,

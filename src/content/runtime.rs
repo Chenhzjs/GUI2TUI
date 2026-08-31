@@ -164,6 +164,19 @@ impl ContentRuntime {
             .unwrap_or(TextCapabilityStatus::Unsupported)
     }
 
+    pub fn text_capability_counts(&self) -> [usize; 4] {
+        let mut counts = [0; 4];
+        for status in self.text_capabilities.values() {
+            counts[match status {
+                TextCapabilityStatus::Unsupported => 0,
+                TextCapabilityStatus::Declared => 1,
+                TextCapabilityStatus::Verified => 2,
+                TextCapabilityStatus::Quarantined => 3,
+            }] += 1;
+        }
+        counts
+    }
+
     pub fn patch_metrics(&self) -> ContentPatchMetrics {
         self.patch_metrics
     }

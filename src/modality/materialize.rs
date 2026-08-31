@@ -301,6 +301,7 @@ mod tests {
         }
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn materializer_crash_child() {
         if std::env::var_os("GUI2TUI_MATERIALIZER_CRASH_STAGE").is_none() {
@@ -322,6 +323,7 @@ mod tests {
         panic!("configured materializer crash failpoint was not reached");
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn every_pre_mid_post_payload_crash_window_is_recovered() {
         use std::os::unix::fs::PermissionsExt;

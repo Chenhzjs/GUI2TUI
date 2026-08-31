@@ -385,6 +385,39 @@ pub fn print_metrics(metrics: HandoffMetrics) {
     );
 }
 
+/// Test-only pacing of a real materialized artifact. Never fabricates payload
+/// or a successful response; the broker still authorizes and hashes every byte.
+#[cfg(debug_assertions)]
+pub(crate) fn debug_paced_artifact(
+    socket: &Path,
+    path: &Path,
+    descriptor: ArtifactDescriptor,
+    progress: &Path,
+    cancel: &CancellationToken,
+) -> io::Result<(Response, u64)> {
+    struct Paced<'a> {
+        file: std::fs::File,
+        progress: &'a Path,
+        bytes: usize,
+    }
+    impl Read for Paced<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            std::thread::sleep(Duration::from_millis(20));
+            let limit = buf.len().min(32);
+            let count = self.file.read(&mut buf[..limit])?;
+            self.bytes += count;
+            std::fs::write(self.progress, self.bytes.to_string())?;
+            Ok(count)
+        }
+    }
+    let mut reader = Paced {
+        file: std::fs::File::open(path)?,
+        progress,
+        bytes: 0,
+    };
+    send_artifact(socket, descriptor, &mut reader, cancel)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
