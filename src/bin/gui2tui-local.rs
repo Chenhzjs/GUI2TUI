@@ -1,4 +1,11 @@
-use std::{collections::HashSet, fs, path::PathBuf, process::ExitCode, time::Duration};
+use std::{
+    collections::HashSet,
+    fs,
+    io::{Read, Write},
+    path::PathBuf,
+    process::ExitCode,
+    time::Duration,
+};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use gui2tui::modality::{
@@ -18,6 +25,44 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Capabilities,
+    /// Receive one authorized operation at a time on a private local socket.
+    Serve {
+        #[arg(long)]
+        socket: PathBuf,
+        /// MIME allowlist/registry entries owned exclusively by the local user.
+        #[arg(long, required = true)]
+        mime: Vec<String>,
+        #[arg(long, conflicts_with = "recording_handler")]
+        handler_program: Option<PathBuf>,
+        /// Explicit test mode: records invocation, does not start a viewer.
+        #[arg(long)]
+        recording_handler: bool,
+        /// Omit to prompt on the local controlling terminal for every new grant.
+        #[arg(long, value_enum)]
+        authorization: Option<Authorization>,
+        /// Explicit local source-prefix=destination-prefix mappings.
+        #[arg(long)]
+        map: Vec<String>,
+        #[arg(long, default_value_t = 0)]
+        max_requests: usize,
+        #[arg(long, default_value_t = 512 * 1024 * 1024)]
+        max_bytes: u64,
+        #[arg(long, default_value_t = 300)]
+        timeout_secs: u64,
+    },
+    /// Diagnostic producer: send only this explicit portable artifact after approval.
+    SendArtifact {
+        #[arg(long)]
+        socket: PathBuf,
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        mime: String,
+        #[arg(long, value_enum)]
+        kind: Kind,
+        #[arg(long)]
+        cancel_before_transfer: bool,
+    },
     Reference {
         #[arg(long)]
         uri: Option<String>,
@@ -33,7 +78,7 @@ enum Command {
         mime: String,
         #[arg(long, value_enum)]
         kind: Kind,
-        #[arg(long, value_enum, default_value_t = Authorization::Once)]
+        #[arg(long, value_enum, default_value_t = Authorization::Deny)]
         authorization: Authorization,
         /// Locally configured handler. This is never accepted from a server descriptor.
         #[arg(long)]
@@ -46,7 +91,7 @@ enum Command {
         mime: String,
         #[arg(long, value_enum)]
         kind: Kind,
-        #[arg(long, value_enum, default_value_t = Authorization::Once)]
+        #[arg(long, value_enum, default_value_t = Authorization::Deny)]
         authorization: Authorization,
         /// Locally configured handler. This is never part of the artifact descriptor.
         #[arg(long)]
@@ -110,9 +155,8 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     if matches!(cli.command, Command::Capabilities) {
-        println!("reference_schemes=http,https,file,mapped-path");
-        println!("mime_patterns=image/*,application/pdf,video/*,audio/*,model/*");
-        println!("artifact_receive=true");
+        println!("No connected broker; handlers must be explicitly configured with serve.");
+        println!("reference_schemes=[] mime_patterns=[] artifact_receive=false");
         println!("executable_paths_disclosed=false");
         return Ok(());
     }
@@ -120,6 +164,117 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let temp_root = std::env::temp_dir().join(format!("gui2tui-local-{}", std::process::id()));
     match cli.command {
         Command::Capabilities => unreachable!(),
+        Command::Serve {
+            socket,
+            mime,
+            handler_program,
+            recording_handler,
+            authorization,
+            map,
+            max_requests,
+            max_bytes,
+            timeout_secs,
+        } => {
+            use gui2tui::modality::wire::{self, LocalSocket, Request};
+            let mut registry = HandlerRegistry::default();
+            let recorder = RecordingHandler::default();
+            for pattern in &mime {
+                if recording_handler {
+                    registry.register(pattern, Box::new(recorder.clone()));
+                } else if let Some(program) = &handler_program {
+                    registry.register(
+                        pattern,
+                        Box::new(ProcessHandler::configured_locally(program)),
+                    );
+                }
+            }
+            let caps = LocalModalityCapabilities {
+                reference_schemes: HashSet::from([
+                    "http".to_owned(),
+                    "https".to_owned(),
+                    "file".to_owned(),
+                    "mapped-path".to_owned(),
+                ]),
+                mime_patterns: registry.mime_patterns(),
+                artifact_receive: true,
+            };
+            let mut broker = LocalModalityBroker::new(caps, registry, std::env::temp_dir())?;
+            for mapping in map {
+                let (source, destination) = mapping
+                    .split_once('=')
+                    .ok_or("mapping requires SOURCE=DESTINATION")?;
+                broker.add_mapping(PathMapping::new(source, destination)?);
+            }
+            let listener = LocalSocket::bind(&socket)?;
+            println!("broker ready; view-only; executable configuration stays local");
+            let stop = CancellationToken::default();
+            let signal = stop.clone();
+            let runtime = tokio::runtime::Runtime::new()?;
+            runtime.spawn(async move {
+                let _ = tokio::signal::ctrl_c().await;
+                signal.cancel();
+            });
+            let transport = ArtifactTransport {
+                max_size: max_bytes,
+                timeout: Duration::from_secs(timeout_secs.max(1)),
+                ..Default::default()
+            };
+            listener.run(
+                &mut broker,
+                &transport,
+                max_requests,
+                &stop,
+                |request, session_grant| {
+                    if let Some(decision) = authorization {
+                        return decision.into();
+                    }
+                    if session_grant {
+                        return AuthorizationDecision::Once;
+                    }
+                    let summary = match request {
+                        Request::Reference { kind, resource } => format!(
+                            "{kind:?} MIME={:?} reference={:?}",
+                            resource.mime, resource.reference
+                        ),
+                        Request::Artifact { descriptor } => format!(
+                            "{:?} MIME={:?} bytes={}",
+                            descriptor.kind, descriptor.mime, descriptor.size
+                        ),
+                        _ => return AuthorizationDecision::Deny,
+                    };
+                    prompt_authorization(&summary, &stop)
+                },
+            )?;
+            wire::print_metrics(broker.metrics());
+            if recording_handler {
+                println!("recorded_invocations={}", recorder.invocations().len());
+            }
+            return Ok(());
+        }
+        Command::SendArtifact {
+            socket,
+            input,
+            mime,
+            kind,
+            cancel_before_transfer,
+        } => {
+            let (descriptor, mut file) = describe_file(&input, mime, kind.into())?;
+            let cancellation = CancellationToken::default();
+            if cancel_before_transfer {
+                cancellation.cancel();
+            }
+            let (result, bytes) = gui2tui::modality::wire::send_artifact(
+                &socket,
+                descriptor,
+                &mut file,
+                &cancellation,
+            )?;
+            println!("{result:?} payload_sent={bytes}");
+            if matches!(result, gui2tui::modality::wire::Response::Failed { .. }) {
+                return Err("handoff failed".into());
+            }
+            return Ok(());
+        }
         Command::Reference {
             uri,
             path,
@@ -140,10 +295,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 let source = map_source.as_deref().ok_or("--map-source is required")?;
                 let destination = map_destination.ok_or("--map-destination is required")?;
                 broker.add_mapping(PathMapping::new(source, &destination)?);
-                ResourceReference::MappedPath {
-                    remote,
-                    local: destination.display().to_string(),
-                }
+                ResourceReference::MappedPath { remote }
             } else {
                 return Err("one of --uri, --path, or --mapped-path is required".into());
             };
@@ -176,20 +328,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             max_bytes,
             cancel_before_transfer,
         } => {
-            let bytes = fs::read(&input)?;
-            let descriptor = ArtifactDescriptor {
-                id: ArtifactId::new(1),
-                kind: kind.into(),
-                mime: mime.clone(),
-                size: bytes.len() as u64,
-                hash: ArtifactHash::sha256(&bytes),
-                display_name: input
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned()),
-                lifetime: ArtifactLifetime::Temporary {
-                    ttl: Duration::from_secs(300),
-                },
-            };
+            let (descriptor, file) = describe_file(&input, mime.clone(), kind.into())?;
             println!(
                 "descriptor mime={} size={} sha256={} authorized_payload=false",
                 descriptor.mime,
@@ -208,7 +347,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let transferred = transport.transfer(
                 &mut broker,
                 &descriptor,
-                bytes.as_slice(),
+                file,
                 authorization.into(),
                 &cancellation,
             )?;
@@ -250,4 +389,84 @@ fn broker(
         LocalModalityBroker::new(capabilities, registry, root)?,
         recorder,
     ))
+}
+
+fn describe_file(
+    input: &PathBuf,
+    mime: String,
+    kind: ModalityKind,
+) -> Result<(ArtifactDescriptor, fs::File), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Seek, SeekFrom};
+    let mut file = fs::File::open(input)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err("artifact source must be a regular file".into());
+    }
+    if metadata.len() > 512 * 1024 * 1024 {
+        return Err("artifact exceeds 512 MiB producer limit".into());
+    }
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 65536];
+    let mut size = 0;
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        size += count as u64;
+        if size > 512 * 1024 * 1024 {
+            return Err("artifact grew beyond limit".into());
+        }
+        hasher.update(&buffer[..count]);
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok((
+        ArtifactDescriptor {
+            id: ArtifactId::new(1),
+            kind,
+            mime,
+            size,
+            hash: ArtifactHash(hasher.finalize().into()),
+            display_name: input.file_name().map(|s| s.to_string_lossy().into_owned()),
+            lifetime: ArtifactLifetime::Session,
+        },
+        file,
+    ))
+}
+
+fn prompt_authorization(summary: &str, stop: &CancellationToken) -> AuthorizationDecision {
+    use std::io::BufRead;
+    let Ok(mut tty) = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+    else {
+        return AuthorizationDecision::Deny;
+    };
+    let _ = writeln!(
+        tty,
+        "View locally: {summary}\n[o] Once / [s] Session / [d] Deny (default):"
+    );
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let mut answer = String::new();
+        let result = std::io::BufReader::new(tty).take(16).read_line(&mut answer);
+        let _ = send.send(result.map(|_| answer));
+    });
+    let answer = loop {
+        if stop.is_cancelled() {
+            return AuthorizationDecision::Deny;
+        }
+        match receive.recv_timeout(Duration::from_millis(100)) {
+            Ok(Ok(answer)) => break answer,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            _ => return AuthorizationDecision::Deny,
+        }
+    };
+    match answer.trim() {
+        "o" => AuthorizationDecision::Once,
+        "s" => AuthorizationDecision::Session,
+        _ => AuthorizationDecision::Deny,
+    }
 }

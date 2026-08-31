@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     sync::{
         Arc,
@@ -91,24 +91,28 @@ impl ArtifactTransport {
         // Control plane authorization is completed before the first payload
         // read or temporary partial file creation.
         broker.authorize_artifact(descriptor, authorization)?;
-        let partial = broker.artifact_partial_path(descriptor);
-        let complete = broker.artifact_complete_path(descriptor);
-        let result = self.copy_verified(descriptor, &mut payload, &partial, cancellation);
+        if cancellation.is_cancelled() {
+            broker.mark_cancelled();
+            return Err(TransferError::Cancelled);
+        }
+        let mut file = broker.artifact_file(descriptor)?;
+        let result = self.copy_verified(
+            descriptor,
+            &mut payload,
+            file.as_file_mut(),
+            cancellation,
+            broker,
+        );
         let bytes = match result {
             Ok(bytes) => bytes,
             Err(error) => {
-                let _ = fs::remove_file(&partial);
                 if matches!(error, TransferError::Cancelled) {
                     broker.mark_cancelled();
                 }
                 return Err(error);
             }
         };
-        fs::rename(&partial, &complete)?;
-        if let Err(error) = broker.finish_artifact(descriptor, complete.clone(), bytes) {
-            let _ = fs::remove_file(complete);
-            return Err(error.into());
-        }
+        broker.finish_artifact(descriptor, file)?;
         Ok(bytes)
     }
 
@@ -116,14 +120,14 @@ impl ArtifactTransport {
         &self,
         descriptor: &ArtifactDescriptor,
         payload: &mut R,
-        partial: &std::path::Path,
+        output: &mut File,
         cancellation: &CancellationToken,
+        broker: &mut LocalModalityBroker,
     ) -> Result<u64, TransferError> {
-        let mut output = File::create(partial)?;
         let started = Instant::now();
         let mut hasher = Sha256::new();
         let mut received = 0_u64;
-        let mut buffer = vec![0_u8; self.chunk_size.max(1)];
+        let mut buffer = vec![0_u8; self.chunk_size.clamp(1, 1024 * 1024)];
         loop {
             if cancellation.is_cancelled() {
                 return Err(TransferError::Cancelled);
@@ -132,6 +136,7 @@ impl ArtifactTransport {
                 return Err(TransferError::Timeout(self.timeout));
             }
             let count = payload.read(&mut buffer)?;
+            broker.record_bytes(count);
             if started.elapsed() > self.timeout {
                 return Err(TransferError::Timeout(self.timeout));
             }
@@ -147,6 +152,11 @@ impl ArtifactTransport {
             }
             hasher.update(&buffer[..count]);
             output.write_all(&buffer[..count])?;
+            tracing::debug!(
+                received_bytes = received,
+                expected_bytes = descriptor.size,
+                "artifact transfer progress"
+            );
         }
         output.flush()?;
         if received != descriptor.size {
@@ -167,6 +177,7 @@ impl ArtifactTransport {
 mod tests {
     use std::{
         collections::HashSet,
+        fs,
         io::Cursor,
         sync::atomic::{AtomicU64, Ordering},
         time::Duration,
@@ -178,6 +189,12 @@ mod tests {
     };
 
     use super::*;
+
+    fn assert_no_staged_files(root: &std::path::Path) {
+        for entry in fs::read_dir(root).unwrap() {
+            assert_eq!(fs::read_dir(entry.unwrap().path()).unwrap().count(), 0);
+        }
+    }
 
     fn broker_and_descriptor(
         bytes: &[u8],
@@ -334,7 +351,7 @@ mod tests {
             ),
             Err(TransferError::Cancelled)
         ));
-        assert!(!broker.artifact_partial_path(&descriptor).exists());
+        assert_no_staged_files(&root);
         assert!(recording.invocations().is_empty());
         let _ = fs::remove_dir_all(root);
     }
@@ -354,7 +371,7 @@ mod tests {
             ),
             Err(TransferError::HashMismatch)
         ));
-        assert!(!broker.artifact_partial_path(&descriptor).exists());
+        assert_no_staged_files(&root);
         drop(broker);
         let _ = fs::remove_dir_all(root);
     }
@@ -384,7 +401,7 @@ mod tests {
             ),
             Err(TransferError::Timeout(_))
         ));
-        assert!(!broker.artifact_partial_path(&descriptor).exists());
+        assert_no_staged_files(&root);
         assert!(recording.invocations().is_empty());
         let _ = fs::remove_dir_all(root);
     }

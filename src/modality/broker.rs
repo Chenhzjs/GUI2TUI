@@ -2,9 +2,11 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
+use tempfile::{NamedTempFile, TempDir};
 
 use thiserror::Error;
 
@@ -75,14 +77,32 @@ impl LocalHandler for ProcessHandler {
             LocalResource::Uri(uri) => uri.clone(),
             LocalResource::Path(path) => path.display().to_string(),
         };
-        let status = Command::new(&self.program)
+        let mut child = Command::new(&self.program)
             .arg(target)
-            .status()
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
             .map_err(|error| error.to_string())?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!("local launcher exited with {status}"))
+        let started = Instant::now();
+        loop {
+            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+                return if status.success() {
+                    Ok(())
+                } else {
+                    Err(format!("local launcher exited with {status}"))
+                };
+            }
+            if started.elapsed() >= Duration::from_secs(2) {
+                // Direct viewers may remain alive. Do not block the broker or
+                // kill the user's viewer; reap it separately. Opened means
+                // launcher accepted, not that visual consumption was proven.
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
 }
@@ -93,6 +113,9 @@ pub struct HandlerRegistry {
 }
 
 impl HandlerRegistry {
+    pub fn mime_patterns(&self) -> HashSet<String> {
+        self.handlers.keys().cloned().collect()
+    }
     pub fn register(&mut self, mime_pattern: impl Into<String>, handler: Box<dyn LocalHandler>) {
         self.handlers.insert(mime_pattern.into(), handler);
     }
@@ -139,6 +162,9 @@ impl PathMapping {
                 canonical.display().to_string(),
             ));
         }
+        if !canonical.is_file() {
+            return Err(BrokerError::Unsupported);
+        }
         Ok(canonical)
     }
 }
@@ -180,20 +206,27 @@ pub struct LocalModalityBroker {
     capabilities: LocalModalityCapabilities,
     registry: HandlerRegistry,
     mappings: Vec<PathMapping>,
-    temp_root: PathBuf,
-    temporary_artifacts: Vec<PathBuf>,
+    temp_root: TempDir,
+    temporary_artifacts: Vec<(NamedTempFile, Instant)>,
     session_authorized: HashSet<(ModalityKind, String)>,
     metrics: HandoffMetrics,
 }
 
 impl LocalModalityBroker {
     pub fn new(
-        capabilities: LocalModalityCapabilities,
+        mut capabilities: LocalModalityCapabilities,
         registry: HandlerRegistry,
         temp_root: impl Into<PathBuf>,
     ) -> Result<Self, BrokerError> {
         let temp_root = temp_root.into();
         fs::create_dir_all(&temp_root)?;
+        // Never reuse a predictable server ID or client PID directory for data.
+        let temp_root = tempfile::Builder::new()
+            .prefix("gui2tui-session-")
+            .tempdir_in(temp_root)?;
+        capabilities
+            .mime_patterns
+            .retain(|mime| registry.handler(mime).is_some());
         Ok(Self {
             capabilities,
             registry,
@@ -229,9 +262,14 @@ impl LocalModalityBroker {
         if !self.capabilities.supports_reference(resource) {
             return Err(BrokerError::Unsupported);
         }
-        let mime = resource.mime.as_deref().unwrap_or(default_mime(kind));
+        let mime = resource.mime.as_deref().ok_or(BrokerError::Unsupported)?;
         self.authorize(kind, mime, authorization)?;
         let local = self.resolve_local_reference(&resource.reference)?;
+        if let LocalResource::Path(path) = &local
+            && !path_extension_matches_mime(path, mime)
+        {
+            return Err(BrokerError::Unsupported);
+        }
         let Some(handler) = self.registry.handler(mime) else {
             self.metrics.handler_unavailable += 1;
             return Err(BrokerError::HandlerUnavailable(mime.to_owned()));
@@ -250,17 +288,33 @@ impl LocalModalityBroker {
     ) -> Result<LocalResource, BrokerError> {
         match reference {
             ResourceReference::NetworkUri(uri) => {
-                let scheme = uri.split_once(':').map_or("", |(scheme, _)| scheme);
-                if !matches!(scheme, "https" | "http") {
-                    return Err(BrokerError::SchemeDenied(scheme.to_owned()));
+                let parsed = url::Url::parse(uri).map_err(|_| BrokerError::Unsupported)?;
+                if !matches!(parsed.scheme(), "https" | "http")
+                    || parsed.host_str().is_none()
+                    || !parsed.username().is_empty()
+                    || parsed.password().is_some()
+                {
+                    return Err(BrokerError::Unsupported);
                 }
                 Ok(LocalResource::Uri(uri.clone()))
             }
             ResourceReference::LocalPath(path) => {
                 let path = validate_absolute_clean(path.into())?;
-                Ok(LocalResource::Path(fs::canonicalize(path)?))
+                if !self.mappings.is_empty() {
+                    return self
+                        .mappings
+                        .iter()
+                        .find_map(|m| m.translate(&path).ok())
+                        .map(LocalResource::Path)
+                        .ok_or(BrokerError::Unsupported);
+                }
+                let path = fs::canonicalize(path)?;
+                if !path.is_file() {
+                    return Err(BrokerError::Unsupported);
+                }
+                Ok(LocalResource::Path(path))
             }
-            ResourceReference::MappedPath { remote, local: _ } => self
+            ResourceReference::MappedPath { remote } => self
                 .mappings
                 .iter()
                 .find_map(|mapping| mapping.translate(Path::new(remote)).ok())
@@ -279,9 +333,27 @@ impl LocalModalityBroker {
         descriptor: &ArtifactDescriptor,
         decision: AuthorizationDecision,
     ) -> Result<(), BrokerError> {
+        self.cleanup_expired();
+        // Bound retained session storage as well as each individual transfer.
+        // No LRU eviction of resources that a viewer may still be using.
+        let retained_bytes: u64 = self
+            .temporary_artifacts
+            .iter()
+            .filter_map(|(file, _)| file.as_file().metadata().ok())
+            .map(|metadata| metadata.len())
+            .sum();
+        if self.temporary_artifacts.len() >= 64
+            || retained_bytes.saturating_add(descriptor.size) > 1024 * 1024 * 1024
+        {
+            return Err(BrokerError::Unsupported);
+        }
         if !self.capabilities.artifact_receive || !self.capabilities.supports_mime(&descriptor.mime)
         {
             return Err(BrokerError::Unsupported);
+        }
+        if self.registry.handler(&descriptor.mime).is_none() {
+            self.metrics.handler_unavailable += 1;
+            return Err(BrokerError::HandlerUnavailable(descriptor.mime.clone()));
         }
         self.authorize(descriptor.kind, &descriptor.mime, decision)
     }
@@ -297,9 +369,7 @@ impl LocalModalityBroker {
             return Err(BrokerError::Unsupported);
         }
         let key = (kind, mime.to_owned());
-        if self.session_authorized.contains(&key) {
-            return Ok(());
-        }
+        // An explicit denial always wins, even after a previous session grant.
         match decision {
             AuthorizationDecision::Once => Ok(()),
             AuthorizationDecision::Session => {
@@ -313,34 +383,47 @@ impl LocalModalityBroker {
         }
     }
 
-    pub(crate) fn artifact_partial_path(&self, descriptor: &ArtifactDescriptor) -> PathBuf {
-        self.temp_root.join(format!("{}.part", descriptor.id))
+    pub fn session_allows(&self, kind: ModalityKind, mime: &str) -> bool {
+        self.session_authorized.contains(&(kind, mime.to_owned()))
     }
 
-    pub(crate) fn artifact_complete_path(&self, descriptor: &ArtifactDescriptor) -> PathBuf {
-        self.temp_root.join(format!(
-            "{}.{}",
-            descriptor.id,
-            safe_extension(&descriptor.mime)
-        ))
+    pub(crate) fn artifact_file(
+        &self,
+        descriptor: &ArtifactDescriptor,
+    ) -> Result<NamedTempFile, BrokerError> {
+        Ok(tempfile::Builder::new()
+            .prefix("artifact-")
+            .suffix(&format!(".{}", safe_extension(&descriptor.mime)))
+            .tempfile_in(self.temp_root.path())?)
+    }
+
+    pub(crate) fn record_bytes(&mut self, count: usize) {
+        self.metrics.artifact_bytes += count as u64;
     }
 
     pub(crate) fn finish_artifact(
         &mut self,
         descriptor: &ArtifactDescriptor,
-        path: PathBuf,
-        bytes: u64,
+        file: NamedTempFile,
     ) -> Result<(), BrokerError> {
         let Some(handler) = self.registry.handler(&descriptor.mime) else {
             self.metrics.handler_unavailable += 1;
             return Err(BrokerError::HandlerUnavailable(descriptor.mime.clone()));
         };
         handler
-            .open(&LocalResource::Path(path.clone()), &descriptor.mime)
+            .open(
+                &LocalResource::Path(file.path().to_path_buf()),
+                &descriptor.mime,
+            )
             .map_err(BrokerError::HandlerFailed)?;
-        self.temporary_artifacts.push(path);
+        let ttl = match descriptor.lifetime {
+            super::ArtifactLifetime::Session => Duration::from_secs(1800),
+            super::ArtifactLifetime::Temporary { ttl } => {
+                ttl.clamp(Duration::from_secs(30), Duration::from_secs(1800))
+            }
+        };
+        self.temporary_artifacts.push((file, Instant::now() + ttl));
         self.metrics.artifact_fallbacks += 1;
-        self.metrics.artifact_bytes += bytes;
         Ok(())
     }
 
@@ -349,9 +432,12 @@ impl LocalModalityBroker {
     }
 
     pub fn cleanup(&mut self) {
-        for path in self.temporary_artifacts.drain(..) {
-            let _ = fs::remove_file(path);
-        }
+        self.temporary_artifacts.clear();
+    }
+
+    pub fn cleanup_expired(&mut self) {
+        self.temporary_artifacts
+            .retain(|(_, expiry)| *expiry > Instant::now());
     }
 }
 
@@ -361,24 +447,18 @@ impl Drop for LocalModalityBroker {
     }
 }
 
-fn default_mime(kind: ModalityKind) -> &'static str {
+pub(crate) fn is_viewable_mime(kind: ModalityKind, mime: &str) -> bool {
     match kind {
-        ModalityKind::Image | ModalityKind::VectorGraphic => "image/*",
-        ModalityKind::Document => "application/pdf",
-        ModalityKind::Video => "video/*",
-        ModalityKind::Audio => "audio/*",
-        ModalityKind::PortableModel => "model/*",
-        ModalityKind::LiveVisual | ModalityKind::Unknown => "application/octet-stream",
-    }
-}
-
-fn is_viewable_mime(kind: ModalityKind, mime: &str) -> bool {
-    match kind {
-        ModalityKind::Image | ModalityKind::VectorGraphic => mime.starts_with("image/"),
+        ModalityKind::Image | ModalityKind::VectorGraphic => matches!(
+            mime,
+            "image/png" | "image/jpeg" | "image/svg+xml" | "image/gif" | "image/webp"
+        ),
         ModalityKind::Document => mime == "application/pdf",
-        ModalityKind::Video => mime.starts_with("video/"),
-        ModalityKind::Audio => mime.starts_with("audio/"),
-        ModalityKind::PortableModel => mime.starts_with("model/"),
+        ModalityKind::Video => matches!(mime, "video/mp4" | "video/webm"),
+        ModalityKind::Audio => matches!(mime, "audio/mpeg" | "audio/ogg" | "audio/wav"),
+        ModalityKind::PortableModel => {
+            matches!(mime, "model/gltf+json" | "model/gltf-binary" | "model/obj")
+        }
         ModalityKind::LiveVisual | ModalityKind::Unknown => false,
     }
 }
@@ -397,11 +477,124 @@ fn safe_extension(mime: &str) -> &'static str {
     }
 }
 
+fn path_extension_matches_mime(path: &Path, mime: &str) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        (mime, extension.as_str()),
+        ("image/png", "png")
+            | ("image/jpeg", "jpg" | "jpeg")
+            | ("image/svg+xml", "svg")
+            | ("image/gif", "gif")
+            | ("image/webp", "webp")
+            | ("application/pdf", "pdf")
+            | ("video/mp4", "mp4")
+            | ("video/webm", "webm")
+            | ("audio/mpeg", "mp3")
+            | ("audio/ogg", "ogg")
+            | ("audio/wav", "wav")
+            | ("model/gltf+json", "gltf")
+            | ("model/gltf-binary", "glb")
+            | ("model/obj", "obj")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use crate::modality::ReferenceProvenance;
 
     use super::*;
+
+    #[test]
+    fn declared_image_mime_does_not_authorize_opening_a_script_or_installer() {
+        for name in [
+            "run.command",
+            "run.sh",
+            "installer.pkg",
+            "program.exe",
+            "no-extension",
+        ] {
+            assert!(!path_extension_matches_mime(Path::new(name), "image/png"));
+        }
+        assert!(path_extension_matches_mime(
+            Path::new("diagram.PNG"),
+            "image/png"
+        ));
+        assert!(!path_extension_matches_mime(
+            Path::new("diagram.png"),
+            "application/pdf"
+        ));
+    }
+
+    #[test]
+    fn mapped_symlink_escape_and_directory_are_rejected() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("image.png"), b"test").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("escape")).unwrap();
+        let mapping = PathMapping::new("/srv", root.path()).unwrap();
+        assert!(
+            mapping
+                .translate(Path::new("/srv/escape/image.png"))
+                .is_err()
+        );
+        assert!(mapping.translate(Path::new("/srv")).is_err());
+    }
+
+    #[test]
+    fn retained_artifact_budget_and_expiration_are_enforced() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = HandlerRegistry::default();
+        registry.register("image/*", Box::<RecordingHandler>::default());
+        let mut broker = LocalModalityBroker::new(
+            LocalModalityCapabilities {
+                reference_schemes: HashSet::new(),
+                mime_patterns: HashSet::from(["image/*".into()]),
+                artifact_receive: true,
+            },
+            registry,
+            dir.path(),
+        )
+        .unwrap();
+        let descriptor = ArtifactDescriptor {
+            id: super::super::ArtifactId::new(1),
+            kind: ModalityKind::Image,
+            mime: "image/png".into(),
+            size: 0,
+            hash: super::super::ArtifactHash::sha256(b""),
+            display_name: None,
+            lifetime: super::super::ArtifactLifetime::Session,
+        };
+        for _ in 0..64 {
+            let file = broker.artifact_file(&descriptor).unwrap();
+            broker.finish_artifact(&descriptor, file).unwrap();
+        }
+        assert!(
+            broker
+                .authorize_artifact(&descriptor, AuthorizationDecision::Once)
+                .is_err()
+        );
+        broker.temporary_artifacts[0].1 = Instant::now();
+        broker.cleanup_expired();
+        assert_eq!(broker.temporary_artifacts.len(), 63);
+        assert!(
+            broker
+                .authorize_artifact(&descriptor, AuthorizationDecision::Once)
+                .is_ok()
+        );
+        let huge = ArtifactDescriptor {
+            size: 1024 * 1024 * 1024 + 1,
+            ..descriptor
+        };
+        assert!(
+            broker
+                .authorize_artifact(&huge, AuthorizationDecision::Once)
+                .is_err()
+        );
+    }
 
     #[test]
     fn mapping_is_prefix_bound_and_rejects_parent_escape() {
@@ -484,8 +677,13 @@ mod tests {
                 AuthorizationDecision::Session,
             )
             .unwrap();
+        assert!(broker.session_allows(ModalityKind::Image, "image/png"));
+        assert!(matches!(
+            broker.handoff_reference(ModalityKind::Image, &resource, AuthorizationDecision::Deny),
+            Err(BrokerError::Denied)
+        ));
         broker
-            .handoff_reference(ModalityKind::Image, &resource, AuthorizationDecision::Deny)
+            .handoff_reference(ModalityKind::Image, &resource, AuthorizationDecision::Once)
             .unwrap();
         assert_eq!(recording.invocations().len(), 3);
         let _ = fs::remove_dir_all(root);

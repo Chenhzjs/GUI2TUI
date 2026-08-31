@@ -65,6 +65,7 @@ impl ModalityResolver {
                 SemanticRole::Audio => ModalityKind::Audio,
                 SemanticRole::Video => ModalityKind::Video,
                 SemanticRole::Document => ModalityKind::Document,
+                SemanticRole::Link => ModalityKind::Unknown,
                 SemanticRole::Unknown(role)
                     if matches!(role.as_str(), "canvas" | "drawing area" | "3d view") =>
                 {
@@ -103,46 +104,104 @@ impl ModalityResolver {
         metadata: &[ModalityMetadata],
     ) -> ExternalModality {
         let reference = reference_from_metadata(metadata, candidate.kind == ModalityKind::Document);
-        let resolution = if let Some(resource) = reference {
-            ModalityResolution::ReferencedResource(resource)
+        let resolution = if self.policy == TransferPolicy::Unavailable {
+            ModalityResolution::Unavailable {
+                reason: "disabled by transfer policy".to_owned(),
+            }
         } else if candidate.kind == ModalityKind::LiveVisual {
             ModalityResolution::LiveVisualState {
                 reason: "continuous graphical state has no portable semantic resource".to_owned(),
             }
+        } else if let Some(resource) = reference {
+            ModalityResolution::ReferencedResource(resource)
         } else {
             ModalityResolution::Unavailable {
                 reason: "accessibility metadata exposes no trustworthy resource reference"
                     .to_owned(),
             }
         };
-        let capabilities = match &resolution {
-            ModalityResolution::ReferencedResource(_) => ModalityCapabilities {
-                reference_handoff: true,
-                ..Default::default()
-            },
-            ModalityResolution::LiveVisualState { .. } => ModalityCapabilities {
-                live_external_fallback: true,
-                ..Default::default()
-            },
-            ModalityResolution::PortableArtifact(_) => ModalityCapabilities {
-                artifact_handoff: true,
-                ..Default::default()
-            },
-            ModalityResolution::StaticVisualArtifact(_) => ModalityCapabilities {
-                artifact_handoff: true,
-                static_visual_request: true,
-                ..Default::default()
-            },
-            ModalityResolution::Unavailable { .. } => ModalityCapabilities::default(),
+        // Resolution is not authorization or evidence of a connected handler.
+        let capabilities = ModalityCapabilities::default();
+        let kind = match &resolution {
+            ModalityResolution::ReferencedResource(resource)
+                if candidate.kind == ModalityKind::Unknown =>
+            {
+                resource
+                    .mime
+                    .as_deref()
+                    .map(kind_for_mime)
+                    .unwrap_or(ModalityKind::Unknown)
+            }
+            _ => candidate.kind,
         };
         ExternalModality {
             id: ExternalModalityId::new(NEXT_MODALITY_ID.fetch_add(1, Ordering::Relaxed)),
             owner: candidate.owner,
-            kind: candidate.kind,
+            kind,
             label: candidate.label.clone(),
             resolution,
             capabilities,
             transfer_policy: self.policy,
+        }
+    }
+
+    /// An explicitly supplied minimal artifact is considered only when no
+    /// usable reference was resolved. Live visual state is never converted.
+    pub fn with_artifact(
+        &self,
+        mut modality: ExternalModality,
+        artifact: super::PortableArtifact,
+    ) -> ExternalModality {
+        if matches!(modality.resolution, ModalityResolution::Unavailable { .. })
+            && matches!(
+                self.policy,
+                TransferPolicy::PreferReference
+                    | TransferPolicy::MinimalArtifactAllowed
+                    | TransferPolicy::StaticVisualAllowed
+            )
+            && artifact.descriptor.kind == modality.kind
+        {
+            modality.resolution = ModalityResolution::PortableArtifact(artifact);
+        }
+        modality
+    }
+}
+
+pub fn kind_for_mime(mime: &str) -> ModalityKind {
+    if mime.starts_with("image/") {
+        ModalityKind::Image
+    } else if mime.starts_with("video/") {
+        ModalityKind::Video
+    } else if mime.starts_with("audio/") {
+        ModalityKind::Audio
+    } else if mime.starts_with("model/") {
+        ModalityKind::PortableModel
+    } else if mime == "application/pdf" {
+        ModalityKind::Document
+    } else {
+        ModalityKind::Unknown
+    }
+}
+
+impl ExternalModality {
+    pub fn negotiate(&mut self, client: Option<&super::LocalModalityCapabilities>) {
+        self.capabilities = ModalityCapabilities::default();
+        let Some(client) = client else { return };
+        match &self.resolution {
+            ModalityResolution::ReferencedResource(resource) => {
+                self.capabilities.reference_handoff = resource.provenance.trusted()
+                    && resource
+                        .mime
+                        .as_deref()
+                        .is_some_and(|mime| super::broker::is_viewable_mime(self.kind, mime))
+                    && client.supports_reference(resource);
+            }
+            ModalityResolution::PortableArtifact(artifact) => {
+                self.capabilities.artifact_handoff = client.artifact_receive
+                    && client.supports_mime(&artifact.descriptor.mime)
+                    && super::broker::is_viewable_mime(self.kind, &artifact.descriptor.mime);
+            }
+            _ => {}
         }
     }
 }
@@ -176,6 +235,7 @@ fn reference_from_metadata(
     for source in metadata {
         for (key, value) in &source.accessible_attributes {
             if is_reference_key(key)
+                && !matches!(key.to_ascii_lowercase().as_str(), "doc-url")
                 && let Some(resource) = parse_reference(
                     value,
                     ReferenceProvenance::AccessibleAttribute,
@@ -219,7 +279,7 @@ fn parse_reference(
     };
     Some(ReferencedResource {
         reference,
-        mime,
+        mime: mime.or_else(|| mime_hint_from_uri(&url)),
         display_name: url
             .path_segments()
             .and_then(|mut segments| segments.next_back())
@@ -227,6 +287,31 @@ fn parse_reference(
             .map(str::to_owned),
         provenance,
     })
+}
+
+fn mime_hint_from_uri(url: &Url) -> Option<String> {
+    let extension = url.path().rsplit('.').next()?.to_ascii_lowercase();
+    Some(
+        match extension.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "svg" => "image/svg+xml",
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            "pdf" => "application/pdf",
+            "mp4" => "video/mp4",
+            "webm" => "video/webm",
+            "mp3" => "audio/mpeg",
+            "ogg" => "audio/ogg",
+            "wav" => "audio/wav",
+            "gltf" => "model/gltf+json",
+            "glb" => "model/gltf-binary",
+            "obj" => "model/obj",
+            "html" | "htm" => "text/html",
+            _ => return None,
+        }
+        .to_owned(),
+    )
 }
 
 pub fn redact_reference(reference: &ResourceReference) -> String {
@@ -238,12 +323,14 @@ pub fn redact_reference(reference: &ResourceReference) -> String {
             if url.query().is_some() {
                 url.set_query(Some("REDACTED"));
             }
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
             url.set_fragment(None);
             url.to_string()
         }
         ResourceReference::LocalPath(path) => path.clone(),
-        ResourceReference::MappedPath { remote, local } => {
-            format!("mapped:{remote} -> {local}")
+        ResourceReference::MappedPath { remote } => {
+            format!("mapped:{remote}")
         }
     }
 }
@@ -251,7 +338,7 @@ pub fn redact_reference(reference: &ResourceReference) -> String {
 pub fn format_external_modality(modality: &ExternalModality) -> String {
     let resolution = match &modality.resolution {
         ModalityResolution::ReferencedResource(resource) => format!(
-            "reference={} provenance={:?} mime={:?}",
+            "reference={:?} provenance={:?} mime={:?}",
             redact_reference(&resource.reference),
             resource.provenance,
             resource.mime
@@ -286,6 +373,100 @@ mod tests {
     use crate::semantic::{BackendLocator, DebugInfo, SemanticNode, TreeTruncation};
 
     use super::*;
+
+    #[test]
+    fn reference_first_and_live_state_cannot_be_replaced_by_artifact() {
+        let candidate = ModalityCandidate {
+            owner: RuntimeNodeId::new(4),
+            locator: BackendLocator::new(":1.9", "/node/4"),
+            evidence_locators: vec![],
+            kind: ModalityKind::Image,
+            label: None,
+        };
+        let artifact = super::super::PortableArtifact {
+            descriptor: super::super::ArtifactDescriptor {
+                id: super::super::ArtifactId::new(1),
+                kind: ModalityKind::Image,
+                mime: "image/png".into(),
+                size: 0,
+                hash: super::super::ArtifactHash::sha256(b""),
+                display_name: None,
+                lifetime: super::super::ArtifactLifetime::Session,
+            },
+        };
+        let metadata = ModalityMetadata {
+            hyperlink_uris: vec!["https://example.invalid/a.png".into()],
+            ..Default::default()
+        };
+        let resolver = ModalityResolver::default();
+        let referenced = resolver.resolve(&candidate, std::slice::from_ref(&metadata));
+        assert!(matches!(
+            resolver
+                .with_artifact(referenced, artifact.clone())
+                .resolution,
+            ModalityResolution::ReferencedResource(_)
+        ));
+        let unresolved = resolver.resolve(&candidate, &[]);
+        assert!(matches!(
+            resolver
+                .with_artifact(unresolved, artifact.clone())
+                .resolution,
+            ModalityResolution::PortableArtifact(_)
+        ));
+        let disabled = ModalityResolver::new(TransferPolicy::Unavailable);
+        assert!(matches!(
+            disabled
+                .with_artifact(disabled.resolve(&candidate, &[]), artifact.clone())
+                .resolution,
+            ModalityResolution::Unavailable { .. }
+        ));
+        let live = ModalityCandidate {
+            kind: ModalityKind::LiveVisual,
+            ..candidate
+        };
+        assert!(matches!(
+            resolver
+                .with_artifact(resolver.resolve(&live, &[metadata]), artifact)
+                .resolution,
+            ModalityResolution::LiveVisualState { .. }
+        ));
+    }
+
+    #[test]
+    fn capability_requires_connected_matching_client_and_debug_redacts_credentials() {
+        let candidate = ModalityCandidate {
+            owner: RuntimeNodeId::new(4),
+            locator: BackendLocator::new(":1.9", "/node/4"),
+            evidence_locators: vec![],
+            kind: ModalityKind::Image,
+            label: None,
+        };
+        let mut modality = ModalityResolver::default().resolve(
+            &candidate,
+            &[ModalityMetadata {
+                hyperlink_uris: vec!["https://example.invalid/a.png?token=secret".into()],
+                ..Default::default()
+            }],
+        );
+        modality.negotiate(None);
+        assert!(!modality.capabilities.reference_handoff);
+        let client = super::super::LocalModalityCapabilities {
+            mime_patterns: std::collections::HashSet::from(["image/*".into()]),
+            reference_schemes: std::collections::HashSet::from(["https".into()]),
+            artifact_receive: false,
+        };
+        modality.negotiate(Some(&client));
+        assert!(modality.capabilities.reference_handoff);
+        let debug = format!(
+            "{:?}",
+            ResourceReference::NetworkUri(
+                "https://user:password@example.invalid/a.png?token=secret#private".into()
+            )
+        );
+        for secret in ["user", "password", "secret", "private"] {
+            assert!(!debug.contains(secret));
+        }
+    }
 
     fn node(id: u64, role: SemanticRole, name: &str) -> SemanticNode {
         SemanticNode {

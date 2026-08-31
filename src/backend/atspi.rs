@@ -1093,6 +1093,7 @@ impl AtspiBackend {
                 .destination(locator.bus_name())
                 .and_then(|builder| builder.path(locator.object_path()))
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+                .cache_properties(zbus::proxy::CacheProperties::No)
                 .build()
                 .await
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
@@ -1103,7 +1104,9 @@ impl AtspiBackend {
                 proxy.n_anchors(),
             )
             .await
-            .unwrap_or(0)
+            // A missing count property does not prove GetURI is unavailable.
+            // Probe just its first anchor; this is a read, never an Action.
+            .unwrap_or(1)
             .clamp(0, 32);
             for index in 0..i32::from(anchors) {
                 if let Ok(uri) = dbus_operation(

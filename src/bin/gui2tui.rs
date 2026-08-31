@@ -61,6 +61,10 @@ struct Cli {
     /// Frontend projection pipeline; legacy preserves the Phase 3B flat mapping.
     #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled)]
     presentation: PresentationMode,
+
+    /// Private local modality broker socket; absent means safe read-only fallback.
+    #[arg(long)]
+    modality_socket: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
@@ -116,6 +120,8 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         cli.presentation,
     )
     .await?;
+
+    app.configure_modality_client(cli.modality_socket);
 
     let terminal_events = EventStream::new();
     futures_lite::pin!(terminal_events);

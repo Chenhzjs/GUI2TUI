@@ -46,6 +46,10 @@ use super::{
 };
 
 pub struct TuiApplication {
+    modality_socket: Option<std::path::PathBuf>,
+    modality_view: Option<super::modality_view::ModalityView>,
+    modality_task: Option<tokio::task::JoinHandle<String>>,
+    modality_cancel: crate::modality::CancellationToken,
     backend: AtspiBackend,
     app_selector: String,
     application_locator: crate::semantic::BackendLocator,
@@ -85,6 +89,110 @@ struct FocusAnchor {
 }
 
 impl TuiApplication {
+    pub fn configure_modality_client(&mut self, socket: Option<std::path::PathBuf>) {
+        self.modality_socket = socket;
+    }
+
+    async fn begin_modality(&mut self) {
+        let candidates = crate::modality::ModalityResolver::discover(&self.cache)
+            .into_iter()
+            .filter(|candidate| self.scopes.allows_node(candidate.owner))
+            .filter(|candidate| {
+                self.content
+                    .catalog()
+                    .owning_root(candidate.owner)
+                    .and_then(|root| self.content.catalog().get(root))
+                    .is_none_or(|model| {
+                        model.scope_class != crate::content::ContentScopeClass::BackgroundSecondary
+                    })
+            })
+            .collect();
+        let capabilities = if let Some(socket) = self.modality_socket.clone() {
+            tokio::task::spawn_blocking(move || crate::modality::wire::capabilities(&socket))
+                .await
+                .ok()
+                .and_then(Result::ok)
+        } else {
+            None
+        };
+        self.modality_view = Some(super::modality_view::ModalityView {
+            candidates,
+            selected: 0,
+            resolved: None,
+            capabilities,
+        });
+        self.resolve_selected_modality().await;
+    }
+
+    async fn resolve_selected_modality(&mut self) {
+        let Some(view) = &self.modality_view else {
+            return;
+        };
+        let Some(candidate) = view.candidates.get(view.selected).cloned() else {
+            return;
+        };
+        let mut modality = crate::modality::runtime::resolve_atspi(&self.backend, &candidate).await;
+        let Some(view) = &mut self.modality_view else {
+            return;
+        };
+        modality.negotiate(view.capabilities.as_ref());
+        view.resolved = Some(modality);
+        self.status = "Resolved from accessibility metadata only; no GUI action invoked".to_owned();
+    }
+
+    fn handoff_selected_modality(&mut self) {
+        if self.modality_task.is_some() {
+            self.status = "A local handoff is already pending approval".to_owned();
+            return;
+        }
+        let Some(view) = &self.modality_view else {
+            return;
+        };
+        let Some(modality) = view.resolved.clone() else {
+            return;
+        };
+        let valid_target = view.candidates.get(view.selected).is_some_and(|candidate| {
+            self.cache
+                .node(candidate.owner)
+                .is_some_and(|node| node.backend_locator == candidate.locator)
+                && self.scopes.allows_node(candidate.owner)
+        });
+        if !valid_target {
+            self.status =
+                "Resource control was replaced or left active scope; reopen F4".to_owned();
+            return;
+        }
+        if !modality.capabilities.reference_handoff {
+            self.status =
+                "Resource unresolved, handler unavailable, or local client disconnected".to_owned();
+            return;
+        }
+        let Some(socket) = self.modality_socket.clone() else {
+            return;
+        };
+        let crate::modality::ModalityResolution::ReferencedResource(resource) = modality.resolution
+        else {
+            return;
+        };
+        self.modality_cancel = Default::default();
+        let cancel = self.modality_cancel.clone();
+        self.modality_task = Some(tokio::task::spawn_blocking(move || {
+            match crate::modality::wire::send_reference_cancellable(
+                &socket,
+                modality.kind,
+                resource,
+                &cancel,
+            ) {
+                Ok(crate::modality::wire::Response::Opened { artifact_bytes, .. }) => format!(
+                    "Local handler accepted resource; reference-only; artifact_bytes={artifact_bytes}"
+                ),
+                Ok(_) => "Local handoff denied or failed; GUI unchanged".to_owned(),
+                Err(_) => "Local modality client unavailable; GUI unchanged".to_owned(),
+            }
+        }));
+        self.status = "Awaiting user authorization in local broker; TUI remains usable".to_owned();
+    }
+
     pub async fn new(
         backend: AtspiBackend,
         app_selector: String,
@@ -136,6 +244,10 @@ impl TuiApplication {
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
         let mut application = Self {
+            modality_socket: None,
+            modality_view: None,
+            modality_task: None,
+            modality_cancel: Default::default(),
             backend,
             app_selector,
             application_locator,
@@ -188,6 +300,10 @@ impl TuiApplication {
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
+        if let Some(view) = &self.modality_view {
+            view.render(frame, &self.status);
+            return;
+        }
         self.viewport_height = frame.area().height.saturating_sub(3).max(1);
         self.viewport_width = frame.area().width.saturating_sub(2).max(1);
         let palette = self.command_palette.as_ref().map(|palette| PaletteRender {
@@ -373,6 +489,44 @@ impl TuiApplication {
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        use crossterm::event::{KeyCode, KeyEventKind};
+        if key.kind == KeyEventKind::Release {
+            return false;
+        }
+        if key.code == KeyCode::Char('c')
+            && key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+        {
+            return true;
+        }
+        if self.modality_view.is_some() {
+            match key.code {
+                KeyCode::Esc => {
+                    self.modality_view = None;
+                    self.status =
+                        "Returned from modality task; semantic position preserved".to_owned();
+                }
+                KeyCode::Up | KeyCode::Down => {
+                    self.modality_view
+                        .as_mut()
+                        .unwrap()
+                        .move_selection(if key.code == KeyCode::Up { -1 } else { 1 });
+                    self.resolve_selected_modality().await;
+                }
+                KeyCode::Enter => self.handoff_selected_modality(),
+                _ => {}
+            }
+            return false;
+        }
+        if key.code == KeyCode::F(4)
+            && self.edit_session.is_none()
+            && self.choice_overlay.is_none()
+            && self.command_palette.is_none()
+        {
+            self.begin_modality().await;
+            return false;
+        }
         if let Some(mut content_view) = self.content_view.take() {
             let command = content_view.handle_key(key);
             self.content_view = Some(content_view);
@@ -514,6 +668,9 @@ impl TuiApplication {
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
+        if self.modality_view.is_some() {
+            return;
+        }
         match intent {
             MouseIntent::Scroll(delta) => {
                 self.viewport.scroll_lines(
@@ -794,6 +951,16 @@ impl TuiApplication {
     }
 
     pub async fn progress_content_operations(&mut self) {
+        if self
+            .modality_task
+            .as_ref()
+            .is_some_and(|task| task.is_finished())
+            && let Some(task) = self.modality_task.take()
+        {
+            self.status = task
+                .await
+                .unwrap_or_else(|_| "Local handoff task failed".to_owned());
+        }
         let Some(mut search) = self
             .content_view
             .as_mut()
@@ -1941,6 +2108,12 @@ impl TuiApplication {
                 element_label(element)
             );
         }
+    }
+}
+
+impl Drop for TuiApplication {
+    fn drop(&mut self) {
+        self.modality_cancel.cancel();
     }
 }
 

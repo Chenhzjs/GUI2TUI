@@ -87,7 +87,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         render_content(frame, content_area, content);
     }
     let footer = format!(
-        "{} | Tab Focus | Enter Operate | : Commands | ↑/↓ Scroll | r Refresh | q Quit",
+        "{} | Tab Focus | Enter Operate | : Commands | F4 Modality | r Refresh | q Quit",
         context.status
     );
     frame.render_widget(

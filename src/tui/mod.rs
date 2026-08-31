@@ -6,6 +6,7 @@ pub mod edit;
 pub mod focus;
 pub mod hit_test;
 pub mod input;
+pub mod modality_view;
 pub mod operation;
 pub mod palette;
 pub mod renderer;

@@ -179,6 +179,14 @@ struct Cli {
     /// Print the server-side modality protocol capabilities (never local executable paths).
     #[arg(long)]
     modality_capabilities: bool,
+
+    /// Request a resolved reference handoff; approval and handler choice stay local.
+    #[arg(long, value_name = "NODE_ID", requires_all = ["app", "modality_socket"])]
+    handoff_modality: Option<String>,
+
+    /// Private local broker socket (or a user-managed socket forwarding endpoint).
+    #[arg(long)]
+    modality_socket: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
@@ -408,6 +416,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.dump_modalities
         || cli.resolve_modality.is_some()
         || cli.dump_resource_reference.is_some()
+        || cli.handoff_modality.is_some()
     {
         let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
@@ -415,11 +424,13 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         if cli.dump_modalities
             || cli.resolve_modality.is_some()
             || cli.dump_resource_reference.is_some()
+            || cli.handoff_modality.is_some()
         {
             let requested = cli
                 .resolve_modality
                 .as_deref()
                 .or(cli.dump_resource_reference.as_deref())
+                .or(cli.handoff_modality.as_deref())
                 .map(gui2tui::semantic::BackendLocator::decode)
                 .transpose()?;
             let candidates = gui2tui::modality::ModalityResolver::discover(&cache);
@@ -448,7 +459,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                     match &modality.resolution {
                         gui2tui::modality::ModalityResolution::ReferencedResource(resource) => {
                             println!(
-                                "{} provenance={:?}",
+                                "{:?} provenance={:?}",
                                 gui2tui::modality::redact_reference(&resource.reference),
                                 resource.provenance
                             );
@@ -457,6 +468,42 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                     }
                 } else {
                     println!("{}", gui2tui::modality::format_external_modality(&modality));
+                }
+                if cli.handoff_modality.is_some() {
+                    let socket = cli.modality_socket.clone().ok_or_else(|| {
+                        BackendError::SemanticCache("local client unavailable".to_owned())
+                    })?;
+                    let result = tokio::task::spawn_blocking(move || {
+                        let capabilities = gui2tui::modality::wire::capabilities(&socket)?;
+                        let mut modality = modality;
+                        modality.negotiate(Some(&capabilities));
+                        if !modality.capabilities.reference_handoff {
+                            return Err(std::io::Error::other(
+                                "no resolved resource with an available local handler",
+                            ));
+                        }
+                        let gui2tui::modality::ModalityResolution::ReferencedResource(resource) =
+                            modality.resolution
+                        else {
+                            return Err(std::io::Error::other("resource unresolved"));
+                        };
+                        gui2tui::modality::wire::send_reference(&socket, modality.kind, resource)
+                    })
+                    .await
+                    .map_err(|_| {
+                        BackendError::SemanticCache("local handoff task failed".to_owned())
+                    })?
+                    .map_err(|_| {
+                        BackendError::SemanticCache(
+                            "local modality client unavailable or unsupported".to_owned(),
+                        )
+                    })?;
+                    println!("Handoff {result:?}");
+                    if matches!(result, gui2tui::modality::wire::Response::Failed { .. }) {
+                        return Err(BackendError::SemanticCache(
+                            "local handoff denied or failed".to_owned(),
+                        ));
+                    }
                 }
             }
             if requested.is_some() && matched == 0 {

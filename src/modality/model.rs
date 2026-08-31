@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt, time::Duration};
 
 use crate::semantic::RuntimeNodeId;
@@ -21,7 +22,7 @@ impl fmt::Display for ExternalModalityId {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModalityKind {
     Image,
     Document,
@@ -43,7 +44,7 @@ pub enum TransferPolicy {
     Unavailable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReferenceProvenance {
     HyperlinkUri,
     DocumentAttribute,
@@ -60,12 +61,18 @@ impl ReferenceProvenance {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ResourceReference {
     NetworkUri(String),
     LocalPath(String),
-    MappedPath { remote: String, local: String },
+    MappedPath { remote: String },
     OpaqueUri(String),
+}
+
+impl fmt::Debug for ResourceReference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", super::redact_reference(self))
+    }
 }
 
 impl ResourceReference {
@@ -80,7 +87,8 @@ impl ResourceReference {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReferencedResource {
     pub reference: ResourceReference,
     pub mime: Option<String>,
@@ -88,7 +96,7 @@ pub struct ReferencedResource {
     pub provenance: ReferenceProvenance,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ArtifactId(u64);
 
 impl ArtifactId {
@@ -103,7 +111,7 @@ impl fmt::Display for ArtifactId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArtifactHash(pub [u8; 32]);
 
 impl ArtifactHash {
@@ -117,13 +125,14 @@ impl ArtifactHash {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ArtifactLifetime {
     Session,
     Temporary { ttl: Duration },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactDescriptor {
     pub id: ArtifactId,
     pub kind: ModalityKind,
@@ -197,7 +206,8 @@ pub struct ExternalModality {
     pub transfer_policy: TransferPolicy,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalModalityCapabilities {
     pub reference_schemes: HashSet<String>,
     pub mime_patterns: HashSet<String>,
@@ -210,7 +220,7 @@ impl LocalModalityCapabilities {
             && resource
                 .mime
                 .as_deref()
-                .is_none_or(|mime| self.supports_mime(mime))
+                .is_some_and(|mime| self.supports_mime(mime))
     }
 
     pub fn supports_mime(&self, mime: &str) -> bool {

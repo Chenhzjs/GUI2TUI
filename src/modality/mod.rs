@@ -1,7 +1,9 @@
 mod broker;
 mod model;
 mod resolver;
+pub mod runtime;
 mod transport;
+pub mod wire;
 
 pub use broker::{
     AuthorizationDecision, BrokerError, HandlerRegistry, LocalHandler, LocalModalityBroker,
