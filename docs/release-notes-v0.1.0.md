@@ -27,3 +27,8 @@ graphics are not implemented. No application-specific extraction is used.
 Candidate artifact/checksum/attestation procedures remain documented in
 [release engineering](release-pipeline-validation.md). A build attestation is
 provenance, not proof that every workflow works or that a release is authorized.
+
+Non-publishing pipeline [33419080074](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33419080074)
+passed for source `156149b5928d1ce607ba87fd0f6144f42f98f493`: both native Linux
+architectures, extracted-package smoke, ABI and checksums. Publish was skipped.
+These candidate artifacts are validation evidence, not an approved public release.

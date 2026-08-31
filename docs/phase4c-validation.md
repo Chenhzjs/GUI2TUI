@@ -155,6 +155,61 @@ through Reader, not a writable Monaco editor. No Copilot request was sent.
 
 ## Release gate
 
-Final non-publishing GitHub pipeline: **PENDING this evidence commit**. A green
-packaging run cannot by itself close C-02, C-03 or remaining real-application
-verification. `v0.1.0 PUBLIC RELEASE NOT PUBLISHED`. Do not create a v0.1 tag.
+The final non-publishing candidate is source commit
+`156149b5928d1ce607ba87fd0f6144f42f98f493` (not a tag). Later documentation-only
+commits do not change this artifact identity.
+
+- [CI 33419070750](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33419070750): PASS.
+- [Release candidate 33419080074](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33419080074):
+  PASS, dispatched on master with `publish=false`, `attest=true`.
+- Both native Ubuntu 22.04 runners built with pinned Rust 1.88; x86_64 and aarch64
+  ABI gates and extracted-package fresh-HOME GTK smoke tests PASS. Each smoke
+  confirmed a GUI action, password absence and local broker capabilities.
+- Assembly accepted exactly two architectures, matching build/ABI/source
+  metadata. Both artifacts require at most GLIBC 2.34 (configured ceiling 2.35).
+- Downloaded both final archives; local SHA256SUMS verification PASS. Manifest
+  source and artifact identities match the run. Signed provenance is available
+  at [attestation 44207338](https://github.com/Chenhzjs/GUI2TUI/attestations/44207338).
+- Local `gh attestation verify` passed separately for both archives,
+  SHA256SUMS and RELEASE-MANIFEST.json, enforcing repository, signer workflow,
+  exact source digest and GitHub-hosted runners. Each returned this run's
+  `attempts/1` invocation, not a historical run.
+- The publish job was **SKIPPED**. Repository release/tag listings remain empty.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| gui2tui-0.1.0-linux-aarch64.tar.gz | 10,503,841 | `2a8775bcf4c8c47eaa6ccce5a3bc8e6b52ec4b29c0eff84f20966edb7011fb63` |
+| gui2tui-0.1.0-linux-x86_64.tar.gz | 10,705,763 | `80b46f7bb934034effcca9959eb71f7a90c9392b4bac9458b40ddbbfa83cd0b0` |
+
+```bash
+gh run download 33419080074 -n gui2tui-0.1.0-release-candidate -D CANDIDATE_DIR
+# From the downloaded directory:
+shasum -a 256 -c SHA256SUMS
+# Executed separately for each of the four final files:
+gh attestation verify FILE --repo Chenhzjs/GUI2TUI \
+  --signer-workflow Chenhzjs/GUI2TUI/.github/workflows/release.yml \
+  --source-digest 156149b5928d1ce607ba87fd0f6144f42f98f493 \
+  --deny-self-hosted-runners --format json
+```
+
+A green packaging run cannot close C-02, C-03 or remaining real-application
+verification. **NOT READY TO RELEASE v0.1.0**.
+`v0.1.0 PUBLIC RELEASE NOT PUBLISHED`. Do not create a v0.1 tag.
+
+### Final settings-discovery diagnostic
+
+Runs `gnseps` and `A4vFsw` (same isolated harness) enabled bridge debug logging.
+PCManFM-Qt's X11 Preferences window existed, but its bridge reported:
+
+```text
+Could not query active accessibility event listeners.
+Error in contacting registry: "org.freedesktop.DBus.Error.Disconnected"
+"Not connected to D-Bus server"
+```
+
+X11 `AT_SPI_BUS` and `org.a11y.Bus.GetAddress` agreed; no inherited
+`AT_SPI_BUS_ADDRESS` was set. An additional experiment explicitly completed
+GetAddress and Registry Ping **before** starting the application; the same
+failure remained. That unhelpful harness change was not retained. This narrows
+the observed failure to bridge registration, but does not establish its cause.
+No application adapter, forced keyboard injection or false workflow PASS was added.
