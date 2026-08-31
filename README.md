@@ -104,6 +104,10 @@ stream can be inspected with
 
 ## Architecture
 
+Runtime/application lifecycle, detach/resume, bounded event recovery and crash-owned artifacts are
+documented in [docs/runtime-recovery.md](docs/runtime-recovery.md). These ownership layers do not
+alter the frozen semantic/content IR.
+
 ```text
 src/backend/atspi.rs       AT-SPI traversal, bulk enrichment, events, and operations
 src/backend/bootstrap.rs   Cache/walk strategy + bulk tree reconstruction

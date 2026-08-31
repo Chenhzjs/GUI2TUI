@@ -134,6 +134,19 @@ class LiveFixture(Gtk.Application):
         item_list.update_property([Gtk.AccessibleProperty.LABEL], ["Demo items"])
         content.append(item_list)
 
+        storm = Gtk.Button(label="Run accessibility event storm")
+
+        def run_storm(_button: Gtk.Button) -> None:
+            # Deliberately rapid generic property + selection mutation. No
+            # GUI2TUI side channel observes this state; AT-SPI is the contract.
+            for index in range(2000):
+                status.set_label(f"Storm: {index}")
+                selection.set_selected(index % 3)
+            status.set_label("Storm complete: 2000")
+
+        storm.connect("clicked", run_storm)
+        content.append(storm)
+
         rich_text = Gtk.TextView()
         rich_text.set_editable(False)
         rich_text.get_buffer().set_text(

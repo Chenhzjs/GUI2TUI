@@ -117,7 +117,9 @@ artifact submission inside the TUI are **NOT IMPLEMENTED**.
 
 ## Local safety and lifetime
 
-* Socket directory must be 0700; socket is 0600; existing sockets are never replaced.
+* Socket directory must be 0700; socket is 0600. A private owner lock prevents two brokers
+  from sharing an endpoint. A same-UID private Unix socket is removed only when the lock is
+  acquired and a connectivity check proves it stale; foreign files/symlinks are refused.
   Only local Unix sockets are implemented. SSH forwarding/authenticated remote
   transport and remote-profile authorization are **NOT IMPLEMENTED**.
 * Network references permit HTTP(S), reject URL credentials, and are never downloaded
@@ -129,8 +131,10 @@ artifact submission inside the TUI are **NOT IMPLEMENTED**.
 * Payload files have random names under a private per-broker TempDir. Display names
   and remote artifact IDs cannot choose filenames. Completed artifacts are retained
   for a clamped 30–1800-second TTL (Session: up to 1800 seconds), or until broker exit.
-  Failed transfers are deleted immediately. SIGINT cleans up; SIGKILL/crash cleanup
-  of leftovers on the next run is **NOT IMPLEMENTED**.
+  Failed transfers are deleted immediately. SIGINT/SIGTERM clean up. SIGKILL residue uses a
+  private leased operation namespace plus closed ownership manifest; the next startup reclaims
+  only abandoned registered regular files. Live broker namespaces and foreign/symlink entries
+  are never removed.
   Each broker also caps retained artifacts at 64 files / 1 GiB, refusing more until
   cleanup rather than evicting a resource still in use. Byte-only progress is
   available through tracing debug instrumentation; no payload is logged.

@@ -98,8 +98,13 @@ directory (0700), fixed MIME-derived basename, SHA-256/length verification, TTL 
 event loop and removing them on normal exit. CLI starts a restricted same-executable TTL reaper
 before returning the path. The worker only deletes its validated manifest/generated file and
 empty directory; it has no viewer, bus or network connection. No catch-all recursive deletion.
-Abrupt host/process termination may leave temporary files; crash-recovery sweeping is
-**NOT IMPLEMENTED**. A viewer can outlive the TTL; the file is not extended automatically.
+Materializations now carry a private ownership marker, session/operation identity,
+creation/expiry timestamps and an exclusive lease. Normal shutdown and the restricted TTL
+reaper remove only the fixed generated files. Broker receive directories use the same leased
+namespace and are reclaimed on the next broker/runtime startup after a crash. Startup recovery
+for an interrupted standalone materializer before its manifest is complete remains
+**NOT IMPLEMENTED**; such an unidentifiable directory is deliberately not deleted. A viewer can
+outlive the TTL; the file is not extended automatically.
 
 ## Same-host viewer (separate authorization)
 
