@@ -106,6 +106,14 @@ pub struct OperationTicket {
     generation: ApplicationGenerationId,
     id: OperationId,
 }
+impl OperationTicket {
+    pub fn session_id(&self) -> RuntimeSessionId {
+        self.session.clone()
+    }
+    pub fn operation_id(&self) -> u64 {
+        self.id.0
+    }
+}
 struct Operation {
     ticket: OperationTicket,
     cancel: CancellationToken,
@@ -120,6 +128,7 @@ pub struct RuntimeMetrics {
     pub terminal_resumes: u64,
     pub endpoint_disconnects: u64,
     pub endpoint_reconnects: u64,
+    pub backend_reconnects: u64,
     pub owner_loss_cancellations: u64,
     pub rejected_late_results: u64,
 }
@@ -250,6 +259,9 @@ impl RuntimeSession {
             self.terminal = next;
         }
     }
+    pub fn begin_terminal_reattach(&mut self) {
+        self.terminal = TerminalState::Reattaching;
+    }
     pub fn set_endpoint(&mut self, state: EndpointState) {
         if state == EndpointState::Disconnected && self.endpoint != state {
             self.metrics.endpoint_disconnects += 1;
@@ -258,6 +270,9 @@ impl RuntimeSession {
             self.metrics.endpoint_reconnects += 1;
         }
         self.endpoint = state;
+    }
+    pub fn record_backend_reconnect(&mut self) {
+        self.metrics.backend_reconnects += 1;
     }
     pub fn shutdown(&mut self) {
         self.state = SessionState::Stopping;

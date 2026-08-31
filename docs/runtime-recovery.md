@@ -89,12 +89,31 @@ RESTART_ROUNDS=3 ./scripts/phase4a-live-linux.sh qt
 python3 tests/live/phase4a_broker_recovery.py target/debug/gui2tui-local
 ```
 
-The GTK run on 2026-08-31 completed 20 generations in 85.99 s. It verified event processing while
+The final GTK run on 2026-08-31 completed 20 generations in 96.22 s. It verified event processing while
 detached, exact RuntimeNode focus preservation, 80×24 / 160×50 / 60×20 resize, stale old locator
-rejection, explicit generation reopening and SIGTERM terminal restoration. This is an accelerated
-churn test, **not** a claimed 30–60 minute soak.
+rejection, explicit generation reopening and SIGTERM terminal restoration. After changing restart
+to reuse the healthy AT-SPI connection, RSS stayed 17,900–18,240 KiB, file descriptors remained
+exactly 17 and threads remained exactly 13 across all generations. A preliminary run exposed the
+old +1 fd/thread per restart and is not counted as the final result. This is an accelerated churn
+test, **not** a claimed 30–60 minute soak.
+
+The real GTK event-storm fixture generated 12,004 AT-SPI events from 2,000 label and selection
+mutations: 2,645 dequeued, 9,359 dropped after the bounded queue reached its 2,048 high-water mark,
+one resync request, zero queued at completion and authoritative final `Storm complete: 2000` state.
+No resync loop occurred. Qt completed three generations in 18.00 s; Chrome completed two in 15.43 s.
+Chrome's complete Reader/search/table probe used 399 nodes and its separate reference-first broker
+probe transferred zero artifact bytes. Firefox reference regression passed. LibreOffice exposed
+1,963 nodes and safely left its embedded image unresolved; no private extraction or fake handoff.
+
+An independent-process broker test sent 4,096 bytes of a declared 2 MiB artifact and SIGKILLed the
+broker. The server producer stayed alive, a replacement broker recovered exactly the abandoned
+operation namespace, a second live broker namespace remained intact, the stale socket was rebound,
+and fresh capabilities changed from `image/*` to `application/pdf`. SIGTERM then removed sockets
+and owned artifacts. This proves bounded local recovery, not cross-host transport.
 
 Remaining Phase 4A live gates are tracked honestly: real AT-SPI daemon loss/reconnect is
-**NOT TESTED**; cross-host endpoint is **NOT IMPLEMENTED**; a 30–60 minute soak is **NOT TESTED**;
-Electron remains **BLOCKED** by its current accessibility exposure. Until all phase criteria have
-real evidence, the project status is `PHASE 4A NOT YET VALIDATED`.
+**NOT TESTED** (bounded reconnect is implemented and unit/build covered); cross-host endpoint is
+**NOT IMPLEMENTED**; a 30–60 minute soak is **NOT TESTED**; standalone materializer crash residue
+before its manifest is complete is **NOT IMPLEMENTED**; Electron remains **BLOCKED** by its current
+accessibility exposure. Until all phase criteria have real evidence, the project status is
+`PHASE 4A NOT YET VALIDATED`.

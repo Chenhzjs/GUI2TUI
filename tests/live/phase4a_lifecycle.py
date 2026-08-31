@@ -52,8 +52,10 @@ def start_application():
     end = time.monotonic() + 8
     while time.monotonic() < end:
         if selector in inspect("--list", check=False).stdout:
-            time.sleep(.2)
-            return
+            ready = inspect("--app", selector, check=False)
+            if ready.returncode == 0 and "Window" in ready.stdout:
+                time.sleep(.2)
+                return
         time.sleep(.1)
     raise AssertionError("fixture not registered")
 
@@ -173,7 +175,13 @@ try:
         stale = inspect("--actions", node, check=False)
         assert stale.returncode != 0 and "panic" not in stale.stdout.lower(), stale.stdout
         assert status()["generation"] is None, "same-name application was silently rebound"
-        tui.send(b"\x1b[15~")  # F5 explicitly opens a NEW generation
+        if os.environ.get("TEST_BACK_TO_SELECTOR") == "1" and generation == rounds - 1:
+            tui.send(b"b")
+            pump(.3)
+            tui.send(b"\r")
+            print("BACK_TO_APPLICATION_SELECTOR=PASS", flush=True)
+        else:
+            tui.send(b"\x1b[15~")  # F5 explicitly opens a NEW generation
         pump(.8)
         print(f"RESTART generation={generation + 1} stale_rejected=true", flush=True)
 

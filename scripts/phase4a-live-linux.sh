@@ -8,10 +8,11 @@ export TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/gui2tui-live-target}"
 export RESULT_DIR
 RESULT_DIR=$(mktemp -d /tmp/gui2tui-p4a-XXXXXX)
 export TEST_TOOLKIT="${1:-gtk}"
+export TEST_DISPLAY="${DISPLAY_NUMBER:-:88}"
 export FIREFOX_BIN="${FIREFOX_BIN:-/opt/firefox-154.0.1/firefox}"
 CARGO_TARGET_DIR="$TARGET_DIR" CARGO_INCREMENTAL=0 cargo build --bins
 dbus-run-session -- bash -euo pipefail -c '
-export DISPLAY=:88 XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+export DISPLAY="$TEST_DISPLAY" XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
 Xvfb "$DISPLAY" -screen 0 1280x800x24 -dpi 96 >"$RESULT_DIR/xvfb.log" 2>&1 &
 xvfb_pid=$!
 trap '\''kill "$xvfb_pid" 2>/dev/null || true'\'' EXIT

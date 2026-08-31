@@ -167,6 +167,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                     RuntimeSignal::Reattach => {
                         tracing::debug!("reattachment signal received");
                         if !guard.attached {
+                            app.begin_terminal_reattach();
                             guard = TerminalGuard::attach()?;
                             tracing::debug!("terminal modes restored for reattachment");
                             // Terminal::clear queries remote cursor position

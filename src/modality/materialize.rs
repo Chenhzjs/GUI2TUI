@@ -58,12 +58,24 @@ impl MaterializedArtifact {
 pub struct ArtifactMaterializer;
 impl ArtifactMaterializer {
     pub fn materialize(
+        descriptor: ArtifactDescriptor,
+        source: impl Read,
+        snapshot: Option<(ScreenRegion, CaptureQuality)>,
+        ttl: Duration,
+        explicit: bool,
+        cancel: &CancellationToken,
+    ) -> io::Result<MaterializedArtifact> {
+        Self::materialize_owned(descriptor, source, snapshot, ttl, explicit, cancel, None)
+    }
+
+    pub fn materialize_owned(
         mut descriptor: ArtifactDescriptor,
         mut source: impl Read,
         snapshot: Option<(ScreenRegion, CaptureQuality)>,
         ttl: Duration,
         explicit: bool,
         cancel: &CancellationToken,
+        owner: Option<(crate::runtime::RuntimeSessionId, u64)>,
     ) -> io::Result<MaterializedArtifact> {
         if !explicit || cancel.is_cancelled() {
             return Err(io::Error::other(
@@ -142,8 +154,8 @@ impl ArtifactMaterializer {
             .map_err(|e| e.error)?;
         let metadata = MaterializationMetadata {
             ownership_marker: "GUI2TUI-MATERIALIZATION-v1".into(),
-            session_id: Default::default(),
-            operation_id: 1,
+            session_id: owner.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
+            operation_id: owner.map(|v| v.1).unwrap_or(1),
             created_unix: unix_now(),
             descriptor,
             region: snapshot.map(|x| x.0),
@@ -298,6 +310,27 @@ mod tests {
                 &Default::default()
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn owned_materialization_records_runtime_operation_without_content() {
+        let session = crate::runtime::RuntimeSessionId::default();
+        let artifact = ArtifactMaterializer::materialize_owned(
+            descriptor(),
+            &b"abc"[..],
+            None,
+            Duration::from_secs(1),
+            true,
+            &Default::default(),
+            Some((session.clone(), 42)),
+        )
+        .unwrap();
+        assert_eq!(artifact.metadata.session_id, session);
+        assert_eq!(artifact.metadata.operation_id, 42);
+        assert_eq!(
+            artifact.metadata.ownership_marker,
+            "GUI2TUI-MATERIALIZATION-v1"
         );
     }
     #[test]

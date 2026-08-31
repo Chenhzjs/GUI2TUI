@@ -80,6 +80,7 @@ pub struct TuiApplication {
     hit_map: HitMap,
     status: String,
     application_available: bool,
+    backend_available: bool,
     edit_session: Option<EditSession>,
     command_palette: Option<CommandPalette>,
     choice_overlay: Option<ChoiceOverlay>,
@@ -141,6 +142,10 @@ impl TuiApplication {
         tracing::debug!(status = %self.runtime_status(), "terminal attachment changed");
     }
 
+    pub fn begin_terminal_reattach(&mut self) {
+        self.runtime.begin_terminal_reattach();
+    }
+
     fn application_gone(&mut self) {
         self.application_available = false;
         self.event_subscription.close();
@@ -169,13 +174,11 @@ impl TuiApplication {
     /// Explicit user selection of the same name. Never reconciles old/new
     /// caches, content, quarantine, scopes or command/choice bindings.
     async fn open_fresh_generation(&mut self) {
-        let backend = match AtspiBackend::connect(self.backend.operation_timeout()).await {
-            Ok(backend) => backend,
-            Err(_) => {
-                self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
-                return;
-            }
-        };
+        // Application restart invalidates object locators, not a healthy
+        // accessibility-bus connection. Reuse it; otherwise every generation
+        // leaves another zbus executor thread/fd until the process runtime
+        // shuts down. A real bus loss follows the separate reconnect path.
+        let backend = self.backend.clone();
         match Self::new(
             backend,
             self.app_selector.clone(),
@@ -229,6 +232,10 @@ impl TuiApplication {
                     })
             })
             .collect();
+        if self.modality_socket.is_some() {
+            self.runtime
+                .set_endpoint(crate::runtime::EndpointState::Connecting);
+        }
         let capabilities = if let Some(socket) = self.modality_socket.clone() {
             tokio::task::spawn_blocking(move || crate::modality::wire::capabilities(&socket))
                 .await
@@ -389,6 +396,10 @@ impl TuiApplication {
         if self.capture_ticket.is_none() {
             return;
         }
+        let artifact_owner = self
+            .capture_ticket
+            .as_ref()
+            .map(|ticket| (ticket.session_id(), ticket.operation_id()));
         let backend = self.backend.clone();
         self.capture_task = Some(tokio::spawn(async move {
             let mut metrics = ModalityMetrics::default();
@@ -402,13 +413,14 @@ impl TuiApplication {
             )
             .await
             .map_err(|_| crate::runtime::RuntimeError::ResourceUnavailable)?;
-            let artifact = ArtifactMaterializer::materialize(
+            let artifact = ArtifactMaterializer::materialize_owned(
                 snapshot.descriptor.clone(),
                 &bytes[..],
                 Some((snapshot.region, snapshot.quality)),
                 Duration::from_secs(300),
                 true,
                 &cancel,
+                artifact_owner,
             )
             .map_err(|_| crate::runtime::RuntimeError::ResourceUnavailable)?;
             if cancel.is_cancelled() {
@@ -572,6 +584,7 @@ impl TuiApplication {
                 bootstrap.metrics.node_count, bootstrap.metrics.strategy
             ),
             application_available: true,
+            backend_available: true,
             edit_session: None,
             command_palette: None,
             choice_overlay: None,
@@ -762,6 +775,19 @@ impl TuiApplication {
     pub async fn handle_intent(&mut self, intent: UiIntent) -> bool {
         if !self.application_available {
             return intent == UiIntent::Quit;
+        }
+        if !self.backend_available
+            && !matches!(
+                intent,
+                UiIntent::Quit
+                    | UiIntent::FocusNext
+                    | UiIntent::FocusPrevious
+                    | UiIntent::ScrollLines(_)
+                    | UiIntent::ScrollPages(_)
+            )
+        {
+            self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
+            return false;
         }
         match intent {
             UiIntent::Quit => return true,
@@ -2108,10 +2134,47 @@ impl TuiApplication {
     }
 
     pub async fn handle_event_stream_closed(&mut self) {
-        self.full_reload(Some(
-            "Full refresh fallback: AT-SPI event stream closed".to_owned(),
-        ))
-        .await;
+        if !self.application_available {
+            return;
+        }
+        self.runtime.state = crate::runtime::SessionState::Degraded;
+        self.backend_available = false;
+        self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
+        let timeout = self.backend.operation_timeout();
+        for delay in [100_u64, 200, 400, 800] {
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            let Ok(backend) = AtspiBackend::connect(timeout).await else {
+                continue;
+            };
+            let Ok(mut fresh) = Self::new(
+                backend,
+                self.app_selector.clone(),
+                self.inspect_options,
+                self.settle_delay,
+                self.bootstrap_strategy,
+                self.event_subscription.capacity(),
+                self.presentation_mode,
+            )
+            .await
+            else {
+                continue;
+            };
+            fresh.configure_modality_client(self.modality_socket.clone());
+            let mut runtime = std::mem::take(&mut self.runtime);
+            runtime.invalidate_application();
+            runtime.open_application(fresh.application_locator.clone());
+            runtime.record_backend_reconnect();
+            fresh.runtime = runtime;
+            fresh.backend_available = true;
+            fresh.status =
+                "Accessibility backend reconnected; opened a fresh application generation".into();
+            *self = fresh;
+            return;
+        }
+        self.event_stream_available = false;
+        self.status =
+            "Accessibility service is unavailable. Existing semantic view is read-only; q quits."
+                .into();
     }
 
     /// Cheap lifecycle check used by the terminal loop. It never walks an
