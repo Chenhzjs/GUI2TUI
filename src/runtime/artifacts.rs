@@ -9,6 +9,7 @@ use std::{
     io::{self, Read, Write},
     os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -72,10 +73,30 @@ impl OwnedArtifactDirectory {
         Self::new_in(&std::env::temp_dir(), ttl_seconds)
     }
     pub fn new_in(base: &Path, ttl_seconds: u64) -> io::Result<Self> {
-        let root = root_in(base)?;
-        Self::in_root(&root, ttl_seconds)
+        Self::new_owned_in(base, ttl_seconds, RuntimeSessionId::default(), 1)
     }
-    fn in_root(root: &Path, ttl_seconds: u64) -> io::Result<Self> {
+    pub fn new_owned(
+        ttl_seconds: u64,
+        session: RuntimeSessionId,
+        operation: u64,
+    ) -> io::Result<Self> {
+        Self::new_owned_in(&std::env::temp_dir(), ttl_seconds, session, operation)
+    }
+    pub fn new_owned_in(
+        base: &Path,
+        ttl_seconds: u64,
+        session: RuntimeSessionId,
+        operation: u64,
+    ) -> io::Result<Self> {
+        let root = root_in(base)?;
+        Self::in_root(&root, ttl_seconds, session, operation)
+    }
+    fn in_root(
+        root: &Path,
+        ttl_seconds: u64,
+        session: RuntimeSessionId,
+        operation: u64,
+    ) -> io::Result<Self> {
         private_owned(root, true)?;
         let directory = tempfile::Builder::new()
             .prefix("operation-")
@@ -87,11 +108,13 @@ impl OwnedArtifactDirectory {
             .create_new(true)
             .mode(0o600)
             .open(directory.path().join("lease"))?;
-        flock(&lease, FlockOperation::NonBlockingLockExclusive)?;
+        // Shared live leases allow a TTL reaper to take ownership before the
+        // producer releases its lease. Recovery always requires exclusive access.
+        flock(&lease, FlockOperation::NonBlockingLockShared)?;
         let ownership = Ownership {
             marker: MARKER.into(),
-            session: serde_json::to_string(&RuntimeSessionId::default())?,
-            operation: 1,
+            session: serde_json::to_string(&session)?,
+            operation,
             created_unix: now(),
             expires_unix: now().saturating_add(ttl_seconds.min(1800)),
             files: Vec::new(),
@@ -107,7 +130,7 @@ impl OwnedArtifactDirectory {
     pub fn path(&self) -> &Path {
         self.directory.path()
     }
-    pub fn create_file(&mut self, suffix: &str) -> io::Result<tempfile::NamedTempFile> {
+    pub fn create_file(&mut self, suffix: &str) -> io::Result<OwnedArtifactFile> {
         self.ownership
             .files
             .retain(|name| self.directory.path().join(name).exists());
@@ -120,34 +143,131 @@ impl OwnedArtifactDirectory {
         {
             return Err(io::Error::other("invalid artifact suffix"));
         }
-        let file = tempfile::Builder::new()
-            .prefix("artifact-")
-            .suffix(suffix)
-            .tempfile_in(self.path())?;
-        self.ownership.files.push(
-            file.path()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned(),
+        static NEXT_FILE: AtomicU64 = AtomicU64::new(1);
+        let name = format!(
+            "artifact-{}-{}{}",
+            std::process::id(),
+            NEXT_FILE.fetch_add(1, Ordering::Relaxed),
+            suffix
         );
+        // Ownership is durable before the filesystem entry and, critically,
+        // before any payload byte. A crash can therefore never leave an
+        // unprovable partial artifact in an otherwise valid namespace.
+        self.ownership.files.push(name.clone());
         self.persist()?;
-        Ok(file)
+        debug_crash_failpoint("B");
+        let path = self.path().join(name);
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)?;
+        Ok(OwnedArtifactFile {
+            file,
+            path,
+            remove_on_drop: true,
+        })
     }
     fn persist(&self) -> io::Result<()> {
-        let mut tmp = tempfile::NamedTempFile::new_in(self.path())?;
+        let pending = self.path().join("ownership.pending");
+        let mut tmp = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&pending)?;
         serde_json::to_writer(&mut tmp, &self.ownership)?;
         tmp.flush()?;
-        tmp.persist(self.path().join("ownership.json"))
-            .map_err(|e| e.error)?;
+        tmp.sync_all()?;
+        fs::rename(pending, self.path().join("ownership.json"))?;
+        File::open(self.path())?.sync_all()?;
         Ok(())
     }
+
+    pub(crate) fn reaper_lease(directory: &Path) -> io::Result<File> {
+        private_owned(directory, true)?;
+        private_owned(&directory.join("lease"), false)?;
+        let lease = nofollow(&directory.join("lease"), true)?;
+        flock(&lease, FlockOperation::NonBlockingLockShared)?;
+        private_owned(&directory.join("ownership.json"), false)?;
+        let ownership: Ownership = serde_json::from_reader(
+            nofollow(&directory.join("ownership.json"), false)?.take(65536),
+        )?;
+        if ownership.marker != MARKER {
+            return Err(io::Error::other("invalid artifact ownership"));
+        }
+        Ok(lease)
+    }
+
+    pub fn keep(self) -> PathBuf {
+        let Self {
+            directory, _lease, ..
+        } = self;
+        let path = directory.keep();
+        drop(_lease);
+        path
+    }
 }
+
+pub struct OwnedArtifactFile {
+    file: File,
+    path: PathBuf,
+    remove_on_drop: bool,
+}
+impl OwnedArtifactFile {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn keep(mut self) -> PathBuf {
+        self.remove_on_drop = false;
+        self.path.clone()
+    }
+    pub fn as_file(&self) -> &File {
+        &self.file
+    }
+    pub fn as_file_mut(&mut self) -> &mut File {
+        &mut self.file
+    }
+}
+impl Write for OwnedArtifactFile {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.file.write(bytes)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
+impl Drop for OwnedArtifactFile {
+    fn drop(&mut self) {
+        if self.remove_on_drop {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+pub(crate) fn debug_crash_failpoint(stage: &str) {
+    if std::env::var("GUI2TUI_MATERIALIZER_CRASH_STAGE").as_deref() == Ok(stage) {
+        // `process::exit` deliberately skips Rust destructors, accurately
+        // modelling an independently killed materializer without producing a
+        // platform crash report during the failpoint suite.
+        std::process::exit(86);
+    }
+}
+#[cfg(not(debug_assertions))]
+pub(crate) fn debug_crash_failpoint(_: &str) {}
 
 /// Run once at startup. Active leases are always skipped, even past TTL.
 /// A crashed namespace is reclaimed on the next startup, not by a scan loop.
 pub fn recover_abandoned() -> io::Result<usize> {
     recover_in(&root_in(&std::env::temp_dir())?)
+}
+#[cfg(test)]
+pub(crate) fn recover_abandoned_in(base: &Path) -> io::Result<usize> {
+    recover_in(&root_in(base)?)
+}
+pub(crate) fn recover_owned_directory(directory: &Path) -> io::Result<bool> {
+    recover_one(directory)
 }
 fn recover_in(root: &Path) -> io::Result<usize> {
     private_owned(root, true)?;
@@ -191,7 +311,10 @@ fn recover_one(directory: &Path) -> io::Result<bool> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !matches!(name.as_str(), "lease" | "ownership.json") && !ownership.files.contains(&name)
+        if !matches!(
+            name.as_str(),
+            "lease" | "ownership.json" | "ownership.pending"
+        ) && !ownership.files.contains(&name)
         {
             return Err(io::Error::other("unregistered file in artifact namespace"));
         }
@@ -217,10 +340,14 @@ mod tests {
     #[test]
     fn live_sessions_are_isolated_and_crash_residue_recovered() {
         let root = test_root();
-        let active = OwnedArtifactDirectory::in_root(root.path(), 300).unwrap();
-        let mut crashed = OwnedArtifactDirectory::in_root(root.path(), 300).unwrap();
+        let active =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 1)
+                .unwrap();
+        let mut crashed =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 2)
+                .unwrap();
         let file = crashed.create_file(".png").unwrap();
-        let _ = file.keep().unwrap();
+        let _ = file.keep();
         assert_eq!(recover_in(root.path()).unwrap(), 0);
         let OwnedArtifactDirectory {
             directory, _lease, ..
@@ -234,7 +361,9 @@ mod tests {
     #[test]
     fn foreign_file_and_symlink_are_not_removed() {
         let root = test_root();
-        let crashed = OwnedArtifactDirectory::in_root(root.path(), 300).unwrap();
+        let crashed =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 1)
+                .unwrap();
         let OwnedArtifactDirectory {
             directory, _lease, ..
         } = crashed;
@@ -245,5 +374,46 @@ mod tests {
         assert!(path.join("foreign").exists());
         std::os::unix::fs::symlink(&path, root.path().join("operation-link")).unwrap();
         assert_eq!(recover_in(root.path()).unwrap(), 0);
+    }
+
+    #[test]
+    fn hardlinked_registered_file_is_not_removed() {
+        let root = test_root();
+        let mut crashed =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 1)
+                .unwrap();
+        let file = crashed.create_file(".png").unwrap();
+        let file_path = file.keep();
+        let outside = root.path().join("outside-hardlink");
+        fs::hard_link(&file_path, &outside).unwrap();
+        let OwnedArtifactDirectory {
+            directory, _lease, ..
+        } = crashed;
+        let path = directory.keep();
+        drop(_lease);
+        assert_eq!(recover_in(root.path()).unwrap(), 0);
+        assert!(path.exists());
+        assert!(outside.exists());
+    }
+
+    #[test]
+    fn ttl_reaper_lease_protects_handoff_and_pending_manifest_is_recovered() {
+        let root = test_root();
+        let owned = OwnedArtifactDirectory::new_in(root.path(), 300).unwrap();
+        let path = owned.path().to_path_buf();
+        let reaper = OwnedArtifactDirectory::reaper_lease(&path).unwrap();
+        let _ = owned.keep();
+        assert_eq!(recover_abandoned_in(root.path()).unwrap(), 0);
+        let mut pending = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path.join("ownership.pending"))
+            .unwrap();
+        pending.write_all(b"incomplete metadata update").unwrap();
+        drop(pending);
+        drop(reaper);
+        assert_eq!(recover_abandoned_in(root.path()).unwrap(), 1);
+        assert!(!path.exists());
     }
 }

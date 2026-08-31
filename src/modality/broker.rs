@@ -1,3 +1,4 @@
+use crate::runtime::artifacts::OwnedArtifactFile;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -6,7 +7,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tempfile::NamedTempFile;
 
 use thiserror::Error;
 
@@ -207,7 +207,7 @@ pub struct LocalModalityBroker {
     registry: HandlerRegistry,
     mappings: Vec<PathMapping>,
     temp_root: crate::runtime::artifacts::OwnedArtifactDirectory,
-    temporary_artifacts: Vec<(NamedTempFile, Instant)>,
+    temporary_artifacts: Vec<(OwnedArtifactFile, Instant)>,
     session_authorized: HashSet<(ModalityKind, String)>,
     metrics: HandoffMetrics,
 }
@@ -389,7 +389,7 @@ impl LocalModalityBroker {
     pub(crate) fn artifact_file(
         &mut self,
         descriptor: &ArtifactDescriptor,
-    ) -> Result<NamedTempFile, BrokerError> {
+    ) -> Result<OwnedArtifactFile, BrokerError> {
         Ok(self
             .temp_root
             .create_file(&format!(".{}", safe_extension(&descriptor.mime)))?)
@@ -402,7 +402,7 @@ impl LocalModalityBroker {
     pub(crate) fn finish_artifact(
         &mut self,
         descriptor: &ArtifactDescriptor,
-        file: NamedTempFile,
+        file: OwnedArtifactFile,
     ) -> Result<(), BrokerError> {
         let Some(handler) = self.registry.handler(&descriptor.mime) else {
             self.metrics.handler_unavailable += 1;

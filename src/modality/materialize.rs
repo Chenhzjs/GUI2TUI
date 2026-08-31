@@ -6,7 +6,7 @@ use super::{
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, BufRead, Read, Write},
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -26,8 +26,7 @@ pub struct MaterializationMetadata {
 }
 
 pub struct MaterializedArtifact {
-    directory: tempfile::TempDir,
-    _lease: fs::File,
+    directory: crate::runtime::artifacts::OwnedArtifactDirectory,
     pub metadata: MaterializationMetadata,
 }
 
@@ -43,13 +42,33 @@ impl MaterializedArtifact {
     /// Failure to start the reaper leaves RAII cleanup enabled.
     pub fn detach_with_reaper(self, inspector: &Path) -> io::Result<PathBuf> {
         let path = self.path();
-        std::process::Command::new(inspector)
+        let mut child = std::process::Command::new(inspector)
             .arg("--reap-materialized")
             .arg(self.directory.path())
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("reaper pipe missing"))?;
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let reader = std::thread::spawn(move || {
+            let mut ready = String::new();
+            let valid = io::BufReader::new(stdout).read_line(&mut ready).is_ok()
+                && ready.trim() == "OWNED_ARTIFACT_LEASE_READY";
+            let _ = sender.send(valid);
+        });
+        if receiver.recv_timeout(Duration::from_secs(5)) != Ok(true) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = reader.join();
+            return Err(io::Error::other(
+                "artifact reaper did not acquire ownership",
+            ));
+        }
+        let _ = reader.join();
         let _ = self.directory.keep();
         Ok(path)
     }
@@ -107,24 +126,36 @@ impl ArtifactMaterializer {
             "application/pdf" => "pdf",
             _ => return Err(io::Error::other("materialization MIME not supported")),
         };
-        let mut builder = tempfile::Builder::new();
-        builder.prefix("gui2tui-artifact-");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            builder.permissions(fs::Permissions::from_mode(0o700));
-        }
-        let directory = builder.tempdir()?;
-        use std::os::unix::fs::OpenOptionsExt;
-        let lease = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(directory.path().join("lease"))?;
-        rustix::fs::flock(&lease, rustix::fs::FlockOperation::NonBlockingLockExclusive)?;
-        let filename = format!("artifact.{extension}");
-        let mut file = tempfile::NamedTempFile::new_in(directory.path())?;
+        let (session, operation) =
+            owner.unwrap_or_else(|| (crate::runtime::RuntimeSessionId::default(), 1));
+        let test_base = if cfg!(debug_assertions) {
+            std::env::var_os("GUI2TUI_ARTIFACT_TEST_BASE").map(PathBuf::from)
+        } else {
+            None
+        };
+        let mut directory = if let Some(base) = test_base {
+            crate::runtime::artifacts::OwnedArtifactDirectory::new_owned_in(
+                &base,
+                ttl.as_secs(),
+                session.clone(),
+                operation,
+            )?
+        } else {
+            crate::runtime::artifacts::OwnedArtifactDirectory::new_owned(
+                ttl.as_secs(),
+                session.clone(),
+                operation,
+            )?
+        };
+        crate::runtime::artifacts::debug_crash_failpoint("A");
+        let mut file = directory.create_file(&format!(".{extension}"))?;
+        crate::runtime::artifacts::debug_crash_failpoint("C");
+        let filename = file
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         let mut hash = sha2::Sha256::new();
         use sha2::Digest;
         let mut count = 0;
@@ -143,6 +174,7 @@ impl ArtifactMaterializer {
             }
             hash.update(&buffer[..n]);
             file.write_all(&buffer[..n])?;
+            crate::runtime::artifacts::debug_crash_failpoint("D");
         }
         if count != descriptor.size || ArtifactHash(hash.finalize().into()) != descriptor.hash {
             return Err(io::Error::other("materialization size/hash mismatch"));
@@ -150,12 +182,12 @@ impl ArtifactMaterializer {
         if cancel.is_cancelled() {
             return Err(io::Error::other("materialization cancelled"));
         }
-        file.persist_noclobber(directory.path().join(&filename))
-            .map_err(|e| e.error)?;
+        let _ = file.keep();
+        crate::runtime::artifacts::debug_crash_failpoint("E");
         let metadata = MaterializationMetadata {
             ownership_marker: "GUI2TUI-MATERIALIZATION-v1".into(),
-            session_id: owner.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
-            operation_id: owner.map(|v| v.1).unwrap_or(1),
+            session_id: session,
+            operation_id: operation,
             created_unix: unix_now(),
             descriptor,
             region: snapshot.map(|x| x.0),
@@ -163,14 +195,17 @@ impl ArtifactMaterializer {
             expires_unix: unix_now() + ttl.as_secs(),
             filename,
         };
-        let mut manifest = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(directory.path().join("manifest.json"))?;
+        let mut manifest = directory.create_file(".json")?;
         serde_json::to_writer(&mut manifest, &metadata)?;
+        manifest.flush()?;
+        let _ = manifest.keep();
+        let mut complete = directory.create_file(".complete")?;
+        complete.write_all(b"GUI2TUI-MATERIALIZATION-COMPLETE-v1")?;
+        complete.flush()?;
+        let _ = complete.keep();
+        crate::runtime::artifacts::debug_crash_failpoint("F");
         Ok(MaterializedArtifact {
             directory,
-            _lease: lease,
             metadata,
         })
     }
@@ -178,12 +213,13 @@ impl ArtifactMaterializer {
     /// Exact private directory only; never follows a manifest-supplied path and
     /// never recursively removes arbitrary contents. No endpoint is involved.
     pub fn reap_after_ttl(directory: &Path) -> io::Result<()> {
+        let lease = crate::runtime::artifacts::OwnedArtifactDirectory::reaper_lease(directory)?;
         let stat = fs::symlink_metadata(directory)?;
         if !stat.is_dir()
             || !directory
                 .file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("gui2tui-artifact-"))
+                .is_some_and(|n| n.starts_with("operation-"))
         {
             return Err(io::Error::other("not a materializer directory"));
         }
@@ -194,24 +230,35 @@ impl ArtifactMaterializer {
                 return Err(io::Error::other("artifact directory is not private"));
             }
         }
-        let manifest = directory.join("manifest.json");
-        if fs::symlink_metadata(&manifest)?.file_type().is_symlink() {
-            return Err(io::Error::other("invalid manifest"));
+        let manifest = fs::read_dir(directory)?
+            .filter_map(Result::ok)
+            .find(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                name != "ownership.json" && name.ends_with(".json")
+            })
+            .ok_or_else(|| io::Error::other("materialization manifest missing"))?
+            .path();
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
+            .open(&manifest)?;
+        let stat = file.metadata()?;
+        if !stat.is_file() || stat.nlink() != 1 || stat.uid() != rustix::process::geteuid().as_raw()
+        {
+            return Err(io::Error::other("unsafe materialization metadata"));
         }
-        let metadata: MaterializationMetadata =
-            serde_json::from_reader(fs::File::open(&manifest)?.take(65536))?;
+        let metadata: MaterializationMetadata = serde_json::from_reader(file.take(65536))?;
         if metadata.ownership_marker != "GUI2TUI-MATERIALIZATION-v1"
             || metadata.created_unix > metadata.expires_unix
         {
             return Err(io::Error::other("invalid materialization ownership"));
         }
-        if ![
-            "artifact.png",
-            "artifact.jpg",
-            "artifact.svg",
-            "artifact.pdf",
-        ]
-        .contains(&metadata.filename.as_str())
+        if !metadata.filename.starts_with("artifact-")
+            || !["png", "jpg", "svg", "pdf"]
+                .iter()
+                .any(|extension| metadata.filename.ends_with(&format!(".{extension}")))
         {
             return Err(io::Error::other("invalid artifact filename"));
         }
@@ -219,11 +266,16 @@ impl ArtifactMaterializer {
         if wait > 1800 {
             return Err(io::Error::other("invalid artifact expiry"));
         }
+        println!("OWNED_ARTIFACT_LEASE_READY");
+        io::stdout().flush()?;
         std::thread::sleep(Duration::from_secs(wait));
-        fs::remove_file(directory.join(metadata.filename))?;
-        fs::remove_file(manifest)?;
-        fs::remove_file(directory.join("lease"))?;
-        fs::remove_dir(directory)
+        drop(lease);
+        if !crate::runtime::artifacts::recover_owned_directory(directory)? {
+            return Err(io::Error::other(
+                "materialized artifact lease is still active",
+            ));
+        }
+        Ok(())
     }
 }
 fn unix_now() -> u64 {
@@ -248,6 +300,62 @@ mod tests {
             lifetime: super::super::ArtifactLifetime::Session,
         }
     }
+
+    #[test]
+    fn materializer_crash_child() {
+        if std::env::var_os("GUI2TUI_MATERIALIZER_CRASH_STAGE").is_none() {
+            return;
+        }
+        let mut descriptor = descriptor();
+        descriptor.size = 131_072;
+        let bytes = vec![b'x'; descriptor.size as usize];
+        descriptor.hash = ArtifactHash::sha256(&bytes);
+        let _ = ArtifactMaterializer::materialize_owned(
+            descriptor,
+            &bytes[..],
+            None,
+            Duration::from_secs(300),
+            true,
+            &Default::default(),
+            Some((crate::runtime::RuntimeSessionId::default(), 99)),
+        );
+        panic!("configured materializer crash failpoint was not reached");
+    }
+
+    #[test]
+    fn every_pre_mid_post_payload_crash_window_is_recovered() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::{Command, Stdio};
+        for stage in ["A", "B", "C", "D", "E", "F"] {
+            let base = tempfile::Builder::new()
+                .permissions(std::fs::Permissions::from_mode(0o700))
+                .tempdir()
+                .unwrap();
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "modality::materialize::tests::materializer_crash_child",
+                    "--nocapture",
+                ])
+                .env("GUI2TUI_MATERIALIZER_CRASH_STAGE", stage)
+                .env("GUI2TUI_ARTIFACT_TEST_BASE", base.path())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(86), "failpoint {stage}");
+            assert_eq!(
+                crate::runtime::artifacts::recover_abandoned_in(base.path()).unwrap(),
+                1,
+                "failpoint {stage}"
+            );
+            let owned_root = base.path().join(format!(
+                "gui2tui-owned-{}",
+                rustix::process::geteuid().as_raw()
+            ));
+            assert_eq!(fs::read_dir(owned_root).unwrap().count(), 0, "{stage}");
+        }
+    }
     #[test]
     fn materialization_is_private_hashed_bounded_and_not_transport() {
         let artifact = ArtifactMaterializer::materialize(
@@ -260,7 +368,13 @@ mod tests {
         )
         .unwrap();
         let path = artifact.path();
-        assert_eq!(path.file_name().unwrap(), "artifact.png");
+        assert!(
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("artifact-")
+        );
+        assert_eq!(path.extension().unwrap(), "png");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -378,7 +492,8 @@ mod tests {
         )
         .unwrap();
         let path = artifact.path();
-        ArtifactMaterializer::reap_after_ttl(path.parent().unwrap()).unwrap();
+        let directory = artifact.directory.keep();
+        ArtifactMaterializer::reap_after_ttl(&directory).unwrap();
         assert!(!path.exists());
         assert!(!path.parent().unwrap().exists());
     }
