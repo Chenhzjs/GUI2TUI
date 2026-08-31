@@ -1,0 +1,19 @@
+{
+  "old_address": "('unix:path=/tmp/gui2tui-p4a-daemon-rDnVuv/runtime/at-spi/bus_130,guid=b01a056eb347af727efaa2226a956438',)",
+  "new_address": "('unix:path=/tmp/gui2tui-p4a-daemon-rDnVuv/runtime/at-spi/bus_130,guid=6fd93ea669cfd4878bc4dd616a956440',)",
+  "old_generation": 1,
+  "new_generation": 2,
+  "old_runtime": 44,
+  "new_runtime": 88,
+  "old_locator": "atspi1_OjEuMwAvb3JnL2d1aTJ0dWkvTGl2ZUZpeHR1cmUvYTExeS8xZTRlNjFiMV8xMjE5XzRhMzZfYjkzYV83ZjUyZDNhZDIzZDA",
+  "new_locator": "atspi1_OjEuMwAvb3JnL2d1aTJ0dWkvTGl2ZUZpeHR1cmUvYTExeS9jMTMxOGUyOF9lNGJjXzRkZmZfODYyNF82OTQ0YmU5ZThhODc",
+  "reconnect_attempts": 5,
+  "reconnect_successes": 1,
+  "daemon_absent_seconds": 5.145232671056874,
+  "backoff_milliseconds": [
+    100,
+    200,
+    400,
+    800
+  ]
+}
