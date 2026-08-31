@@ -153,6 +153,7 @@ impl ModalityResolver {
         artifact: super::PortableArtifact,
     ) -> ExternalModality {
         if matches!(modality.resolution, ModalityResolution::Unavailable { .. })
+            && artifact.descriptor.origin == super::ArtifactOrigin::OriginalResource
             && matches!(
                 self.policy,
                 TransferPolicy::PreferReference
@@ -161,7 +162,7 @@ impl ModalityResolver {
             )
             && artifact.descriptor.kind == modality.kind
         {
-            modality.resolution = ModalityResolution::PortableArtifact(artifact);
+            modality.resolution = ModalityResolution::OriginalArtifact(artifact);
         }
         modality
     }
@@ -196,7 +197,7 @@ impl ExternalModality {
                         .is_some_and(|mime| super::broker::is_viewable_mime(self.kind, mime))
                     && client.supports_reference(resource);
             }
-            ModalityResolution::PortableArtifact(artifact) => {
+            ModalityResolution::OriginalArtifact(artifact) => {
                 self.capabilities.artifact_handoff = client.artifact_receive
                     && client.supports_mime(&artifact.descriptor.mime)
                     && super::broker::is_viewable_mime(self.kind, &artifact.descriptor.mime);
@@ -343,14 +344,14 @@ pub fn format_external_modality(modality: &ExternalModality) -> String {
             resource.provenance,
             resource.mime
         ),
-        ModalityResolution::PortableArtifact(artifact) => format!(
+        ModalityResolution::OriginalArtifact(artifact) => format!(
             "artifact={} mime={} size={} sha256={}",
             artifact.descriptor.id,
             artifact.descriptor.mime,
             artifact.descriptor.size,
             artifact.descriptor.hash.hex()
         ),
-        ModalityResolution::StaticVisualArtifact(artifact) => format!(
+        ModalityResolution::RenderedSnapshot(artifact) => format!(
             "static-artifact={} mime={} size={}",
             artifact.descriptor.id, artifact.descriptor.mime, artifact.descriptor.size
         ),
@@ -385,6 +386,7 @@ mod tests {
         };
         let artifact = super::super::PortableArtifact {
             descriptor: super::super::ArtifactDescriptor {
+                origin: Default::default(),
                 id: super::super::ArtifactId::new(1),
                 kind: ModalityKind::Image,
                 mime: "image/png".into(),
@@ -411,7 +413,7 @@ mod tests {
             resolver
                 .with_artifact(unresolved, artifact.clone())
                 .resolution,
-            ModalityResolution::PortableArtifact(_)
+            ModalityResolution::OriginalArtifact(_)
         ));
         let disabled = ModalityResolver::new(TransferPolicy::Unavailable);
         assert!(matches!(

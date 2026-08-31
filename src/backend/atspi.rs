@@ -1047,6 +1047,152 @@ impl AtspiBackend {
         Ok(result)
     }
 
+    /// AT-SPI supplies identity and screen bounds, never image bytes. Deliberately
+    /// narrow to static Image roles: ordinary widgets and live canvases refuse.
+    pub async fn static_visual_region(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<crate::modality::acquisition::SemanticVisualRegion, BackendError> {
+        use crate::modality::acquisition::{ScreenRegion, SemanticVisualRegion};
+        let (id, object, interfaces, role) = self.validate_content_object(locator).await?;
+        if role != Role::Image || !interfaces.contains(Interface::Component) {
+            return Err(BackendError::SemanticCache(
+                "AcquisitionUnavailable: requires an Image with Component bounds".into(),
+            ));
+        }
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
+        let states = dbus_operation(
+            self.operation_timeout,
+            "validate visual visibility",
+            &id,
+            proxy.get_state(),
+        )
+        .await?;
+        if !states.contains(State::Showing)
+            || !states.contains(State::Visible)
+            || states.contains(State::Defunct)
+        {
+            return Err(BackendError::SemanticCache(
+                "AcquisitionUnavailable: image is not visible and showing".into(),
+            ));
+        }
+        let geometry = read_geometry(self.operation_timeout, &id, &proxy)
+            .await
+            .ok_or_else(|| {
+                BackendError::SemanticCache(
+                    "AcquisitionUnavailable: no reliable screen bounds".into(),
+                )
+            })?;
+        let bounds = ScreenRegion {
+            x: geometry.x,
+            y: geometry.y,
+            width: geometry.width,
+            height: geometry.height,
+        };
+        let mut child = object.clone();
+        for _ in 0..16 {
+            let current = child
+                .as_accessible_proxy(self.connection.connection())
+                .await
+                .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
+            let parent = dbus_operation(
+                self.operation_timeout,
+                "visual parent",
+                &id,
+                current.parent(),
+            )
+            .await?;
+            let proxy = parent
+                .as_accessible_proxy(self.connection.connection())
+                .await
+                .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
+            let siblings = dbus_operation(
+                self.operation_timeout,
+                "visual sibling geometry",
+                &id,
+                proxy.get_children(),
+            )
+            .await?;
+            if siblings.len() > 128 {
+                break;
+            }
+            for sibling in siblings.iter().filter(|s| **s != child) {
+                let other = sibling
+                    .as_accessible_proxy(self.connection.connection())
+                    .await
+                    .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
+                let states = dbus_operation(
+                    self.operation_timeout,
+                    "visual sibling visibility",
+                    &id,
+                    other.get_state(),
+                )
+                .await?;
+                if !states.contains(State::Showing) {
+                    continue;
+                }
+                if let Some(g) = read_geometry(self.operation_timeout, &id, &other).await
+                    && bounds.overlaps(ScreenRegion {
+                        x: g.x,
+                        y: g.y,
+                        width: g.width,
+                        height: g.height,
+                    })
+                {
+                    return Err(BackendError::SemanticCache("AcquisitionUnavailable: overlapping semantic siblings; bounds cannot isolate this Image reliably".into()));
+                }
+            }
+            let role = dbus_operation(
+                self.operation_timeout,
+                "visual ancestor role",
+                &id,
+                proxy.get_role(),
+            )
+            .await?;
+            if matches!(role, Role::Frame | Role::Window | Role::Dialog) {
+                let g = read_geometry(self.operation_timeout, &id, &proxy)
+                    .await
+                    .ok_or_else(|| {
+                        BackendError::SemanticCache(
+                            "AcquisitionUnavailable: no top-level screen geometry".into(),
+                        )
+                    })?;
+                return Ok(SemanticVisualRegion {
+                    bounds,
+                    window: ScreenRegion {
+                        x: g.x,
+                        y: g.y,
+                        width: g.width,
+                        height: g.height,
+                    },
+                    process_id: {
+                        let bus = zbus::fdo::DBusProxy::new(self.connection.connection())
+                            .await
+                            .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e.into()))?;
+                        let name = zbus::names::BusName::try_from(locator.bus_name())
+                            .map_err(|e| BackendError::SemanticCache(e.to_string()))?;
+                        tokio::time::timeout(
+                            self.operation_timeout,
+                            bus.get_connection_unix_process_id(name),
+                        )
+                        .await
+                        .map_err(|_| {
+                            BackendError::SemanticCache("visual process identity timeout".into())
+                        })?
+                        .map_err(|e| BackendError::SemanticCache(e.to_string()))?
+                    },
+                });
+            }
+            child = parent;
+        }
+        Err(BackendError::SemanticCache(
+            "AcquisitionUnavailable: could not validate visual ancestry within bounds".into(),
+        ))
+    }
+
     /// Read only generic AT-SPI metadata that may carry a resource reference.
     pub async fn probe_modality_metadata(
         &self,

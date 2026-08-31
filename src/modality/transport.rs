@@ -221,6 +221,7 @@ mod tests {
         ));
         let broker = LocalModalityBroker::new(capabilities, registry, &root).unwrap();
         let descriptor = ArtifactDescriptor {
+            origin: Default::default(),
             id: ArtifactId::new(bytes.len() as u64 + 1),
             kind: ModalityKind::Image,
             mime: "image/svg+xml".to_owned(),

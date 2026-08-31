@@ -50,6 +50,7 @@ pub struct TuiApplication {
     modality_view: Option<super::modality_view::ModalityView>,
     modality_task: Option<tokio::task::JoinHandle<String>>,
     modality_cancel: crate::modality::CancellationToken,
+    materialized_artifacts: Vec<crate::modality::materialize::MaterializedArtifact>,
     backend: AtspiBackend,
     app_selector: String,
     application_locator: crate::semantic::BackendLocator,
@@ -163,8 +164,14 @@ impl TuiApplication {
             return;
         }
         if !modality.capabilities.reference_handoff {
-            self.status =
-                "Resource unresolved, handler unavailable, or local client disconnected".to_owned();
+            self.status = match &modality.resolution {
+                crate::modality::ModalityResource::ReferencedResource(resource) => format!(
+                    "Headless reference: {:?}; payload_bytes=0",
+                    crate::modality::redact_reference(&resource.reference)
+                ),
+                _ => "No reference Open available; m explicitly materializes an unresolved Image"
+                    .into(),
+            };
             return;
         }
         let Some(socket) = self.modality_socket.clone() else {
@@ -191,6 +198,128 @@ impl TuiApplication {
             }
         }));
         self.status = "Awaiting user authorization in local broker; TUI remains usable".to_owned();
+    }
+
+    async fn materialize_selected_modality(&mut self) {
+        use crate::modality::{acquisition::ModalityMetrics, materialize::ArtifactMaterializer};
+        let Some(candidate) = self
+            .modality_view
+            .as_ref()
+            .and_then(|v| v.candidates.get(v.selected))
+            .cloned()
+        else {
+            return;
+        };
+        if !self.scopes.allows_node(candidate.owner)
+            || !self
+                .cache
+                .node(candidate.owner)
+                .is_some_and(|n| n.backend_locator == candidate.locator)
+        {
+            self.status = "Visual control changed; reopen F4".into();
+            return;
+        }
+        self.materialized_artifacts.retain(|a| !a.expired());
+        if self.materialized_artifacts.len() >= 8 {
+            self.status = "Session artifact limit reached; wait for expiry or restart TUI".into();
+            return;
+        }
+        // Resolve again to prefer any newly available reference over capture.
+        let mut modality = crate::modality::runtime::resolve_atspi(&self.backend, &candidate).await;
+        if let crate::modality::ModalityResource::ReferencedResource(resource) =
+            &modality.resolution
+        {
+            self.status = format!(
+                "Reference {:?}; payload_bytes=0; no capture",
+                crate::modality::redact_reference(&resource.reference)
+            );
+            return;
+        }
+        let mut metrics = ModalityMetrics::default();
+        self.modality_cancel = Default::default();
+        let result = crate::modality::runtime::acquire_snapshot(
+            &self.backend,
+            &candidate,
+            &modality.resolution,
+            std::sync::Arc::new(crate::backend::static_visual::HostStaticVisualProvider),
+            self.modality_cancel.clone(),
+            &mut metrics,
+        )
+        .await;
+        match result {
+            Ok((snapshot, bytes)) => match ArtifactMaterializer::materialize(
+                snapshot.descriptor.clone(),
+                &bytes[..],
+                Some((snapshot.region, snapshot.quality)),
+                Duration::from_secs(300),
+                true,
+                &self.modality_cancel,
+            ) {
+                Ok(artifact) => {
+                    metrics.headless_materialization = 1;
+                    self.status = format!(
+                        "RenderedSnapshot (may be occluded): {}",
+                        artifact.path().display()
+                    );
+                    self.materialized_artifacts.push(artifact);
+                    modality.resolution =
+                        crate::modality::ModalityResource::RenderedSnapshot(snapshot);
+                    if let Some(view) = &mut self.modality_view {
+                        view.resolved = Some(modality);
+                    }
+                }
+                Err(error) => self.status = format!("Materialization unavailable: {error}"),
+            },
+            Err(error) => self.status = format!("{error}"),
+        }
+        tracing::debug!(?metrics, "explicit static modality request");
+    }
+
+    fn open_materialized_same_host(&mut self) {
+        if self.modality_task.is_some() {
+            self.status = "A handoff is already pending".into();
+            return;
+        }
+        let Some(socket) = self.modality_socket.clone() else {
+            self.status = "Headless: artifact remains on this host; no endpoint required".into();
+            return;
+        };
+        let Some(crate::modality::ExternalModality {
+            resolution: crate::modality::ModalityResource::RenderedSnapshot(snapshot),
+            ..
+        }) = self
+            .modality_view
+            .as_ref()
+            .and_then(|v| v.resolved.as_ref())
+        else {
+            return;
+        };
+        let Some(artifact) = self
+            .materialized_artifacts
+            .iter()
+            .rev()
+            .find(|a| !a.expired() && a.metadata.descriptor.hash == snapshot.descriptor.hash)
+        else {
+            self.status = "Artifact expired; explicitly materialize again".into();
+            return;
+        };
+        let resource = crate::modality::runtime::materialized_reference(artifact);
+        self.modality_cancel = Default::default();
+        let cancel = self.modality_cancel.clone();
+        self.modality_task = Some(tokio::task::spawn_blocking(move || {
+            match crate::modality::wire::send_reference_cancellable(
+                &socket,
+                crate::modality::ModalityKind::Image,
+                resource,
+                &cancel,
+            ) {
+                Ok(crate::modality::wire::Response::Opened {
+                    artifact_bytes: 0, ..
+                }) => "Same-host viewer accepted RenderedSnapshot; network_payload_bytes=0".into(),
+                _ => "Same-host viewer unavailable or denied; no pixels transported".into(),
+            }
+        }));
+        self.status = "Awaiting same-host viewer authorization (local path only)".into();
     }
 
     pub async fn new(
@@ -248,6 +377,7 @@ impl TuiApplication {
             modality_view: None,
             modality_task: None,
             modality_cancel: Default::default(),
+            materialized_artifacts: Vec::new(),
             backend,
             app_selector,
             application_locator,
@@ -515,6 +645,8 @@ impl TuiApplication {
                     self.resolve_selected_modality().await;
                 }
                 KeyCode::Enter => self.handoff_selected_modality(),
+                KeyCode::Char('m') => self.materialize_selected_modality().await,
+                KeyCode::Char('o') => self.open_materialized_same_host(),
                 _ => {}
             }
             return false;
@@ -951,6 +1083,7 @@ impl TuiApplication {
     }
 
     pub async fn progress_content_operations(&mut self) {
+        self.materialized_artifacts.retain(|a| !a.expired());
         if self
             .modality_task
             .as_ref()

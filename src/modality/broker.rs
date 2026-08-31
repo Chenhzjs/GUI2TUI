@@ -560,6 +560,7 @@ mod tests {
         )
         .unwrap();
         let descriptor = ArtifactDescriptor {
+            origin: Default::default(),
             id: super::super::ArtifactId::new(1),
             kind: ModalityKind::Image,
             mime: "image/png".into(),
@@ -586,6 +587,7 @@ mod tests {
                 .is_ok()
         );
         let huge = ArtifactDescriptor {
+            origin: Default::default(),
             size: 1024 * 1024 * 1024 + 1,
             ..descriptor
         };

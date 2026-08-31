@@ -233,12 +233,12 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     }
                     let summary = match request {
                         Request::Reference { kind, resource } => format!(
-                            "{kind:?} MIME={:?} reference={:?}",
-                            resource.mime, resource.reference
+                            "{kind:?} MIME={:?} label={:?} reference={:?}",
+                            resource.mime, resource.display_name, resource.reference
                         ),
                         Request::Artifact { descriptor } => format!(
-                            "{:?} MIME={:?} bytes={}",
-                            descriptor.kind, descriptor.mime, descriptor.size
+                            "{:?} origin={:?} MIME={:?} bytes={}",
+                            descriptor.kind, descriptor.origin, descriptor.mime, descriptor.size
                         ),
                         _ => return AuthorizationDecision::Deny,
                     };
@@ -423,6 +423,7 @@ fn describe_file(
     file.seek(SeekFrom::Start(0))?;
     Ok((
         ArtifactDescriptor {
+            origin: Default::default(),
             id: ArtifactId::new(1),
             kind,
             mime,

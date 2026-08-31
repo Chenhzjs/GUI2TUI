@@ -1,6 +1,7 @@
 pub mod atspi;
 pub mod bootstrap;
 pub mod protocol_compat;
+pub mod static_visual;
 
 pub use atspi::{
     ApplicationRef, AtspiBackend, BackendError, CollectionProbe, CollectionQueryProbe,

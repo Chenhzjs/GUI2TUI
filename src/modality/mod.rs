@@ -1,4 +1,6 @@
+pub mod acquisition;
 mod broker;
+pub mod materialize;
 mod model;
 mod resolver;
 pub mod runtime;
@@ -10,9 +12,10 @@ pub use broker::{
     LocalResource, PathMapping, ProcessHandler, RecordingHandler,
 };
 pub use model::{
-    ArtifactDescriptor, ArtifactHash, ArtifactId, ArtifactLifetime, ExternalModality,
-    ExternalModalityId, LocalModalityCapabilities, ModalityCapabilities, ModalityKind,
-    ModalityResolution, ModalityResolutionMetrics, PortableArtifact, ReferenceProvenance,
+    ArtifactDescriptor, ArtifactHash, ArtifactId, ArtifactLifetime, ArtifactOrigin,
+    DeploymentTopology, ExternalModality, ExternalModalityId, LocalModalityCapabilities,
+    ModalityCapabilities, ModalityDisposition, ModalityKind, ModalityResolution,
+    ModalityResolutionMetrics, ModalityResource, PortableArtifact, ReferenceProvenance,
     ReferencedResource, ResourceReference, StaticVisualArtifact, TransferPolicy,
 };
 pub use resolver::{

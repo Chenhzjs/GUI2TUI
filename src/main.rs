@@ -20,6 +20,21 @@ use tracing_subscriber::EnvFilter;
     about = "Inspect and activate semantic GUI controls exposed through Linux AT-SPI"
 )]
 struct Cli {
+    /// Explicitly capture one unresolved Image's screen region and save it on this host.
+    #[arg(long, value_name = "NODE_ID", requires = "app", conflicts_with_all=["resolve_modality","dump_resource_reference","handoff_modality","dump_modalities","watch_events","probe_cache","probe_collection"])]
+    materialize_modality: Option<String>,
+
+    /// Open the materialized PNG via an explicitly same-host broker (never transport pixels).
+    #[arg(long, requires_all=["materialize_modality", "modality_socket"])]
+    open_materialized: bool,
+
+    /// Lifetime of a requested host-local artifact, including after CLI exit.
+    #[arg(long, default_value_t=300, value_parser=clap::value_parser!(u64).range(1..=1800))]
+    artifact_ttl_secs: u64,
+
+    /// Internal private-artifact expiry worker; no accessibility or endpoint connection.
+    #[arg(long, hide = true)]
+    reap_materialized: Option<std::path::PathBuf>,
     /// List applications currently exposed by the AT-SPI desktop.
     #[arg(long, conflicts_with_all = ["app", "app_id", "actions", "activate", "action", "action_name", "select_child", "watch_events", "probe_cache", "probe_collection"])]
     list: bool,
@@ -217,11 +232,18 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<(), BackendError> {
+    if let Some(directory) = cli.reap_materialized {
+        return gui2tui::modality::materialize::ArtifactMaterializer::reap_after_ttl(&directory)
+            .map_err(|e| BackendError::SemanticCache(e.to_string()));
+    }
     if cli.modality_capabilities {
-        println!("resolution=reference-first,portable-artifact,live-visual-fallback");
+        println!(
+            "resolution=reference-first,original-artifact,rendered-snapshot,live-visual-fallback"
+        );
         println!("payload_in_semantic_cache=false");
         println!("server_executable_selection=false");
-        println!("static_visual_artifact=false");
+        println!("static_visual_artifact=explicit-single-frame-provider");
+        println!("headless_materialization=true; endpoint_required=false");
         println!("continuous_streaming=false");
         return Ok(());
     }
@@ -417,6 +439,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.resolve_modality.is_some()
         || cli.dump_resource_reference.is_some()
         || cli.handoff_modality.is_some()
+        || cli.materialize_modality.is_some()
     {
         let mut cache = gui2tui::semantic::SemanticCache::from_snapshot(bootstrap.root)
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
@@ -425,12 +448,14 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             || cli.resolve_modality.is_some()
             || cli.dump_resource_reference.is_some()
             || cli.handoff_modality.is_some()
+            || cli.materialize_modality.is_some()
         {
             let requested = cli
                 .resolve_modality
                 .as_deref()
                 .or(cli.dump_resource_reference.as_deref())
                 .or(cli.handoff_modality.as_deref())
+                .or(cli.materialize_modality.as_deref())
                 .map(gui2tui::semantic::BackendLocator::decode)
                 .transpose()?;
             let candidates = gui2tui::modality::ModalityResolver::discover(&cache);
@@ -455,6 +480,14 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                 }
                 let modality =
                     gui2tui::modality::ModalityResolver::default().resolve(&candidate, &metadata);
+                if cli.materialize_modality.is_some() {
+                    println!(
+                        "initial_resource_dispositions={:?}",
+                        modality
+                            .resolution
+                            .dispositions(gui2tui::modality::DeploymentTopology::Headless)
+                    );
+                }
                 if cli.dump_resource_reference.is_some() {
                     match &modality.resolution {
                         gui2tui::modality::ModalityResolution::ReferencedResource(resource) => {
@@ -468,6 +501,118 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
                     }
                 } else {
                     println!("{}", gui2tui::modality::format_external_modality(&modality));
+                }
+                if cli.materialize_modality.is_some() {
+                    use gui2tui::modality::{
+                        acquisition::ModalityMetrics, materialize::ArtifactMaterializer,
+                    };
+                    let mut metrics = ModalityMetrics::default();
+                    if let gui2tui::modality::ModalityResource::ReferencedResource(resource) =
+                        &modality.resolution
+                    {
+                        metrics.reference_resolved = 1;
+                        println!(
+                            "Reference {:?}; payload_bytes=0; no acquisition needed",
+                            gui2tui::modality::redact_reference(&resource.reference)
+                        );
+                        println!(
+                            "metrics={}",
+                            serde_json::to_string(&metrics).unwrap_or_default()
+                        );
+                        continue;
+                    }
+                    let cancel = gui2tui::modality::CancellationToken::default();
+                    let signal = cancel.clone();
+                    let interrupt = tokio::spawn(async move {
+                        let _ = tokio::signal::ctrl_c().await;
+                        signal.cancel();
+                    });
+                    let acquired = gui2tui::modality::runtime::acquire_snapshot(
+                        &backend,
+                        &candidate,
+                        &modality.resolution,
+                        std::sync::Arc::new(
+                            gui2tui::backend::static_visual::HostStaticVisualProvider,
+                        ),
+                        cancel.clone(),
+                        &mut metrics,
+                    )
+                    .await;
+                    interrupt.abort();
+                    let (snapshot, bytes) = acquired.map_err(|error| {
+                        eprintln!(
+                            "metrics={}",
+                            serde_json::to_string(&metrics).unwrap_or_default()
+                        );
+                        BackendError::SemanticCache(error.to_string())
+                    })?;
+                    println!(
+                        "acquired_resource=RenderedSnapshot dispositions={:?}",
+                        gui2tui::modality::ModalityResource::RenderedSnapshot(snapshot.clone())
+                            .dispositions(if cli.open_materialized {
+                                gui2tui::modality::DeploymentTopology::SameHostEndpoint
+                            } else {
+                                gui2tui::modality::DeploymentTopology::Headless
+                            })
+                    );
+                    let artifact = ArtifactMaterializer::materialize(
+                        snapshot.descriptor,
+                        &bytes[..],
+                        Some((snapshot.region, snapshot.quality)),
+                        Duration::from_secs(cli.artifact_ttl_secs),
+                        true,
+                        &cancel,
+                    )
+                    .map_err(|e| BackendError::SemanticCache(e.to_string()))?;
+                    println!(
+                        "materialized={}",
+                        serde_json::to_string(&artifact.metadata)
+                            .map_err(|e| BackendError::SemanticCache(e.to_string()))?
+                    );
+                    if cli.open_materialized {
+                        let socket = cli.modality_socket.clone().ok_or_else(|| {
+                            BackendError::SemanticCache("same-host broker missing".into())
+                        })?;
+                        let resource =
+                            gui2tui::modality::runtime::materialized_reference(&artifact);
+                        let result = tokio::task::spawn_blocking(move || {
+                            gui2tui::modality::wire::send_reference(
+                                &socket,
+                                gui2tui::modality::ModalityKind::Image,
+                                resource,
+                            )
+                        })
+                        .await
+                        .map_err(|_| {
+                            BackendError::SemanticCache("same-host open task failed".into())
+                        })?
+                        .map_err(|e| BackendError::SemanticCache(e.to_string()))?;
+                        if !matches!(
+                            result,
+                            gui2tui::modality::wire::Response::Opened {
+                                artifact_bytes: 0,
+                                ..
+                            }
+                        ) {
+                            return Err(BackendError::SemanticCache(
+                                "same-host handler denied or failed".into(),
+                            ));
+                        }
+                        metrics.same_host_open = 1;
+                    } else {
+                        metrics.headless_materialization = 1;
+                    }
+                    let path = artifact
+                        .detach_with_reaper(
+                            &std::env::current_exe()
+                                .map_err(|e| BackendError::SemanticCache(e.to_string()))?,
+                        )
+                        .map_err(|e| BackendError::SemanticCache(e.to_string()))?;
+                    println!("artifact_path={}", path.display());
+                    println!(
+                        "metrics={}; network_payload_bytes=0",
+                        serde_json::to_string(&metrics).unwrap_or_default()
+                    );
                 }
                 if cli.handoff_modality.is_some() {
                     let socket = cli.modality_socket.clone().ok_or_else(|| {
@@ -758,4 +903,51 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         )
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn headless_materialization_needs_no_endpoint() {
+        let cli = Cli::try_parse_from([
+            "gui2tui-inspect",
+            "--app",
+            "fixture",
+            "--materialize-modality",
+            "node",
+        ])
+        .unwrap();
+        assert!(cli.modality_socket.is_none());
+        assert!(!cli.open_materialized);
+    }
+
+    #[test]
+    fn materialization_cannot_be_redirected_by_another_node_argument() {
+        assert!(
+            Cli::try_parse_from([
+                "gui2tui-inspect",
+                "--app",
+                "fixture",
+                "--materialize-modality",
+                "node-a",
+                "--resolve-modality",
+                "node-b"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "gui2tui-inspect",
+                "--app",
+                "fixture",
+                "--materialize-modality",
+                "node-a",
+                "--open-materialized"
+            ])
+            .is_err()
+        );
+    }
 }

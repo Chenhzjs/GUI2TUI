@@ -28,7 +28,7 @@ impl ModalityView {
         let area = frame.area();
         frame.render_widget(Clear, area);
         let block = Block::default()
-            .title(" External modality — original content ")
+            .title(" External modality — references / explicit static snapshots ")
             .borders(Borders::ALL);
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -57,14 +57,19 @@ impl ModalityView {
                     "Live graphical state — no portable representation"
                 }
                 ModalityResolution::Unavailable { .. } => {
-                    "Original modality UNRESOLVED (read-only)"
+                    "Original UNRESOLVED; m Request Image region snapshot (may be occluded)"
                 }
-                _ if self.capabilities.is_none() => "Local modality client unavailable (read-only)",
+                ModalityResolution::RenderedSnapshot(_) => {
+                    "RenderedSnapshot on host; not original bytes; o Same-host viewer if configured"
+                }
+                _ if self.capabilities.is_none() => {
+                    "Headless reference: Enter Inspect; no endpoint required"
+                }
                 _ => "No matching local handler or permitted resource scheme (read-only)",
             },
             None => "No resolved resource",
         };
-        frame.render_widget(Paragraph::new(format!("{availability}\n{status}\n↑/↓ Choose resource | Enter Open if available | Esc Return (GUI unchanged)")), rows[1]);
+        frame.render_widget(Paragraph::new(format!("{availability}\n{status}\n↑/↓ Choose | Enter Reference | m Materialize | o Same-host viewer | Esc Return")), rows[1]);
     }
 }
 
@@ -107,7 +112,7 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(output.contains("Local modality client unavailable"));
+        assert!(output.contains("Headless reference"));
         assert!(!output.contains("[Open locally]"));
         view.move_selection(1);
         assert!(view.resolved.is_none());

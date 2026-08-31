@@ -359,6 +359,7 @@ mod tests {
         )
         .unwrap();
         let descriptor = ArtifactDescriptor {
+            origin: Default::default(),
             id: ArtifactId::new(1),
             kind: ModalityKind::Image,
             mime: "image/svg+xml".into(),

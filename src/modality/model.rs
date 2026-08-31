@@ -131,9 +131,19 @@ pub enum ArtifactLifetime {
     Temporary { ttl: Duration },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArtifactOrigin {
+    #[default]
+    OriginalResource,
+    RenderedSnapshot,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactDescriptor {
+    /// Legacy protocol descriptors identify supplied original resources.
+    #[serde(default)]
+    pub origin: ArtifactOrigin,
     pub id: ArtifactId,
     pub kind: ModalityKind,
     pub mime: String,
@@ -152,15 +162,54 @@ pub struct PortableArtifact {
 pub struct StaticVisualArtifact {
     pub descriptor: ArtifactDescriptor,
     pub source_region_only: bool,
+    pub region: super::acquisition::ScreenRegion,
+    pub quality: super::acquisition::CaptureQuality,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModalityResolution {
     ReferencedResource(ReferencedResource),
-    PortableArtifact(PortableArtifact),
-    StaticVisualArtifact(StaticVisualArtifact),
+    OriginalArtifact(PortableArtifact),
+    RenderedSnapshot(StaticVisualArtifact),
     LiveVisualState { reason: String },
     Unavailable { reason: String },
+}
+
+/// Resource resolution is independent of endpoint presence or user disposition.
+pub type ModalityResource = ModalityResolution;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModalityDisposition {
+    InspectReference,
+    MaterializeOnHost,
+    OpenSameHost,
+    SendToEndpoint,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeploymentTopology {
+    Headless,
+    SameHostEndpoint,
+    RemoteEndpoint,
+}
+
+impl ModalityResolution {
+    pub fn dispositions(&self, topology: DeploymentTopology) -> Vec<ModalityDisposition> {
+        use ModalityDisposition::*;
+        let mut result = match self {
+            Self::ReferencedResource(_) => vec![InspectReference],
+            Self::OriginalArtifact(_) | Self::RenderedSnapshot(_) => vec![MaterializeOnHost],
+            _ => return vec![Unavailable],
+        };
+        // These are possible dispositions, not a claim that a handler is available.
+        match topology {
+            DeploymentTopology::Headless => {}
+            DeploymentTopology::SameHostEndpoint => result.push(OpenSameHost),
+            DeploymentTopology::RemoteEndpoint => result.push(SendToEndpoint),
+        }
+        result
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -185,8 +234,7 @@ impl ModalityResolutionMetrics {
         self.resolutions += 1;
         match resolution {
             ModalityResolution::ReferencedResource(_) => self.reference_hits += 1,
-            ModalityResolution::PortableArtifact(_)
-            | ModalityResolution::StaticVisualArtifact(_) => {
+            ModalityResolution::OriginalArtifact(_) | ModalityResolution::RenderedSnapshot(_) => {
                 self.artifact_fallbacks += 1;
             }
             ModalityResolution::LiveVisualState { .. } => self.live_fallback += 1,
