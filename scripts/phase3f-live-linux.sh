@@ -106,6 +106,10 @@ esac
 sleep 8
 inspect="$TARGET_DIR/debug/gui2tui-inspect"
 "$inspect" --list
+if [[ "${PRODUCT_BENCHMARK:-0}" == 1 ]]; then
+    APP_SELECTOR="$selector" python3 tests/live/phase4b_bootstrap_bench.py
+    exit 0
+fi
 if [[ "${HANDOFF_ONLY:-0}" == 1 ]]; then
     APP_SELECTOR="$selector" GUI="$TARGET_DIR/debug/gui2tui" \
         python3 - <<"PY"

@@ -27,7 +27,9 @@ def inspect(*args):
     return subprocess.check_output([str(binary / "gui2tui-inspect"), *args],
                                    text=True, stderr=subprocess.DEVNULL, timeout=20)
 try:
-    pump(4)
+    deadline = time.monotonic() + 20
+    while "Loaded " not in pump(.15):
+        assert time.monotonic() < deadline, "TUI initial frame did not complete"
     commands = inspect("--app", "soffice", "--dump-commands", "--command-query", "About LibreOffice")
     assert "About LibreOffice" in commands
     child.send(b":About LibreOffice\r")

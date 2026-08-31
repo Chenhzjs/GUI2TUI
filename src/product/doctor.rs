@@ -260,10 +260,31 @@ mod tests {
     }
     #[tokio::test]
     async fn hung_probe_deadline_is_bounded() {
+        use tokio::io::AsyncReadExt;
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("endpoint");
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let length = socket.read_u32().await.unwrap() as usize;
+            let mut request = vec![0; length];
+            socket.read_exact(&mut request).await.unwrap();
+            assert!(matches!(
+                serde_json::from_slice::<crate::modality::wire::Request>(&request),
+                Ok(crate::modality::wire::Request::Capabilities {})
+            ));
+            // Deliberately never send a response. Cancellation must close the
+            // client socket, rather than leaving a detached blocking reader.
+            assert_eq!(socket.read(&mut [0]).await.unwrap(), 0);
+        });
         assert!(
-            tokio::time::timeout(Duration::from_millis(2), std::future::pending::<()>())
+            tokio::time::timeout(Duration::from_millis(50), endpoint_probe(&path))
                 .await
                 .is_err()
         );
+        tokio::time::timeout(Duration::from_secs(1), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

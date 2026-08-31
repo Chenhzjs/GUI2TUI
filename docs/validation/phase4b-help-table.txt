@@ -1,0 +1,38 @@
+┌GUI2TUI Help — Esc return───────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Table                                                                                                                           │
+│h/j/k/l or arrows: move by semantic row/column                                                                                  │
+│Esc: return to Reader                                                                                                           │
+│Cells not exposed by accessibility remain unavailable.                                                                          │
+│                                                                                                                                │
+│F1: help in every context | ?: help outside text input                                                                          │
+│F12: contents-free runtime status (F12/Esc returns)                                                                             │
+│Ctrl-C: quit and restore the terminal                                                                                           │
+│Help: Up/Down scroll | Esc/F1/? return                                                                                          │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

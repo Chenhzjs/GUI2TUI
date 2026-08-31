@@ -1,3 +1,4 @@
 /target/
+/dist/
 tests/fixtures/.~lock.*#
 __pycache__/

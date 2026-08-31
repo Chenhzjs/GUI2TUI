@@ -10,7 +10,7 @@ export TEST_APP="${1:-gtk}"
 cd "$PROJECT_ROOT"
 CARGO_TARGET_DIR="$TARGET_DIR" CARGO_INCREMENTAL=0 cargo build --bins
 dbus-run-session -- bash -euo pipefail -c '
-export DISPLAY=:89 XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0
+export DISPLAY="${DISPLAY_NUMBER:-:89}" XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0
 Xvfb "$DISPLAY" -screen 0 1280x800x24 -dpi 96 >"$RESULT_DIR/xvfb.log" 2>&1 &
 xvfb_pid=$!
 app_pid=

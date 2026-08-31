@@ -71,7 +71,9 @@ with root.joinpath("broker.log").open("w") as log:
                     pass
             return "\n".join(screen.display)
 
-        pump(3)
+        deadline = time.monotonic() + 20
+        while "Loaded " not in pump(.15):
+            assert time.monotonic() < deadline, "TUI initial frame did not complete"
         child.send(b"\x1bOS")  # xterm F4
         frame = pump(1)
         assert "External modality" in frame, frame

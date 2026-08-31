@@ -144,12 +144,12 @@ with root.joinpath("broker.log").open("w") as log:
             if socket.exists():
                 break
             time.sleep(.02)
-        output, _, _ = materialize(extra=("--open-materialized", "--modality-socket", str(socket)))
+        output, _, opened_path = materialize(extra=("--open-materialized", "--modality-socket", str(socket)))
         root.joinpath("same-host.txt").write_text(output)
         time.sleep(2)
         viewer = inspect("--app", "eog")
         root.joinpath("viewer-tree.txt").write_text(viewer)
-        assert "artifact.png" in viewer
+        assert opened_path.name in viewer
         if os.environ.get("SCREENSHOT_HELPER"):
             subprocess.check_call(["python3", os.environ["SCREENSHOT_HELPER"], "--mode", "temp", "--path", str(root / "viewer.png")])
         print("SAME_HOST_VIEWER=OPENED; network_payload_bytes=0; visual inspection required")

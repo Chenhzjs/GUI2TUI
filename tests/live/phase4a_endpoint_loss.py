@@ -21,9 +21,9 @@ broker_env = {**os.environ, "TMPDIR": str(root), "GUI2TUI_HANDLER_MARKER": str(m
 brokers = []
 
 
-def start_broker(mime, slow):
+def start_broker(mime, slow, deny=False):
     command = [str(binary / "gui2tui-local"), "serve", "--socket", str(socket),
-               "--mime", mime, "--authorization", "once"]
+               "--mime", mime, "--authorization", "deny" if deny else "once"]
     command += ["--handler-program", str(handler)] if slow else ["--recording-handler"]
     process = subprocess.Popen(command, env=broker_env, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True)
@@ -124,6 +124,22 @@ try:
     assert success["metrics"]["endpoint_reconnects"] >= 1, success
     assert success["metrics"]["rejected_late_results"] == 0, success
     print("ENDPOINT_RESTART=PASS capabilities=image/png old_grant_reused=false new_handoff=true")
+    if os.environ.get("DENIAL_UX_TEST") == "1" and not transfer:
+        restarted.terminate()
+        restarted.wait(timeout=5)
+        start_broker("image/png", False, deny=True)
+        child.send(b"\x1b")
+        pump(child, .2)
+        child.send(b"\x1bOS")
+        assert "External modality" in pump(child, 1)
+        child.send(b"m")
+        assert "RenderedSnapshot (may be occluded)" in pump(child, 3)
+        child.send(b"o")
+        denied = pump(child, 1)
+        assert "Permission denied by local viewer" in denied, denied
+        assert "viewer accepted" not in denied.lower()
+        root.joinpath("endpoint-denied.txt").write_text(denied)
+        print("TUI_EXPLICIT_PERMISSION_DENIED=PASS no_false_open=true")
 finally:
     if child.isalive():
         child.send(b"\x03")

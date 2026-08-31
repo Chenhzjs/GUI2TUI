@@ -40,6 +40,14 @@ def focus(label):
         child.send(b"\t")
     raise AssertionError(f"focus target unavailable: {label}\n{frame}")
 
+def help_frame(name, required, key=b"\x1bOP"):
+    child.send(key)
+    frame = pump(.3)
+    assert "GUI2TUI Help" in frame and required in frame, frame
+    pathlib.Path(os.environ["RESULT_DIR"]).joinpath(f"help-{name}.txt").write_text(frame)
+    child.send(b"\x1b")
+    pump(.2)
+
 child = None
 try:
     time.sleep(2)
@@ -47,7 +55,10 @@ try:
                           env=os.environ.copy(), encoding=None, dimensions=(70, 140))
     pump(2)
     focus("Username")
-    child.send(b"\r-p4a\r")
+    child.send(b"\r")
+    pump(.2)
+    help_frame("edit", "Plain text editing")
+    child.send(b"-p4a\r")
     pump(1)
     assert 'value="alice-p4a"' in inspect()
     child.send(b"\r-cancelled\x1b")
@@ -72,6 +83,7 @@ try:
         focus("Choice:")
         child.send(b"\r")
         assert "Beta" in pump(.4)
+        help_frame("choice", "Choice", b"?")
         child.send(b"\x1b[B\r")
         assert "Choice: Beta" in pump(1)
         choice_tree = inspect()
@@ -87,6 +99,12 @@ try:
         assert "No compatible" in pump(.5)
         assert 'CheckBox "Enable feature" [checked' in inspect()
         print("GTK_CHECKBOX_READ_ONLY=PASS")
+    child.send(b":")
+    pump(.2)
+    help_frame("commands", "toggle all-scope search")
+    child.send(b"\x1b")
+    pump(.2)
+    print(f"{toolkit.upper()}_CONTEXT_HELP=PASS edit_command_choice_where_available=true")
 finally:
     if child is not None and child.isalive():
         child.send(b"\x03")

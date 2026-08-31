@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "os": "linux",
+  "arch": "aarch64",
+  "elapsed_ms": 3,
+  "checks": [
+    {
+      "name": "platform",
+      "level": "PASS",
+      "message": "Linux runtime supported"
+    },
+    {
+      "name": "desktop",
+      "level": "INFO",
+      "message": "Session=X11; DISPLAY set=false; WAYLAND_DISPLAY set=false. Missing display is valid for a headless terminal with access to a desktop's accessibility bus."
+    },
+    {
+      "name": "wayland-capture",
+      "level": "INFO",
+      "message": "Wayland static capture NOT IMPLEMENTED; semantic AT-SPI use is independent of capture."
+    },
+    {
+      "name": "terminal",
+      "level": "INFO",
+      "message": "Interactive TUI requires a TTY and non-dumb TERM. Doctor/config also work without a TTY."
+    },
+    {
+      "name": "configuration",
+      "level": "PASS",
+      "message": "Valid configuration or defaults (no file required)"
+    },
+    {
+      "name": "runtime-directory",
+      "level": "PASS",
+      "message": "Requires a current-user-owned 0700 directory, no symlinks. When XDG_RUNTIME_DIR is absent, a verified private temporary fallback is used."
+    },
+    {
+      "name": "artifact-ownership",
+      "level": "PASS",
+      "message": "Observed 0 namespaces / 0 live leases (scan bounded at 4096). No payload read or deletion; startup recovery separately validates complete ownership."
+    },
+    {
+      "name": "session-bus",
+      "level": "PASS",
+      "message": "Session D-Bus reachable"
+    },
+    {
+      "name": "accessibility-bus",
+      "level": "PASS",
+      "message": "org.a11y.Bus GetAddress probe; if unavailable, install/enable AT-SPI in this session. No address included in report."
+    },
+    {
+      "name": "accessible-applications",
+      "level": "PASS",
+      "message": "1 accessible application(s); no names or GUI contents collected"
+    },
+    {
+      "name": "same-host-endpoint",
+      "level": "WARN",
+      "message": "No viewer endpoint configured (valid headless mode). References remain inspectable; available artifacts can be explicitly materialized on this host."
+    }
+  ],
+  "exclusions": "No GUI text, input values, passwords, queries, payloads, resource URIs, environment addresses, app names, or arbitrary logs. Running-session metrics/recent errors are not attached by this standalone command; inspect F12 locally."
+}

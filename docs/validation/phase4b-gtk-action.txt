@@ -1,0 +1,38 @@
+┌ GUI2TUI — GUI2TUI Release Demo ────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Release demo                                                                                                                  │
+│  Username: alice                                                                                                               │
+│  Password: [password]  (read-only)                                                                                             │
+│  [x] Enable feature  (read-only)                                                                                               │
+│  Status: activated                                                                                                             │
+│> [ Activate safely ]                                                                                                           │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Activated "Activate safely" via Click — events=5 dirty=1 refreshed=10 nodes cache_nodes=12 reconc

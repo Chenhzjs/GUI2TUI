@@ -1,0 +1,38 @@
+┌GUI2TUI Help — Esc return───────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Scene                                                                                                                           │
+│Tab / Shift-Tab: focus controls                                                                                                 │
+│Enter: use the focusedecontrol, editia plain field, choose a value, or read a document                                          │
+│Space: safe toggle/action (no anonymous action fallback)                                                                        │
+│Up/Down / PageUp/PageDown: scroll                                                                                               │
+│: open commands in the current scope                                                                                            │
+│r: force refresh                                                                                                                │
+│F4: resources and visual tasks                                                                                                  │
+│q / Esc: quit                                                                                                                   │
+│                                                                                                                                │
+│Read-only means no safe operation is available. Password editing is disabled.                                                   │
+│                                                                                                                                │
+│F1: help in every context | ?: help outside text input                                                                          │
+│F12: contents-free runtime status (F12/Esc returns)                                                                             │
+│Ctrl-C: quit and restore the terminal                                                                                           │
+│Help: Up/Down scroll | Esc/F1/? return                                                                                          │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+│                                                                                                                                │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

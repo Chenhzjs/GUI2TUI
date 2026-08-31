@@ -26,5 +26,8 @@ for property in IsEnabled ScreenReaderEnabled; do
     --method org.freedesktop.DBus.Properties.Set org.a11y.Status "$property" "<true>"
 done
 python3 tests/live/phase4a_reader_terminal.py
+if [[ "${USER_HELP_TEST:-0}" == 1 ]]; then
+  python3 tests/live/phase4b_help.py
+fi
 '
 echo "RESULT_DIR=$RESULT_DIR"

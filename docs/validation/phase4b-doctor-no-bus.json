@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "os": "linux",
+  "arch": "aarch64",
+  "elapsed_ms": 0,
+  "checks": [
+    {
+      "name": "platform",
+      "level": "PASS",
+      "message": "Linux runtime supported"
+    },
+    {
+      "name": "desktop",
+      "level": "INFO",
+      "message": "Session=X11; DISPLAY set=false; WAYLAND_DISPLAY set=false. Missing display is valid for a headless terminal with access to a desktop's accessibility bus."
+    },
+    {
+      "name": "wayland-capture",
+      "level": "INFO",
+      "message": "Wayland static capture NOT IMPLEMENTED; semantic AT-SPI use is independent of capture."
+    },
+    {
+      "name": "terminal",
+      "level": "INFO",
+      "message": "Interactive TUI requires a TTY and non-dumb TERM. Doctor/config also work without a TTY."
+    },
+    {
+      "name": "configuration",
+      "level": "PASS",
+      "message": "Valid configuration or defaults (no file required)"
+    },
+    {
+      "name": "runtime-directory",
+      "level": "PASS",
+      "message": "Requires a current-user-owned 0700 directory, no symlinks. When XDG_RUNTIME_DIR is absent, a verified private temporary fallback is used."
+    },
+    {
+      "name": "artifact-ownership",
+      "level": "PASS",
+      "message": "Observed 0 namespaces / 0 live leases (scan bounded at 4096). No payload read or deletion; startup recovery separately validates complete ownership."
+    },
+    {
+      "name": "session-bus",
+      "level": "FAIL",
+      "message": "No session bus reachable within deadline. Run in the same desktop session/user; in an isolated test use dbus-run-session. Do not copy another user's credentials."
+    },
+    {
+      "name": "accessibility-bus",
+      "level": "INFO",
+      "message": "Not probed: no session bus. No AT-SPI desktop connection available."
+    },
+    {
+      "name": "same-host-endpoint",
+      "level": "WARN",
+      "message": "No viewer endpoint configured (valid headless mode). References remain inspectable; available artifacts can be explicitly materialized on this host."
+    }
+  ],
+  "exclusions": "No GUI text, input values, passwords, queries, payloads, resource URIs, environment addresses, app names, or arbitrary logs. Running-session metrics/recent errors are not attached by this standalone command; inspect F12 locally."
+}

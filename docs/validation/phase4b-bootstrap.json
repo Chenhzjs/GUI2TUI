@@ -1,0 +1,115 @@
+{
+  "samples": [
+    {
+      "strategy": "phase4a_debug",
+      "iteration": 0,
+      "warmup": true,
+      "nodes": 5166,
+      "bootstrap_ms": 479,
+      "first_frame_ms": 540.94
+    },
+    {
+      "strategy": "phase4b_debug",
+      "iteration": 0,
+      "warmup": true,
+      "nodes": 5166,
+      "bootstrap_ms": 490,
+      "first_frame_ms": 609.82
+    },
+    {
+      "strategy": "phase4b_release",
+      "iteration": 0,
+      "warmup": true,
+      "nodes": 5166,
+      "bootstrap_ms": 190,
+      "first_frame_ms": 211.28
+    },
+    {
+      "strategy": "phase4a_debug",
+      "iteration": 1,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 556,
+      "first_frame_ms": 572.59
+    },
+    {
+      "strategy": "phase4b_debug",
+      "iteration": 1,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 487,
+      "first_frame_ms": 515.06
+    },
+    {
+      "strategy": "phase4b_release",
+      "iteration": 1,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 173,
+      "first_frame_ms": 192.81
+    },
+    {
+      "strategy": "phase4a_debug",
+      "iteration": 2,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 467,
+      "first_frame_ms": 491.54
+    },
+    {
+      "strategy": "phase4b_debug",
+      "iteration": 2,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 497,
+      "first_frame_ms": 526.78
+    },
+    {
+      "strategy": "phase4b_release",
+      "iteration": 2,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 182,
+      "first_frame_ms": 200.74
+    },
+    {
+      "strategy": "phase4a_debug",
+      "iteration": 3,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 499,
+      "first_frame_ms": 526.38
+    },
+    {
+      "strategy": "phase4b_debug",
+      "iteration": 3,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 499,
+      "first_frame_ms": 524.4
+    },
+    {
+      "strategy": "phase4b_release",
+      "iteration": 3,
+      "warmup": false,
+      "nodes": 5166,
+      "bootstrap_ms": 184,
+      "first_frame_ms": 204.5
+    }
+  ],
+  "warm_medians": {
+    "phase4a_debug": {
+      "bootstrap_ms": 499,
+      "first_frame_ms": 526.38
+    },
+    "phase4b_debug": {
+      "bootstrap_ms": 497,
+      "first_frame_ms": 524.4
+    },
+    "phase4b_release": {
+      "bootstrap_ms": 182,
+      "first_frame_ms": 200.74
+    }
+  },
+  "note": "Same live Chrome tree; first run reported as warmup, next three medians. No eager doctor or endpoint probe."
+}
