@@ -3,7 +3,7 @@ use std::{error::Error, io, process::ExitCode, time::Duration};
 use clap::Parser;
 use crossterm::{
     cursor::{Hide, Show},
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, EventStream},
+    event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -13,6 +13,7 @@ use gui2tui::{
         AtspiBackend, BackendError, BootstrapStrategy, DEFAULT_EVENT_BUFFER_CAPACITY,
         InspectOptions,
     },
+    runtime::signals::{RuntimeSignal, RuntimeSignals},
     transcompile::PresentationMode,
     tui::{
         app::TuiApplication,
@@ -83,13 +84,23 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
+    let recovered = gui2tui::runtime::artifacts::recover_abandoned()?;
+    tracing::debug!(
+        recovered_artifact_namespaces = recovered,
+        "runtime startup recovery"
+    );
+    let mut signals = RuntimeSignals::new()?;
     let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await?;
-    enable_raw_mode()?;
-    let _guard = TerminalGuard;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+    let mut guard = TerminalGuard::attach()?;
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        previous_hook(info);
+    }));
+    let stdout = io::stdout();
     let terminal_backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(terminal_backend)?;
+    let mut terminal_events = EventStream::new();
 
     let app_selector = match cli.app {
         Some(name) => name,
@@ -99,7 +110,14 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 return Err(BackendError::NoApplications.into());
             }
             let names = applications.into_iter().map(|app| app.name).collect();
-            let Some(name) = run_selector(&mut terminal, ApplicationSelector::new(names))? else {
+            let Some(name) = run_selector(
+                &mut terminal,
+                ApplicationSelector::new(names),
+                &mut signals,
+                &mut terminal_events,
+            )
+            .await?
+            else {
                 return Ok(());
             };
             name
@@ -123,19 +141,77 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 
     app.configure_modality_client(cli.modality_socket);
 
-    let terminal_events = EventStream::new();
-    futures_lite::pin!(terminal_events);
-    let mut liveness = tokio::time::interval(Duration::from_millis(500));
+    // Keep one Crossterm reader for the lifetime of this terminal. Recreating
+    // EventStream while its old poll worker retires can contend on Crossterm's
+    // process-global reader lock and block reattachment.
+    let mut input_available = true;
+    let mut liveness =
+        tokio::time::interval(gui2tui::runtime::RuntimeLimits::default().lifecycle_probe);
     liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut content_tick = tokio::time::interval(Duration::from_millis(25));
     content_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut redraw = true;
     loop {
-        terminal.draw(|frame| app.render(frame))?;
+        if redraw && guard.attached {
+            terminal.draw(|frame| app.render(frame))?;
+        }
+        redraw = false;
         tokio::select! {
-            terminal_event = terminal_events.next() => {
-                let Some(terminal_event) = terminal_event else { break };
+            signal = signals.recv() => {
+                match signal {
+                    RuntimeSignal::Stop => break,
+                    RuntimeSignal::Detach => {
+                        guard.detach();
+                        app.set_terminal_attached(false);
+                    }
+                    RuntimeSignal::Reattach => {
+                        tracing::debug!("reattachment signal received");
+                        if !guard.attached {
+                            guard = TerminalGuard::attach()?;
+                            tracing::debug!("terminal modes restored for reattachment");
+                            // Terminal::clear queries remote cursor position
+                            // (DSR), which may block on a PTY without replies.
+                            // Fullscreen resize invalidates buffers without DSR.
+                            let (width, height) = crossterm::terminal::size()?;
+                            terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+                            tracing::debug!("terminal frame invalidated for reattachment");
+                            // Discard buffered terminal input, never replay it
+                            // as semantic operations after reattachment.
+                            for _ in 0..128 {
+                                if futures_lite::future::poll_once(terminal_events.next()).await.is_none() { break; }
+                            }
+                            app.set_terminal_attached(true);
+                            redraw = true;
+                        }
+                    }
+                }
+            },
+            terminal_event = async {
+                if guard.attached && input_available {
+                    terminal_events.next().await
+                } else {
+                    std::future::pending().await
+                }
+            } => {
+                let Some(terminal_event) = terminal_event else {
+                    input_available = false;
+                    guard.detach();
+                    app.set_terminal_attached(false);
+                    continue;
+                };
+                redraw = true;
                 match terminal_event? {
                     Event::Key(key) => {
+                        if !app.is_available() && key.code == crossterm::event::KeyCode::Char('b') {
+                            if let Ok(backend) = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms)).await
+                                && let Ok(applications) = backend.applications().await {
+                                let selector = ApplicationSelector::new(applications.into_iter().map(|a| a.name).collect());
+                                if let Some(name) = run_selector(&mut terminal, selector, &mut signals, &mut terminal_events).await? {
+                                    app.select_fresh_application(name).await;
+                                }
+                            }
+                            continue;
+                        }
                         if app.handle_key_event(key).await {
                             break;
                         }
@@ -149,6 +225,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 }
             },
             event = app.next_event() => {
+                redraw = true;
                 if let Some(event) = event {
                     app.apply_external_delivery(event).await;
                 } else {
@@ -156,9 +233,12 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 }
             },
             _ = liveness.tick() => {
+                let was_available = app.is_available();
                 app.check_application_available().await;
+                redraw |= was_available != app.is_available();
             },
             _ = content_tick.tick() => {
+                redraw |= app.has_pending_work();
                 app.progress_content_operations().await;
             }
         }
@@ -166,13 +246,22 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_selector(
+async fn run_selector(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut selector: ApplicationSelector,
+    signals: &mut RuntimeSignals,
+    events: &mut EventStream,
 ) -> Result<Option<String>, io::Error> {
     loop {
         terminal.draw(|frame| selector.render(frame))?;
-        match event::read()? {
+        let event = tokio::select! {
+            signal = signals.recv() => {
+                if matches!(signal, RuntimeSignal::Stop) { return Ok(None); }
+                continue;
+            },
+            event = events.next() => match event { Some(event) => event?, None => return Ok(None) },
+        };
+        match event {
             Event::Key(key) => {
                 if let Some(intent) = key_to_selector_intent(key) {
                     if intent == SelectorIntent::Quit {
@@ -195,16 +284,37 @@ fn run_selector(
     }
 }
 
-struct TerminalGuard;
+struct TerminalGuard {
+    attached: bool,
+}
+
+impl TerminalGuard {
+    fn attach() -> io::Result<Self> {
+        enable_raw_mode()?;
+        let guard = Self { attached: true };
+        execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, Hide)?;
+        Ok(guard)
+    }
+    fn detach(&mut self) {
+        if self.attached {
+            restore_terminal();
+            self.attached = false;
+        }
+    }
+}
+
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        Show,
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    );
+}
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
-        let _ = disable_raw_mode();
-        let _ = execute!(
-            io::stdout(),
-            Show,
-            DisableMouseCapture,
-            LeaveAlternateScreen
-        );
+        self.detach();
     }
 }

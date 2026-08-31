@@ -197,6 +197,7 @@ pub enum BackendError {
     },
 }
 
+#[derive(Clone)]
 pub struct AtspiBackend {
     connection: AccessibilityConnection,
     operation_timeout: Duration,
@@ -211,10 +212,32 @@ pub enum EventDelivery {
 }
 
 pub struct EventSubscription {
+    statistics: Arc<EventQueueStatistics>,
     receiver: tokio::sync::mpsc::Receiver<crate::events::NormalizedEvent>,
     resync_required: Arc<AtomicBool>,
     dropped: Arc<AtomicU64>,
     notify: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Default)]
+struct EventQueueStatistics {
+    received: AtomicU64,
+    dequeued: AtomicU64,
+    dropped: AtomicU64,
+    high_water: AtomicU64,
+    resync_requests: AtomicU64,
+}
+impl EventQueueStatistics {
+    fn receive(&self, sender: &tokio::sync::mpsc::Sender<crate::events::NormalizedEvent>) {
+        self.received.fetch_add(1, Ordering::Relaxed);
+        if sender.capacity() == 0 {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+        }
+        self.high_water.fetch_max(
+            (sender.max_capacity() - sender.capacity() + 1).min(sender.max_capacity()) as u64,
+            Ordering::Relaxed,
+        );
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -284,13 +307,34 @@ pub struct RelationEnrichmentMetrics {
 }
 
 impl EventSubscription {
+    pub fn close(&mut self) {
+        self.receiver.close();
+    }
+
+    pub fn statistics(&self) -> serde_json::Value {
+        let s = &self.statistics;
+        serde_json::json!({"received": s.received.load(Ordering::Relaxed), "dequeued": s.dequeued.load(Ordering::Relaxed),
+            "dropped": s.dropped.load(Ordering::Relaxed), "high_water": s.high_water.load(Ordering::Relaxed),
+            "resync_requests": s.resync_requests.load(Ordering::Relaxed)})
+    }
+    pub fn queue_depth(&self) -> usize {
+        self.receiver.len()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.receiver.max_capacity()
+    }
+
     pub async fn recv(&mut self) -> Option<EventDelivery> {
         loop {
             if let Some(resync) = self.take_resync() {
                 return Some(resync);
             }
             tokio::select! {
-                event = self.receiver.recv() => return event.map(EventDelivery::Event),
+                event = self.receiver.recv() => {
+                    if event.is_some() { self.statistics.dequeued.fetch_add(1, Ordering::Relaxed); }
+                    return event.map(EventDelivery::Event);
+                },
                 _ = self.notify.notified() => {
                     // A notification permit may outlive the flag consumption
                     // when the owner observed overflow before awaiting here.
@@ -303,19 +347,30 @@ impl EventSubscription {
     pub fn try_recv(
         &mut self,
     ) -> Result<crate::events::NormalizedEvent, tokio::sync::mpsc::error::TryRecvError> {
-        self.receiver.try_recv()
+        let event = self.receiver.try_recv();
+        if event.is_ok() {
+            self.statistics.dequeued.fetch_add(1, Ordering::Relaxed);
+        }
+        event
     }
 
     pub fn take_resync(&self) -> Option<EventDelivery> {
-        self.resync_required
-            .swap(false, Ordering::AcqRel)
-            .then(|| EventDelivery::ResyncRequired {
+        self.resync_required.swap(false, Ordering::AcqRel).then(|| {
+            self.statistics
+                .resync_requests
+                .fetch_add(1, Ordering::Relaxed);
+            EventDelivery::ResyncRequired {
                 dropped: self.dropped.swap(0, Ordering::AcqRel),
-            })
+            }
+        })
     }
 }
 
 impl AtspiBackend {
+    pub fn operation_timeout(&self) -> Duration {
+        self.operation_timeout
+    }
+
     pub async fn connect(operation_timeout: Duration) -> Result<Self, BackendError> {
         let environment = SessionEnvironment::detect();
         let _session_connection =
@@ -1576,14 +1631,27 @@ impl AtspiBackend {
         let producer_resync = resync_required.clone();
         let producer_dropped = dropped.clone();
         let producer_notify = notify.clone();
+        let statistics = Arc::new(EventQueueStatistics::default());
+        let producer_statistics = statistics.clone();
         tokio::spawn(async move {
             let events = MessageStream::from(&connection);
             futures_lite::pin!(events);
-            while let Some(message) = events.next().await {
+            loop {
+                // Receiver ownership ends on generation replacement. Waiting
+                // for an event from an already-dead application leaks the old
+                // connection/task indefinitely; close is an independent wakeup.
+                let message = tokio::select! {
+                    _ = sender.closed() => break,
+                    message = events.next() => match message {
+                        Some(message) => message,
+                        None => break,
+                    },
+                };
                 let message = match message {
                     Ok(message) => message,
                     Err(error) => {
                         warn!(%error, "skipping unreadable D-Bus message on AT-SPI event stream");
+                        producer_statistics.receive(&sender);
                         if deliver_event(
                             &sender,
                             crate::events::NormalizedEvent::Unknown {
@@ -1644,6 +1712,7 @@ impl AtspiBackend {
                         }
                     },
                 };
+                producer_statistics.receive(&sender);
                 if deliver_event(
                     &sender,
                     normalized,
@@ -1658,6 +1727,7 @@ impl AtspiBackend {
             }
         });
         Ok(EventSubscription {
+            statistics,
             receiver,
             resync_required,
             dropped,
@@ -2624,6 +2694,7 @@ mod tests {
         (
             sender,
             EventSubscription {
+                statistics: Arc::new(EventQueueStatistics::default()),
                 receiver,
                 resync_required,
                 dropped,
@@ -2637,6 +2708,7 @@ mod tests {
         subscription: &EventSubscription,
         path: &str,
     ) {
+        subscription.statistics.receive(sender);
         deliver_event(
             sender,
             test_event(path),
@@ -2942,5 +3014,23 @@ mod tests {
             subscription.take_resync(),
             Some(EventDelivery::ResyncRequired { dropped: 1 })
         ));
+    }
+
+    #[test]
+    fn ten_thousand_events_remain_bounded_with_one_pending_resync() {
+        let (sender, subscription) = test_subscription(4);
+        for _ in 0..10_000 {
+            send_test_event(&sender, &subscription, "/storm");
+        }
+        assert_eq!(subscription.queue_depth(), 4);
+        assert!(matches!(
+            subscription.take_resync(),
+            Some(EventDelivery::ResyncRequired { dropped: 9996 })
+        ));
+        assert!(subscription.take_resync().is_none());
+        let metrics = subscription.statistics();
+        assert_eq!(metrics["received"], 10_000);
+        assert_eq!(metrics["high_water"], 4);
+        assert_eq!(metrics["resync_requests"], 1);
     }
 }

@@ -46,6 +46,12 @@ use super::{
 };
 
 pub struct TuiApplication {
+    capture_task:
+        Option<tokio::task::JoinHandle<Result<CaptureCompletion, crate::runtime::RuntimeError>>>,
+    capture_ticket: Option<crate::runtime::OperationTicket>,
+    runtime: crate::runtime::RuntimeSession,
+    modality_ticket: Option<crate::runtime::OperationTicket>,
+    runtime_status_visible: bool,
     modality_socket: Option<std::path::PathBuf>,
     modality_view: Option<super::modality_view::ModalityView>,
     modality_task: Option<tokio::task::JoinHandle<String>>,
@@ -89,8 +95,123 @@ struct FocusAnchor {
     locator: BackendLocator,
 }
 
+struct CaptureCompletion {
+    candidate: crate::modality::ModalityCandidate,
+    modality: crate::modality::ExternalModality,
+    artifact: crate::modality::materialize::MaterializedArtifact,
+}
+
 impl TuiApplication {
+    pub fn is_available(&self) -> bool {
+        self.application_available
+    }
+    pub fn has_pending_work(&self) -> bool {
+        self.capture_task.is_some()
+            || self.modality_task.is_some()
+            || self
+                .content_view
+                .as_ref()
+                .and_then(|v| v.full_search.as_ref())
+                .is_some_and(|s| s.state == SearchState::Running)
+    }
+    pub fn runtime_status(&self) -> serde_json::Value {
+        let mut status = self.runtime.status();
+        status["event_queue_depth"] = self.event_subscription.queue_depth().into();
+        status["event_queue_capacity"] = self.event_subscription.capacity().into();
+        status["events"] = self.event_subscription.statistics();
+        status["temporary_artifacts"] = self.materialized_artifacts.len().into();
+        status["cache_nodes"] = self.cache.node_count().into();
+        status["full_snapshots"] = self.cache.full_snapshot_count().into();
+        status["focused_scene"] = self.focus.current().map(SceneElementId::get).into();
+        status["focused_runtime"] = self
+            .focus
+            .current()
+            .and_then(|id| self.scene.element(id))
+            .and_then(|el| el.binding.as_ref())
+            .map(|b| b.runtime_id.get())
+            .into();
+        status
+    }
+
+    pub fn set_terminal_attached(&mut self, attached: bool) {
+        self.runtime.set_terminal_attached(attached);
+        // Preserve semantic focus/Reader offsets; the next draw recomputes
+        // rectangles for the current terminal dimensions, not old screen rows.
+        self.hit_map = HitMap::default();
+        tracing::debug!(status = %self.runtime_status(), "terminal attachment changed");
+    }
+
+    fn application_gone(&mut self) {
+        self.application_available = false;
+        self.event_subscription.close();
+        self.runtime.invalidate_application();
+        self.modality_cancel.cancel();
+        if let Some(task) = self.capture_task.take() {
+            task.abort();
+        }
+        self.capture_ticket = None;
+        self.modality_ticket = None;
+        if let Some(task) = self.modality_task.take() {
+            task.abort();
+        }
+        self.edit_session = None;
+        self.content_view = None;
+        self.content_return = None;
+        self.modality_view = None;
+        self.choice_overlay = None;
+        self.command_palette = None;
+        self.materialized_artifacts.clear();
+        self.hit_map = HitMap::default();
+        self.status = "Application is no longer available. Tasks discarded. F5: fresh generation; b: applications; q: quit.".into();
+        tracing::debug!(status = %self.runtime_status(), "application generation invalidated");
+    }
+
+    /// Explicit user selection of the same name. Never reconciles old/new
+    /// caches, content, quarantine, scopes or command/choice bindings.
+    async fn open_fresh_generation(&mut self) {
+        let backend = match AtspiBackend::connect(self.backend.operation_timeout()).await {
+            Ok(backend) => backend,
+            Err(_) => {
+                self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
+                return;
+            }
+        };
+        match Self::new(
+            backend,
+            self.app_selector.clone(),
+            self.inspect_options,
+            self.settle_delay,
+            self.bootstrap_strategy,
+            self.event_subscription.capacity(),
+            self.presentation_mode,
+        )
+        .await
+        {
+            Ok(mut fresh) => {
+                fresh.configure_modality_client(self.modality_socket.clone());
+                let mut runtime = std::mem::take(&mut self.runtime);
+                runtime.open_application(fresh.application_locator.clone());
+                fresh.runtime = runtime;
+                *self = fresh;
+                tracing::debug!(status = %self.runtime_status(), "opened fresh application generation");
+            }
+            Err(_) => {
+                self.status =
+                    "Application is not available yet. F5 retries explicitly; q quits.".into()
+            }
+        }
+    }
+
+    pub async fn select_fresh_application(&mut self, name: String) {
+        self.application_gone();
+        self.app_selector = name;
+        self.open_fresh_generation().await;
+    }
+
     pub fn configure_modality_client(&mut self, socket: Option<std::path::PathBuf>) {
+        self.runtime.endpoint_profile = socket
+            .as_ref()
+            .map(|p| crate::runtime::EndpointProfileId(p.to_string_lossy().into_owned()));
         self.modality_socket = socket;
     }
 
@@ -116,6 +237,13 @@ impl TuiApplication {
         } else {
             None
         };
+        self.runtime.set_endpoint(if capabilities.is_some() {
+            crate::runtime::EndpointState::Available
+        } else if self.modality_socket.is_some() {
+            crate::runtime::EndpointState::Disconnected
+        } else {
+            crate::runtime::EndpointState::Unavailable
+        });
         self.modality_view = Some(super::modality_view::ModalityView {
             candidates,
             selected: 0,
@@ -183,6 +311,16 @@ impl TuiApplication {
         };
         self.modality_cancel = Default::default();
         let cancel = self.modality_cancel.clone();
+        self.modality_ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::ReferenceHandoff,
+                cancel.clone(),
+            )
+            .ok();
+        if self.modality_ticket.is_none() {
+            return;
+        }
         self.modality_task = Some(tokio::task::spawn_blocking(move || {
             match crate::modality::wire::send_reference_cancellable(
                 &socket,
@@ -202,6 +340,10 @@ impl TuiApplication {
 
     async fn materialize_selected_modality(&mut self) {
         use crate::modality::{acquisition::ModalityMetrics, materialize::ArtifactMaterializer};
+        if self.capture_task.is_some() || self.modality_task.is_some() {
+            self.status = "A modality operation is already pending".into();
+            return;
+        }
         let Some(candidate) = self
             .modality_view
             .as_ref()
@@ -235,44 +377,53 @@ impl TuiApplication {
             );
             return;
         }
-        let mut metrics = ModalityMetrics::default();
         self.modality_cancel = Default::default();
-        let result = crate::modality::runtime::acquire_snapshot(
-            &self.backend,
-            &candidate,
-            &modality.resolution,
-            std::sync::Arc::new(crate::backend::static_visual::HostStaticVisualProvider),
-            self.modality_cancel.clone(),
-            &mut metrics,
-        )
-        .await;
-        match result {
-            Ok((snapshot, bytes)) => match ArtifactMaterializer::materialize(
+        let cancel = self.modality_cancel.clone();
+        self.capture_ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::SnapshotAcquisition,
+                cancel.clone(),
+            )
+            .ok();
+        if self.capture_ticket.is_none() {
+            return;
+        }
+        let backend = self.backend.clone();
+        self.capture_task = Some(tokio::spawn(async move {
+            let mut metrics = ModalityMetrics::default();
+            let (snapshot, bytes) = crate::modality::runtime::acquire_snapshot(
+                &backend,
+                &candidate,
+                &modality.resolution,
+                std::sync::Arc::new(crate::backend::static_visual::HostStaticVisualProvider),
+                cancel.clone(),
+                &mut metrics,
+            )
+            .await
+            .map_err(|_| crate::runtime::RuntimeError::ResourceUnavailable)?;
+            let artifact = ArtifactMaterializer::materialize(
                 snapshot.descriptor.clone(),
                 &bytes[..],
                 Some((snapshot.region, snapshot.quality)),
                 Duration::from_secs(300),
                 true,
-                &self.modality_cancel,
-            ) {
-                Ok(artifact) => {
-                    metrics.headless_materialization = 1;
-                    self.status = format!(
-                        "RenderedSnapshot (may be occluded): {}",
-                        artifact.path().display()
-                    );
-                    self.materialized_artifacts.push(artifact);
-                    modality.resolution =
-                        crate::modality::ModalityResource::RenderedSnapshot(snapshot);
-                    if let Some(view) = &mut self.modality_view {
-                        view.resolved = Some(modality);
-                    }
-                }
-                Err(error) => self.status = format!("Materialization unavailable: {error}"),
-            },
-            Err(error) => self.status = format!("{error}"),
-        }
-        tracing::debug!(?metrics, "explicit static modality request");
+                &cancel,
+            )
+            .map_err(|_| crate::runtime::RuntimeError::ResourceUnavailable)?;
+            if cancel.is_cancelled() {
+                return Err(crate::runtime::RuntimeError::Cancelled);
+            }
+            metrics.headless_materialization = 1;
+            modality.resolution = crate::modality::ModalityResource::RenderedSnapshot(snapshot);
+            tracing::debug!(?metrics, "explicit static modality request");
+            Ok(CaptureCompletion {
+                candidate,
+                modality,
+                artifact,
+            })
+        }));
+        self.status = "Acquiring one explicit static frame; TUI remains usable".into();
     }
 
     fn open_materialized_same_host(&mut self) {
@@ -306,6 +457,16 @@ impl TuiApplication {
         let resource = crate::modality::runtime::materialized_reference(artifact);
         self.modality_cancel = Default::default();
         let cancel = self.modality_cancel.clone();
+        self.modality_ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::ReferenceHandoff,
+                cancel.clone(),
+            )
+            .ok();
+        if self.modality_ticket.is_none() {
+            return;
+        }
         self.modality_task = Some(tokio::task::spawn_blocking(move || {
             match crate::modality::wire::send_reference_cancellable(
                 &socket,
@@ -372,7 +533,14 @@ impl TuiApplication {
         let snapshot_ms = started.elapsed().as_millis();
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
+        let mut runtime = crate::runtime::RuntimeSession::default();
+        runtime.open_application(application_locator.clone());
         let mut application = Self {
+            capture_task: None,
+            capture_ticket: None,
+            runtime,
+            modality_ticket: None,
+            runtime_status_visible: false,
             modality_socket: None,
             modality_view: None,
             modality_task: None,
@@ -430,6 +598,33 @@ impl TuiApplication {
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
+        if self.runtime_status_visible {
+            use ratatui::widgets::{Block, Borders, Paragraph};
+            frame.render_widget(
+                Paragraph::new(
+                    serde_json::to_string_pretty(&self.runtime_status()).unwrap_or_default(),
+                )
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Runtime status (contents-free) — F12/Esc return"),
+                ),
+                frame.area(),
+            );
+            return;
+        }
+        if !self.application_available {
+            use ratatui::widgets::{Block, Borders, Paragraph};
+            frame.render_widget(
+                Paragraph::new(self.status.as_str()).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Application unavailable — old generation is not interactive"),
+                ),
+                frame.area(),
+            );
+            return;
+        }
         if let Some(view) = &self.modality_view {
             view.render(frame, &self.status);
             return;
@@ -565,6 +760,9 @@ impl TuiApplication {
     }
 
     pub async fn handle_intent(&mut self, intent: UiIntent) -> bool {
+        if !self.application_available {
+            return intent == UiIntent::Quit;
+        }
         match intent {
             UiIntent::Quit => return true,
             UiIntent::FocusNext => {
@@ -629,6 +827,23 @@ impl TuiApplication {
                 .contains(crossterm::event::KeyModifiers::CONTROL)
         {
             return true;
+        }
+        if key.code == KeyCode::F(12) {
+            self.runtime_status_visible = !self.runtime_status_visible;
+            tracing::debug!(status = %self.runtime_status(), "runtime status requested");
+            return false;
+        }
+        if self.runtime_status_visible {
+            if key.code == KeyCode::Esc {
+                self.runtime_status_visible = false;
+            }
+            return false;
+        }
+        if !self.application_available {
+            if key.code == KeyCode::F(5) {
+                self.open_fresh_generation().await;
+            }
+            return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc);
         }
         if self.modality_view.is_some() {
             match key.code {
@@ -800,6 +1015,9 @@ impl TuiApplication {
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
+        if !self.application_available || self.runtime_status_visible {
+            return;
+        }
         if self.modality_view.is_some() {
             return;
         }
@@ -1083,16 +1301,72 @@ impl TuiApplication {
     }
 
     pub async fn progress_content_operations(&mut self) {
+        if !self.application_available {
+            return;
+        }
         self.materialized_artifacts.retain(|a| !a.expired());
+        if self
+            .capture_task
+            .as_ref()
+            .is_some_and(|task| task.is_finished())
+            && let Some(task) = self.capture_task.take()
+        {
+            let result = task.await;
+            if let Some(ticket) = self.capture_ticket.take()
+                && self.runtime.complete(&ticket).is_ok()
+            {
+                match result {
+                    Ok(Ok(completion)) => {
+                        let valid = self
+                            .cache
+                            .node(completion.candidate.owner)
+                            .is_some_and(|n| n.backend_locator == completion.candidate.locator)
+                            && self.scopes.allows_node(completion.candidate.owner);
+                        if valid {
+                            self.status = format!(
+                                "RenderedSnapshot (may be occluded): {}",
+                                completion.artifact.path().display()
+                            );
+                            self.materialized_artifacts.push(completion.artifact);
+                            if let Some(view) = &mut self.modality_view
+                                && view
+                                    .candidates
+                                    .get(view.selected)
+                                    .is_some_and(|c| c.locator == completion.candidate.locator)
+                            {
+                                view.resolved = Some(completion.modality);
+                            }
+                        } else {
+                            self.status = crate::runtime::RuntimeError::StaleIdentity.to_string();
+                        }
+                    }
+                    Ok(Err(error)) => self.status = error.to_string(),
+                    Err(_) => self.status = crate::runtime::RuntimeError::Internal.to_string(),
+                }
+            }
+        }
         if self
             .modality_task
             .as_ref()
             .is_some_and(|task| task.is_finished())
             && let Some(task) = self.modality_task.take()
         {
-            self.status = task
-                .await
-                .unwrap_or_else(|_| "Local handoff task failed".to_owned());
+            let result = task.await;
+            if let Some(ticket) = self.modality_ticket.take()
+                && self.runtime.complete(&ticket).is_ok()
+            {
+                self.status = result.unwrap_or_else(|_| "Local handoff task failed".to_owned());
+                // Every completed handoff invalidates the negotiated lease.
+                // Reopening F4 negotiates anew; no stale fake Open remains.
+                if let Some(view) = &mut self.modality_view {
+                    view.capabilities = None;
+                    if let Some(modality) = &mut view.resolved {
+                        modality.negotiate(None);
+                    }
+                }
+                self.runtime
+                    .set_endpoint(crate::runtime::EndpointState::Disconnected);
+            }
         }
         let Some(mut search) = self
             .content_view
@@ -1682,6 +1956,9 @@ impl TuiApplication {
     }
 
     async fn full_reload(&mut self, success_status: Option<String>) {
+        if !self.application_available {
+            return;
+        }
         let previous_scope = self.scopes.active();
         let previous_scene = self.focus.current();
         let previous_binding = previous_scene
@@ -1711,6 +1988,13 @@ impl TuiApplication {
         .await
         {
             Ok(bootstrap) => {
+                if !self
+                    .runtime
+                    .validates_application(&bootstrap.root.backend_locator)
+                {
+                    self.application_gone();
+                    return;
+                }
                 let snapshot_ms = started.elapsed().as_millis();
                 if let Err(error) = self.cache.full_refresh(bootstrap.root) {
                     self.status = format!("Full refresh fallback failed: {error}");
@@ -1774,14 +2058,7 @@ impl TuiApplication {
                 self.ensure_focus_visible();
             }
             Err(error) if application_is_gone(&error) => {
-                self.application_available = false;
-                let editing = self.edit_session.take().is_some();
-                self.status = if editing {
-                    "Application is no longer available. Edit discarded. Press q to quit."
-                        .to_owned()
-                } else {
-                    "Application is no longer available. Press q to quit.".to_owned()
-                };
+                self.application_gone();
             }
             Err(error) => {
                 self.status = format!("Refresh failed: {error}");
@@ -1856,17 +2133,14 @@ impl TuiApplication {
             }
         };
         if !alive {
-            self.application_available = false;
-            let editing = self.edit_session.take().is_some();
-            self.status = if editing {
-                "Application is no longer available. Edit discarded. Press q to quit.".to_owned()
-            } else {
-                "Application is no longer available. Press q to quit.".to_owned()
-            };
+            self.application_gone();
         }
     }
 
     pub async fn apply_external_delivery(&mut self, delivery: EventDelivery) {
+        if !self.application_available {
+            return;
+        }
         let first = match delivery {
             EventDelivery::Event(event) => event,
             EventDelivery::ResyncRequired { dropped } => {
@@ -2247,6 +2521,12 @@ impl TuiApplication {
 impl Drop for TuiApplication {
     fn drop(&mut self) {
         self.modality_cancel.cancel();
+        if let Some(task) = self.capture_task.take() {
+            task.abort();
+        }
+        if let Some(task) = self.modality_task.take() {
+            task.abort();
+        }
     }
 }
 

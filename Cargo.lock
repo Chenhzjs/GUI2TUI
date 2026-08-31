@@ -715,6 +715,7 @@ dependencies = [
  "crossterm",
  "futures-lite",
  "ratatui",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
