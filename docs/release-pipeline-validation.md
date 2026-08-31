@@ -1,6 +1,11 @@
 # Phase 4B release pipeline validation
 
-PHASE 4B RELEASE PIPELINE SUPPLEMENT VALIDATED
+PHASE 4B RELEASE PIPELINE SUPPLEMENT NOT YET VALIDATED
+
+The run below passed build/smoke/provenance but was subsequently superseded:
+an all-bytes audit found embedded checkout paths in ELF files. The text-only
+audit had skipped binaries. Compiler source-path remapping and binary-inclusive
+validation are now required; a fresh complete dual-native run is pending.
 
 Core IR structural changes: NONE. CORE ARCHITECTURE FROZEN FOR v0.1.
 Public v0.1.0 release: NOT PUBLISHED. No release tag was created.

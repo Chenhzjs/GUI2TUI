@@ -19,7 +19,8 @@ version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["versi
 test "$("$bundle/bin/gui2tui" --version)" = "gui2tui $version"
 python3 "$(dirname -- "$0")/release-abi.py" "$bundle" "$temp/actual-abi.json"
 cmp "$bundle/ABI.json" "$temp/actual-abi.json"
-if grep -R -I -n -E '/Users/chenhz/|/home/runner/work/' "$bundle"; then echo 'developer path leaked into bundle' >&2; exit 1; fi
+# Scan binary bytes too; -l reports only filenames, never embedded user content.
+if grep -R -a -l -E '/Users/chenhz/|/home/runner/work/' "$bundle"; then echo 'developer path leaked into bundle' >&2; exit 1; fi
 if grep -R -I -n -E 'browser-phase-secret|phase-two-secret|phase-zero-secret|firefox-phase-secret' "$bundle" --exclude='release_smoke_gtk.py'; then echo 'test sentinel leaked outside smoke fixture' >&2; exit 1; fi
 if [[ "$smoke" == --smoke ]]; then "$bundle/smoke/run.sh"; fi
 echo "RELEASE_VALIDATION=PASS archive=$(basename -- "$archive") version=$version smoke=$([[ "$smoke" == --smoke ]] && echo true || echo false)"

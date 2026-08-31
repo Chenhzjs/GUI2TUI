@@ -8,7 +8,16 @@ target=${CARGO_TARGET_DIR:-$project/target}
 output=${RELEASE_DIR:-$project/dist}
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
-cargo build --locked --release --bins
+# Remove checkout paths from embedded panic/source locations as well as metadata.
+build_flags=$(python3 - "$project" <<'PY'
+import os, sys
+existing = os.environ.get("CARGO_ENCODED_RUSTFLAGS")
+flags = existing.split("\x1f") if existing else os.environ.get("RUSTFLAGS", "").split()
+flags.append(f"--remap-path-prefix={sys.argv[1]}=gui2tui-source")
+print("\x1f".join(flags), end="")
+PY
+)
+CARGO_ENCODED_RUSTFLAGS="$build_flags" cargo build --locked --release --bins
 version=$("$target/release/gui2tui" --version | awk '{print $2}')
 architecture=$(uname -m)
 case "$architecture" in x86_64|aarch64) ;; *) echo "Unsupported release architecture: $architecture" >&2; exit 1;; esac
