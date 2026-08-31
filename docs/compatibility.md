@@ -7,13 +7,19 @@ Qt 6.4.2 through PyQt 6.6.1, Chrome 152, and Firefox 154.0.1.
 
 | Capability | GTK4 | Qt6 | Chrome | Firefox | LibreOffice |
 | --- | --- | --- | --- | --- | --- |
-| Image semantic role | PASS (`Image`) | ACCESSIBILITY-LIMITED (`QLabel`) | PASS (`Image`) | NOT EXPOSED in captured tree | PASS (`Image`) |
-| Generic resource reference | UNRESOLVED | UNRESOLVED | PASS (local file URI via Accessible attribute) | UNRESOLVED | UNRESOLVED |
+| Image semantic role | PASS (`Image`) | ACCESSIBILITY-LIMITED (`QLabel`) | PASS (`Image`) | PASS (`Image`, fresh profile 2026-08-31) | PASS (`Image`) |
+| Generic resource reference | UNRESOLVED | UNRESOLVED | PASS (Image GetURI / Accessible attribute) | PASS (surrounding Hyperlink; video poster `src`) | UNRESOLVED |
+| PDF/video/model hyperlink descriptors | NOT TESTED | NOT TESTED | PASS (`GetURI(0)`) | PASS (`GetURI(0)`) | NOT TESTED |
+| Native video source | NOT TESTED | NOT TESTED | UNRESOLVED (`Video`) | UNRESOLVED (poster Image is not video source) | NOT TESTED |
+| TUI → separate recording broker | read-only | no Image candidate | PASS (4 references, 0 payload bytes) | PASS (4 references, 0 payload bytes) | read-only |
 | Portable artifact from accessibility | UNRESOLVED | UNRESOLVED | UNRESOLVED | UNRESOLVED | UNRESOLVED |
-| Safe fallback | unavailable | unavailable | reference handoff | unavailable/live visual | unavailable |
+| Safe fallback | unavailable | unavailable | reference handoff / unavailable video | reference handoff / unavailable video | unavailable |
 
 This matrix is updated only from live AT-SPI evidence. Application-specific APIs
 are forbidden; toolkit-independent broker and transport behavior is tested separately.
+Recording handlers prove dispatch, not downloaded content or visual rendering.
+`NAnchors` failed in both browser probes; a single bounded `GetURI(0)` read succeeded.
+See [Phase 3G validation](phase3g-validation.md) for commands and validation boundaries.
 
 | Feature | GTK4 | Qt6 | Chrome | Firefox |
 | --- | --- | --- | --- | --- |

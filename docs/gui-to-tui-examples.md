@@ -181,6 +181,51 @@ rendered:
 Selected "Dark" via Toggle (GUI disclosure calls=0)
 ```
 
+## 5. Original modality → explicitly authorized local handoff
+
+The following is a trimmed export from the real Chrome PTY test on 2026-08-31,
+not a design mockup. F4 opens a terminal task without changing the GUI:
+
+```text
+┌ External modality — original content ────────────────────────────────┐
+│  Document: "GUI2TUI Browser Fixture"                                 │
+│> Image: "Architecture diagram with semantic graph and terminal reader"│
+│  Unknown: "Open PDF manual"                                          │
+│  Unknown: "Open demo video"                                          │
+│  Video: "Native video modality probe"                                │
+│  Unknown: "Open portable model"                                      │
+│[Open locally] — approval required in local broker                     │
+│Local handler accepted resource; reference-only; artifact_bytes=0      │
+│↑/↓ Choose resource | Enter Open if available | Esc Return (GUI unchanged)│
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+Labels in the list show discovery roles; Hyperlink resolution supplies MIME/kind
+for PDF/video/model only when selected. This capture used an explicitly configured
+recording handler: it proves TUI → broker dispatch, **not a viewer screenshot**.
+Firefox completed the same four-reference test. GTK's image instead displayed
+`Original modality UNRESOLVED (read-only)`. With no connected broker, a resolved
+image displays `Local modality client unavailable (read-only)`, never a fake Open.
+
+The separate **real local viewer** test sent a reference-free SVG descriptor and
+726 artifact bytes through the broker to EOG 45.3. The received image was visually
+checked, not inferred from the launcher return value:
+
+![EOG displaying the received SVG artifact, 726 bytes](assets/phase3g-eog.png)
+
+This is a test screenshot of a local viewer in Xvfb. It is not a production
+StaticVisual acquisition path, and no framebuffer is sent by GUI2TUI.
+
+The reference-first version also completed the actual GUI → TUI → EOG chain with
+`artifact_bytes=0`. The source browser is visible behind the independent local viewer:
+
+![Chrome source image handed to EOG by the semantic TUI](assets/phase3g-reference-eog.png)
+
+A separate in-memory SVG had **no source URI or source file**. Its fallback
+transferred exactly 221 bytes after approval and was also visually verified:
+
+![Reference-free 221-byte artifact in the local viewer](assets/phase3g-memory-artifact.png)
+
 ## What these examples demonstrate
 
 ```text
