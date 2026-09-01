@@ -430,23 +430,11 @@ fn element_lines_for_width(
 }
 
 fn section_lines(label: &str, focused: bool, width: u16) -> Vec<String> {
-    let available = usize::from(width.clamp(20, 100).saturating_sub(6));
-    let title = truncate(label, available);
-    let inner = format!("─ {title} ");
-    let horizontal = "─".repeat(inner.chars().count().max(available));
+    let box_width = usize::from(width.clamp(20, 100).saturating_sub(2));
+    let title = truncate(label, box_width.saturating_sub(5));
+    let fill = box_width.saturating_sub(title.chars().count() + 5);
     let marker = if focused { "> " } else { "  " };
-    vec![
-        format!(
-            "{marker}┌{inner}{:─<width$}┐",
-            "",
-            width = horizontal
-                .chars()
-                .count()
-                .saturating_sub(inner.chars().count())
-        ),
-        "  │".to_owned(),
-        format!("  └{}┘", horizontal),
-    ]
+    vec![format!("{marker}┌─ {title} {:─<fill$}┐", "", fill = fill)]
 }
 
 fn boxed_lines(title: &str, body: &[String], focused: bool, width: u16) -> Vec<String> {
@@ -704,12 +692,12 @@ mod tests {
     }
 
     #[test]
-    fn group_headers_use_three_line_sections_and_fit_narrow_widths() {
+    fn group_headers_use_single_line_sections_and_fit_narrow_widths() {
         let group = element(SceneElementKind::Group {
             label: "Toolbar controls".into(),
         });
         let lines = element_lines_for_width(&group, false, None, 24);
-        assert_eq!(lines.len(), 3);
+        assert_eq!(lines.len(), 1);
         assert!(lines.iter().all(|line| line.chars().count() <= 24));
         assert!(lines[0].contains("Toolbar controls"));
     }

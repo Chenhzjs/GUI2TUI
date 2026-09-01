@@ -159,7 +159,9 @@ impl SceneElement {
             SceneElementKind::Field { .. } if width < 100 => 2,
             SceneElementKind::OpaqueContent { .. } => 5,
             SceneElementKind::DocumentSummary { .. } => 7,
-            SceneElementKind::Group { .. } | SceneElementKind::CommandHeader { .. } => 3,
+            // Region headers are dividers, not empty containers. Their
+            // children follow in document order and are rendered below.
+            SceneElementKind::Group { .. } | SceneElementKind::CommandHeader { .. } => 1,
             _ => 1,
         }
     }
