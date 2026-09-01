@@ -14,6 +14,19 @@ pub enum SelectorIntent {
     Quit,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SelectorTarget {
+    Running(String),
+    Launcher(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SelectorEntry {
+    label: String,
+    search_key: String,
+    target: SelectorTarget,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SelectorHitRegion {
     index: usize,
@@ -22,7 +35,7 @@ struct SelectorHitRegion {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApplicationSelector {
-    applications: Vec<String>,
+    entries: Vec<SelectorEntry>,
     query: String,
     filtering: bool,
     message: Option<String>,
@@ -33,7 +46,14 @@ pub struct ApplicationSelector {
 impl ApplicationSelector {
     pub fn new(applications: Vec<String>) -> Self {
         Self {
-            applications,
+            entries: applications
+                .into_iter()
+                .map(|name| SelectorEntry {
+                    label: format!("[running] {name}"),
+                    search_key: name.clone(),
+                    target: SelectorTarget::Running(name),
+                })
+                .collect(),
             query: String::new(),
             filtering: false,
             message: None,
@@ -43,29 +63,55 @@ impl ApplicationSelector {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.applications.is_empty()
+        self.entries.is_empty()
     }
 
-    pub fn selected_name(&self) -> Option<&str> {
-        self.filtered().nth(self.selected).map(String::as_str)
+    pub fn with_launchers(applications: Vec<String>, launchers: Vec<String>) -> Self {
+        let mut selector = Self::new(applications);
+        selector
+            .entries
+            .extend(launchers.into_iter().map(|id| SelectorEntry {
+                label: format!("[launch]  {id}"),
+                search_key: id.clone(),
+                target: SelectorTarget::Launcher(id),
+            }));
+        selector
     }
 
-    fn filtered(&self) -> impl Iterator<Item = &String> {
-        self.applications
-            .iter()
-            .filter(|name| name.to_lowercase().contains(&self.query.to_lowercase()))
+    pub fn selected_target(&self) -> Option<&SelectorTarget> {
+        self.filtered()
+            .nth(self.selected)
+            .map(|entry| &entry.target)
     }
 
-    pub fn replace(&mut self, applications: Vec<String>, message: Option<String>) {
-        let selected = self.selected_name().map(str::to_owned);
-        self.applications = applications;
+    fn filtered(&self) -> impl Iterator<Item = &SelectorEntry> {
+        self.entries.iter().filter(|entry| {
+            entry
+                .search_key
+                .to_lowercase()
+                .contains(&self.query.to_lowercase())
+        })
+    }
+
+    pub fn replace(
+        &mut self,
+        applications: Vec<String>,
+        launchers: Vec<String>,
+        message: Option<String>,
+    ) {
+        let selected = self.selected_target().cloned();
+        *self = Self::with_launchers(applications, launchers);
         self.message = message;
         let index = self
             .filtered()
-            .position(|name| Some(name) == selected.as_ref())
+            .position(|entry| Some(&entry.target) == selected.as_ref())
             .unwrap_or(0);
         self.selected = index;
         self.hit_regions.clear();
+    }
+
+    pub fn set_message(&mut self, message: impl Into<String>) {
+        self.message = Some(message.into());
     }
 
     /// Text input takes precedence over navigation shortcuts while filtering.
@@ -111,7 +157,7 @@ impl ApplicationSelector {
         true
     }
 
-    pub fn handle(&mut self, intent: SelectorIntent) -> Option<String> {
+    pub fn handle(&mut self, intent: SelectorIntent) -> Option<SelectorTarget> {
         let count = self.filtered().count();
         match intent {
             SelectorIntent::Next if count > 0 => {
@@ -126,19 +172,19 @@ impl ApplicationSelector {
                 };
                 None
             }
-            SelectorIntent::Open => self.selected_name().map(str::to_owned),
+            SelectorIntent::Open => self.selected_target().cloned(),
             SelectorIntent::Quit | SelectorIntent::Next | SelectorIntent::Previous => None,
         }
     }
 
-    pub fn click(&mut self, x: u16, y: u16) -> Option<String> {
+    pub fn click(&mut self, x: u16, y: u16) -> Option<SelectorTarget> {
         let index = self
             .hit_regions
             .iter()
             .find(|region| contains(region.rect, x, y))?
             .index;
         self.selected = index;
-        self.selected_name().map(str::to_owned)
+        self.selected_target().cloned()
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
@@ -164,8 +210,8 @@ impl ApplicationSelector {
         let start = self
             .selected
             .saturating_sub(inner.height.saturating_sub(1) as usize);
-        let names: Vec<_> = self.filtered().cloned().collect();
-        if names.is_empty() {
+        let entries: Vec<_> = self.filtered().cloned().collect();
+        if entries.is_empty() {
             let message = self.message.as_deref().unwrap_or(if self.query.is_empty() {
                 "No accessible applications found. Start a GUI application in the same desktop session.\n\n[d] diagnostics  [r] refresh  [q] quit"
             } else { "No applications match this filter. Press / then Esc to clear." });
@@ -174,7 +220,7 @@ impl ApplicationSelector {
                 inner,
             );
         }
-        for (index, name) in names
+        for (index, entry) in entries
             .iter()
             .enumerate()
             .skip(start)
@@ -195,15 +241,20 @@ impl ApplicationSelector {
             } else {
                 Style::default()
             };
-            frame.render_widget(Paragraph::new(format!("{marker}{name}")).style(style), row);
+            frame.render_widget(
+                Paragraph::new(format!("{marker}{}", entry.label)).style(style),
+                row,
+            );
             self.hit_regions
                 .push(SelectorHitRegion { index, rect: row });
         }
         frame.render_widget(
-            Paragraph::new(if self.filtering {
+            Paragraph::new(if let Some(message) = self.message.as_deref() {
+                message
+            } else if self.filtering {
                 "Type filter | Enter Apply | Esc Clear"
             } else {
-                "↑/↓ Select | Enter Open | / Filter | r/F5 Refresh | d Diagnose | q Quit"
+                "↑/↓ Select | Enter Open/Launch | / Filter | r/F5 Refresh | d Diagnose | q Quit"
             })
             .style(Style::default().fg(Color::Cyan)),
             footer,
@@ -257,10 +308,16 @@ mod tests {
                 selector.filter_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
             );
         }
-        assert_eq!(selector.selected_name(), Some("Browser"));
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running("Browser".into()))
+        );
         selector.filter_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        selector.replace(vec!["Other".into(), "Browser".into()], None);
-        assert_eq!(selector.selected_name(), Some("Browser"));
+        selector.replace(vec!["Other".into(), "Browser".into()], Vec::new(), None);
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running("Browser".into()))
+        );
     }
 
     #[test]
@@ -276,12 +333,18 @@ mod tests {
     fn selector_navigation_wraps_and_opens_the_selected_application() {
         let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
         selector.handle(SelectorIntent::Previous);
-        assert_eq!(selector.selected_name(), Some("Qt"));
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running("Qt".into()))
+        );
         selector.handle(SelectorIntent::Next);
-        assert_eq!(selector.selected_name(), Some("GTK"));
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running("GTK".into()))
+        );
         assert_eq!(
             selector.handle(SelectorIntent::Open),
-            Some("GTK".to_owned())
+            Some(SelectorTarget::Running("GTK".to_owned()))
         );
     }
 
@@ -292,8 +355,25 @@ mod tests {
         let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
         terminal.draw(|frame| selector.render(frame)).unwrap();
 
-        assert_eq!(selector.click(2, 2), Some("Qt".to_owned()));
-        assert_eq!(selector.selected_name(), Some("Qt"));
+        assert_eq!(
+            selector.click(2, 2),
+            Some(SelectorTarget::Running("Qt".to_owned()))
+        );
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running("Qt".into()))
+        );
         assert!(selector.click(39, 7).is_none());
+    }
+
+    #[test]
+    fn selector_exposes_registered_launchers_distinctly() {
+        let mut selector =
+            ApplicationSelector::with_launchers(vec!["GTK".into()], vec!["chromium".into()]);
+        selector.handle(SelectorIntent::Next);
+        assert_eq!(
+            selector.handle(SelectorIntent::Open),
+            Some(SelectorTarget::Launcher("chromium".into()))
+        );
     }
 }

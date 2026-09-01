@@ -14,6 +14,13 @@ semantic, content, scene, modality and runtime contracts are unchanged.
   the helper never installs packages automatically.
 - README now includes real Chrome/Firefox, LibreOffice Writer, GTK and Qt
   GUI-to-TUI examples.
+- Added explicit saved application launchers: `gui2tui app add/list/remove`,
+  `gui2tui launch ID`, and `[launch]` rows alongside `[running]` applications
+  in the selector. Launchers use direct argv execution, bounded AT-SPI waiting,
+  atomic private configuration writes, and never invoke a shell.
+- `gui2tui app add PROGRAM` infers ordinary defaults; bare `gui2tui app add`
+  provides an interactive fill-in wizard for executable, name, AT-SPI match and
+  optional arguments.
 - Release validation accepts immutable v0.1.0 packages while checking the
   helper whenever it is present in newer packages.
 
@@ -39,6 +46,7 @@ do not use that option as ordinary-user guidance.
 `gui2tui-inspect --list` enumerates applications already registered with the
 current AT-SPI session. It does not scan installed executables or launch them.
 Likewise, `gui2tui --app NAME` selects an already running accessible application.
+Use `gui2tui app add` plus `gui2tui launch ID` when GUI2TUI should start it.
 
 ## Language and text boundary
 

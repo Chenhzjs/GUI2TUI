@@ -23,6 +23,12 @@ event_queue_capacity = 2048
 
 [terminal]
 mouse = true
+
+[launchers.chromium]
+program = "chromium"
+args = ["--force-renderer-accessibility=complete", "about:blank"]
+match_name = "Chromium"
+wait_ms = 15000
 ```
 
 `backend_timeout_ms`: 50–30000 inclusive, existing per-backend operation deadline.
@@ -34,7 +40,24 @@ Precedence: built-in defaults < config file < explicit CLI.
 `--no-mouse` is user-visible. Example: `gui2tui --no-mouse config show` prints effective configuration.
 Unknown keys/types, unsupported versions and out-of-range values are rejected, never silently clamped.
 Syntax/type errors report file and line without echoing source values. A bad file must be fixed;
-CLI flags cannot make an invalid file valid. There is no toolkit-name or application-name configuration.
+CLI flags cannot make an invalid file valid. Launchers are user-owned process
+configuration, not toolkit-specific semantic behavior. Prefer managing them
+without hand-editing TOML:
+
+```bash
+gui2tui app add chromium
+gui2tui app add       # interactive fill-in wizard
+gui2tui app list
+gui2tui app remove chromium
+```
+
+Launcher ids are 1–64 ASCII letters/digits plus `.`, `_`, or `-`. A launcher
+contains one executable, at most 128 argv entries, an expected AT-SPI name, and
+a bounded 100–120000 ms registration wait. It never contains a shell command,
+environment override, password, privilege escalation, or automatic sandbox
+disable. Add advanced argv after `--`; override inferred values with `--id` and
+`--match`. Existing ids require explicit `--replace`. The config is atomically
+written mode 0600 and a config-file symlink is refused.
 
 Only existing runtime knobs are exposed. Content budgets, artifact size/TTL bounds and authorization
 continue using their tested policies; they are **not** pretend TOML settings. Local broker handlers

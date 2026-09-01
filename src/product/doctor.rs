@@ -79,7 +79,7 @@ fn availability(name: &'static str, result: Option<usize>) -> Check {
         Some(0) => check(
             name,
             Level::Warn,
-            "No accessible applications found. Start an application in the same desktop session, then refresh (r).",
+            "No accessible applications found. Start one in this same session, or save a launcher with `gui2tui app add`, then refresh (r). Installed binaries are not AT-SPI registrations.",
         ),
         Some(count) => check(
             name,

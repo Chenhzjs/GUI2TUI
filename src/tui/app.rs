@@ -156,6 +156,12 @@ impl TuiApplication {
         status
     }
 
+    /// Surface a recoverable product-shell error without mutating semantic
+    /// cache state. Used when an explicitly registered launcher fails.
+    pub fn set_shell_status(&mut self, message: impl Into<String>) {
+        self.status = message.into();
+    }
+
     pub fn set_terminal_attached(&mut self, attached: bool) {
         self.runtime.set_terminal_attached(attached);
         // Preserve semantic focus/Reader offsets; the next draw recomputes

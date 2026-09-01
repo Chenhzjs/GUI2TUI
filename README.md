@@ -59,6 +59,26 @@ opens a shell:
 
 See [one-command headless setup](docs/getting-started.md#one-command-headless-session).
 
+To save and launch an application directly (instead of starting it in another
+shell first), register its executable once. The shortest form is:
+
+```bash
+./bin/gui2tui app add chromium
+./bin/gui2tui launch chromium
+```
+
+Run `./bin/gui2tui app add` with no executable for a fill-in setup wizard.
+If Chromium does not register accessibility by default, add its required argv
+without a shell command:
+
+```bash
+./bin/gui2tui app add chromium --replace -- \
+  --force-renderer-accessibility=complete about:blank
+```
+
+Registered applications also appear as `[launch]` entries in the normal
+`gui2tui` selector; already accessible applications appear as `[running]`.
+
 Verify downloaded archives with:
 
 ```bash
@@ -91,7 +111,7 @@ accessibility information exposed by each application.
 
 ## What works in v0.1
 
-- Application discovery and terminal application selector
+- Application discovery, saved launchers and terminal application selector
 - Buttons, checkboxes, choices, menus and semantic command palette
 - Safe atomic editing of plain single-line text fields
 - Reader, Outline and bounded semantic Search

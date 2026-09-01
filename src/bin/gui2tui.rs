@@ -1,4 +1,10 @@
-use std::{error::Error, io, process::ExitCode, time::Duration};
+use std::{
+    error::Error,
+    io::{self, IsTerminal, Write},
+    path::Path,
+    process::ExitCode,
+    time::Duration,
+};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use crossterm::{
@@ -15,7 +21,10 @@ use gui2tui::{
     tui::{
         app::TuiApplication,
         input::mouse_to_intent,
-        selector::{ApplicationSelector, SelectorIntent, key_to_selector_intent, mouse_click},
+        selector::{
+            ApplicationSelector, SelectorIntent, SelectorTarget, key_to_selector_intent,
+            mouse_click,
+        },
     },
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
@@ -99,6 +108,16 @@ enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Manage explicit GUI launchers stored in the user configuration.
+    App {
+        #[command(subcommand)]
+        command: AppCommand,
+    },
+    /// Start a registered GUI application, wait for AT-SPI, and open it.
+    Launch {
+        /// Registered launcher id from `gui2tui app list`.
+        id: String,
+    },
 }
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
@@ -106,6 +125,33 @@ enum ConfigCommand {
     Check,
     Show,
     Init,
+}
+#[derive(Debug, Subcommand)]
+enum AppCommand {
+    /// Add a launcher without invoking a shell.
+    Add {
+        /// Executable name/path. Omit it to use the interactive setup wizard.
+        program: Option<String>,
+        /// Short launcher id shown in the selector; defaults to executable name.
+        #[arg(long)]
+        id: Option<String>,
+        /// Expected AT-SPI application name; defaults to ID.
+        #[arg(long = "match", value_name = "AT_SPI_NAME")]
+        match_name: Option<String>,
+        /// Maximum time to wait for AT-SPI registration.
+        #[arg(long, default_value_t = 15_000, value_parser = clap::value_parser!(u64).range(100..=120_000))]
+        wait_ms: u64,
+        /// Replace an existing launcher with the same id.
+        #[arg(long)]
+        replace: bool,
+        /// Arguments passed directly to the program. Put them after `--`.
+        #[arg(last = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// List registered launchers and their direct argv (no shell).
+    List,
+    /// Remove a registered launcher.
+    Remove { id: String },
 }
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum LogLevel {
@@ -126,7 +172,11 @@ async fn main() -> ExitCode {
 }
 
 async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
-    use gui2tui::product::{config::Config, doctor, paths};
+    use gui2tui::product::{
+        config::{Config, LauncherConfig},
+        doctor, launcher, paths,
+    };
+    let mut launch_id = None;
     match cli.command.take() {
         Some(Command::Doctor {
             verbose,
@@ -174,10 +224,78 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
             }
             return Ok(());
         }
+        Some(Command::App { command }) => {
+            let path = paths::config_path()?;
+            let mut config = Config::load(&path)?;
+            match command {
+                AppCommand::Add {
+                    program,
+                    id,
+                    match_name,
+                    wait_ms,
+                    replace,
+                    args,
+                } => {
+                    let (id, launcher) = complete_launcher_fields(program, id, match_name, args)?;
+                    if config.launchers.contains_key(&id) && !replace {
+                        return Err(format!(
+                            "launcher '{id}' already exists; pass --replace to update it"
+                        )
+                        .into());
+                    }
+                    config.launchers.insert(
+                        id.clone(),
+                        LauncherConfig {
+                            wait_ms,
+                            ..launcher
+                        },
+                    );
+                    config.save(&path)?;
+                    println!("Registered launcher '{id}' in {}", path.display());
+                    println!("Run it with: gui2tui launch {id}");
+                }
+                AppCommand::List => {
+                    if config.launchers.is_empty() {
+                        println!("No launchers registered. Add one with `gui2tui app add`.");
+                    }
+                    for (id, entry) in &config.launchers {
+                        println!(
+                            "{id}\tprogram={}\tmatch={}\targs={}",
+                            entry.program,
+                            entry.match_name,
+                            entry.args.len()
+                        );
+                    }
+                }
+                AppCommand::Remove { id } => {
+                    if config.launchers.remove(&id).is_none() {
+                        return Err(format!("launcher '{id}' is not registered").into());
+                    }
+                    config.save(&path)?;
+                    println!("Removed launcher '{id}'");
+                }
+            }
+            return Ok(());
+        }
+        Some(Command::Launch { id }) => launch_id = Some(id),
         Some(Command::Run) | None => {}
     }
     let mut config = Config::load(&paths::config_path()?)?;
     config.apply_overrides(cli.timeout_ms, cli.event_buffer_capacity, cli.no_mouse)?;
+    if let Some(id) = launch_id {
+        let registered = config
+            .launchers
+            .get(&id)
+            .ok_or_else(|| format!("launcher '{id}' is not registered; run `gui2tui app list`"))?;
+        cli.app = Some(
+            launcher::ensure_running(
+                &id,
+                registered,
+                Duration::from_millis(config.runtime.backend_timeout_ms),
+            )
+            .await?,
+        );
+    }
     if !matches!(cli.log_level, LogLevel::Off) {
         use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
         let path = paths::runtime_dir()?.join("product.log");
@@ -215,6 +333,84 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
     result
 }
 
+fn complete_launcher_fields(
+    program: Option<String>,
+    id: Option<String>,
+    match_name: Option<String>,
+    mut args: Vec<String>,
+) -> Result<(String, gui2tui::product::config::LauncherConfig), Box<dyn Error>> {
+    let interactive = program.is_none();
+    if interactive && !io::stdin().is_terminal() {
+        return Err(
+            "Executable is required when stdin is not a terminal; try `gui2tui app add PROGRAM`"
+                .into(),
+        );
+    }
+    let program = match program {
+        Some(program) => program,
+        None => prompt_required("Executable")?,
+    };
+    let inferred_id = Path::new(&program)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(program.as_str())
+        .to_owned();
+    let id = match id {
+        Some(id) => id,
+        None if interactive => prompt_default("Launcher name", &inferred_id)?,
+        None => inferred_id,
+    };
+    let match_name = match match_name {
+        Some(match_name) => match_name,
+        None if interactive => prompt_default("Expected AT-SPI name", &id)?,
+        None => id.clone(),
+    };
+    if interactive && args.is_empty() {
+        loop {
+            let argument = prompt("Extra argument (blank to finish)")?;
+            if argument.is_empty() {
+                break;
+            }
+            args.push(argument);
+        }
+    }
+    Ok((
+        id,
+        gui2tui::product::config::LauncherConfig {
+            program,
+            args,
+            match_name,
+            ..Default::default()
+        },
+    ))
+}
+
+fn prompt(label: &str) -> io::Result<String> {
+    print!("{label}: ");
+    io::stdout().flush()?;
+    let mut value = String::new();
+    io::stdin().read_line(&mut value)?;
+    Ok(value.trim().to_owned())
+}
+
+fn prompt_required(label: &str) -> Result<String, Box<dyn Error>> {
+    let value = prompt(label)?;
+    if value.is_empty() {
+        return Err(format!("{label} cannot be empty").into());
+    }
+    Ok(value)
+}
+
+fn prompt_default(label: &str, default: &str) -> io::Result<String> {
+    let value = prompt(&format!("{label} [{default}]"))?;
+    Ok(if value.is_empty() {
+        default.to_owned()
+    } else {
+        value
+    })
+}
+
 async fn run(cli: Cli, config: gui2tui::product::config::Config) -> Result<(), Box<dyn Error>> {
     let timeout = Duration::from_millis(config.runtime.backend_timeout_ms);
     let recovered = gui2tui::runtime::artifacts::recover_abandoned()?;
@@ -248,6 +444,7 @@ async fn run(cli: Cli, config: gui2tui::product::config::Config) -> Result<(), B
                 &mut terminal_events,
                 timeout,
                 config.terminal.mouse,
+                &config,
             )
             .await?
             else {
@@ -340,7 +537,7 @@ async fn run(cli: Cli, config: gui2tui::product::config::Config) -> Result<(), B
                 match terminal_event? {
                     Event::Key(key) => {
                         if !app.is_available() && key.code == crossterm::event::KeyCode::Char('b') {
-                                if let Some(name) = run_selector(&mut terminal, &mut signals, &mut terminal_events, timeout, config.terminal.mouse).await? {
+                                if let Some(name) = run_selector(&mut terminal, &mut signals, &mut terminal_events, timeout, config.terminal.mouse, &config).await? {
                                     app.select_fresh_application(name).await;
                                 }
                             continue;
@@ -389,9 +586,11 @@ async fn run_selector(
     events: &mut EventStream,
     timeout: Duration,
     mouse_enabled: bool,
+    config: &gui2tui::product::config::Config,
 ) -> Result<Option<String>, io::Error> {
-    let mut selector = ApplicationSelector::new(Vec::new());
-    refresh_selector(&mut selector, timeout).await;
+    let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
+    let mut selector = ApplicationSelector::with_launchers(Vec::new(), launchers.clone());
+    refresh_selector(&mut selector, timeout, &launchers).await;
     loop {
         terminal.draw(|frame| selector.render(frame))?;
         let event = tokio::select! {
@@ -410,7 +609,7 @@ async fn run_selector(
                     key.code,
                     crossterm::event::KeyCode::Char('r') | crossterm::event::KeyCode::F(5)
                 ) {
-                    refresh_selector(&mut selector, timeout).await;
+                    refresh_selector(&mut selector, timeout, &launchers).await;
                     continue;
                 }
                 if key.code == crossterm::event::KeyCode::Char('d') {
@@ -421,17 +620,32 @@ async fn run_selector(
                     if intent == SelectorIntent::Quit {
                         return Ok(None);
                     }
-                    if let Some(name) = selector.handle(intent) {
-                        return Ok(Some(name));
+                    if let Some(target) = selector.handle(intent) {
+                        if let Some(name) = resolve_selector_target(
+                            terminal,
+                            &mut selector,
+                            target,
+                            config,
+                            timeout,
+                        )
+                        .await?
+                        {
+                            return Ok(Some(name));
+                        }
                     }
                 }
             }
             Event::Mouse(mouse) => {
                 if mouse_enabled
                     && let Some((x, y)) = mouse_click(mouse)
-                    && let Some(name) = selector.click(x, y)
+                    && let Some(target) = selector.click(x, y)
                 {
-                    return Ok(Some(name));
+                    if let Some(name) =
+                        resolve_selector_target(terminal, &mut selector, target, config, timeout)
+                            .await?
+                    {
+                        return Ok(Some(name));
+                    }
                 }
             }
             Event::Resize(_, _) | Event::FocusGained | Event::FocusLost | Event::Paste(_) => {}
@@ -439,14 +653,58 @@ async fn run_selector(
     }
 }
 
-async fn refresh_selector(selector: &mut ApplicationSelector, timeout: Duration) {
+async fn resolve_selector_target(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    selector: &mut ApplicationSelector,
+    target: SelectorTarget,
+    config: &gui2tui::product::config::Config,
+    timeout: Duration,
+) -> io::Result<Option<String>> {
+    let SelectorTarget::Launcher(id) = target else {
+        let SelectorTarget::Running(name) = target else {
+            unreachable!()
+        };
+        return Ok(Some(name));
+    };
+    terminal.draw(|frame| {
+        frame.render_widget(
+            ratatui::widgets::Paragraph::new(format!(
+                "Starting '{id}' and waiting for its accessible interface..."
+            )),
+            frame.area(),
+        )
+    })?;
+    let result = match config.launchers.get(&id) {
+        Some(launcher) => gui2tui::product::launcher::ensure_running(&id, launcher, timeout).await,
+        None => Err(format!(
+            "launcher '{id}' disappeared from configuration; restart GUI2TUI"
+        )),
+    };
+    match result {
+        Ok(name) => Ok(Some(name)),
+        Err(error) => {
+            selector.set_message(error);
+            Ok(None)
+        }
+    }
+}
+
+async fn refresh_selector(
+    selector: &mut ApplicationSelector,
+    timeout: Duration,
+    launchers: &[String],
+) {
     let result = tokio::time::timeout(timeout, async {
         AtspiBackend::connect(timeout).await?.applications().await
     })
     .await;
     match result {
-        Ok(Ok(apps)) => selector.replace(apps.into_iter().map(|app| app.name).collect(), None),
-        _ => selector.replace(Vec::new(), Some("Desktop accessibility service unavailable. Use the same desktop session/user; press d for diagnostics.".into())),
+        Ok(Ok(apps)) => selector.replace(
+            apps.into_iter().map(|app| app.name).collect(),
+            launchers.to_vec(),
+            None,
+        ),
+        _ => selector.replace(Vec::new(), launchers.to_vec(), Some("Desktop accessibility service unavailable. Registered launchers still require a working AT-SPI session; press d for diagnostics.".into())),
     }
 }
 

@@ -32,10 +32,56 @@ fn fresh_user_commands_require_no_config_or_desktop() {
     }
     assert!(!temp.path().join("config/gui2tui/config.toml").exists());
     let help = String::from_utf8(run(temp.path(), &["--help"]).stdout).unwrap();
-    for command in ["doctor", "config", "run"] {
+    for command in ["doctor", "config", "app", "launch", "run"] {
         assert!(help.contains(command));
     }
     assert!(!help.contains("--max-nodes"));
+}
+
+#[test]
+fn launcher_registration_is_explicit_and_round_trips_argv() {
+    let temp = tempfile::tempdir().unwrap();
+    let add = run(
+        temp.path(),
+        &[
+            "app",
+            "add",
+            "chromium",
+            "--match",
+            "Chromium",
+            "--",
+            "--force-renderer-accessibility=complete",
+            "about:blank",
+        ],
+    );
+    assert!(
+        add.status.success(),
+        "{}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    assert!(
+        !run(temp.path(), &["app", "add", "other", "--id", "chromium"])
+            .status
+            .success()
+    );
+
+    let listed = run(temp.path(), &["app", "list"]);
+    let listing = String::from_utf8(listed.stdout).unwrap();
+    assert!(listing.contains("chromium\tprogram=chromium\tmatch=Chromium\targs=2"));
+    let saved = std::fs::read_to_string(temp.path().join("config/gui2tui/config.toml")).unwrap();
+    assert!(saved.contains("--force-renderer-accessibility=complete"));
+    assert!(saved.contains("about:blank"));
+
+    assert!(
+        run(temp.path(), &["app", "remove", "chromium"])
+            .status
+            .success()
+    );
+    assert!(
+        String::from_utf8(run(temp.path(), &["app", "list"]).stdout)
+            .unwrap()
+            .contains("No launchers registered")
+    );
 }
 #[test]
 fn doctor_json_failure_is_bounded_and_contents_free() {

@@ -39,6 +39,40 @@ gui2tui                # application selector, no required config
 gui2tui --app NAME     # exact or unambiguous accessible application name
 ```
 
+`--app` selects an application that is already registered in the current
+AT-SPI session. It does not scan installed packages or start a binary. To save
+a safe, explicit launcher and open it later:
+
+```bash
+gui2tui app add chromium       # executable; id and AT-SPI name inferred
+gui2tui app list
+gui2tui launch chromium
+```
+
+Or run `gui2tui app add` without an executable to fill in `Executable`, launcher
+name, expected AT-SPI name, and optional argv one field at a time. This wizard
+requires an interactive terminal and shows defaults that Enter accepts.
+
+The id (`chromium`) is the user-owned launcher name. `--id` overrides it;
+`--match` is the AT-SPI
+application name or an unambiguous substring; use `gui2tui-inspect --list`
+after a manual start to discover it. Options after `--` are passed directly to
+the executable. No shell is invoked. Adding an existing id is refused unless
+`--replace` is explicit; remove one with `gui2tui app remove ID`.
+
+With no arguments, the selector shows `[running] NAME` and `[launch] ID` rows.
+Selecting a launcher starts it, waits up to 15 seconds for AT-SPI registration,
+then opens the authoritative accessible application. Registration is still the
+application/toolkit's responsibility; GUI2TUI cannot manufacture an accessibility
+tree for software that exposes none.
+
+Chromium may require an explicit accessibility argv:
+
+```bash
+gui2tui app add chromium --replace -- \
+  --force-renderer-accessibility=complete about:blank
+```
+
 Doctor is explicit, bounded and does not read application text. No DISPLAY is not itself an
 error: the terminal may be headless while a GUI session runs elsewhere on the same host.
 No apps? Start an application in that desktop session, press `r`, or `d` for diagnostics.
@@ -59,6 +93,12 @@ inherit the same private accessibility session:
 gtk4-demo &
 gui2tui
 ```
+
+Launchers saved inside that helper's private HOME are intentionally temporary.
+For persistent launchers, provide your normal configuration HOME deliberately,
+or register them in the ordinary same-user desktop/SSH session. A program that
+is already running outside the helper's private D-Bus/AT-SPI session is not
+visible inside it.
 
 Or run everything as one command:
 

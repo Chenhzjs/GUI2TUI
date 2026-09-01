@@ -9,7 +9,9 @@ exit 1 means at least one FAIL. `--verbose` adds timeout information, not arbitr
 | --- | --- |
 | Session bus unavailable | Use the desktop's user/session. SSH alone does not create a desktop. For an isolated test use dbus-run-session + Xvfb/fixtures. Do not copy another user's credentials. |
 | org.a11y.Bus unavailable | Check AT-SPI service installation/activation in that session. Doctor explicitly calls GetAddress and reports failure; no speculative flag names. |
-| No applications | Start an accessibility-enabled GUI program there; press r/F5 in selector. d opens diagnostics. |
+| No applications | `--list` enumerates running AT-SPI applications, not installed binaries. Start one in this exact D-Bus/display session, or save it with `gui2tui app add` and choose its `[launch]` row. Chromium commonly needs `--force-renderer-accessibility=complete`. Press r/F5 to refresh; d opens diagnostics. |
+| Registered app never appears | Check `gui2tui app list`, executable spelling, `--match`, and accessibility flags. The launcher waits but cannot force a program to implement/register AT-SPI. In `gui2tui-headless`, start or launch the app inside the helper shell; an app outside its private session is invisible. |
+| Snap Chromium in a private helper session | Strict Snap confinement can hide a private `dbus-run-session` socket even though X11 works; the browser then cannot register on that AT-SPI bus. Use Chromium in the normal desktop session, or a non-Snap package for the isolated helper. Do not weaken the sandbox as a generic fix. |
 | DISPLAY unset | Not automatically a failure. Headless terminal operation needs access to the GUI's accessibility session, not a viewer. |
 | Application exited | Old controls become non-interactive. F5 searches for a fresh generation; b opens selector, d diagnoses. q quits. |
 | Backend disappeared | The existing bounded recovery retries; if still unavailable F5 retries explicitly. No old identities are revived. |

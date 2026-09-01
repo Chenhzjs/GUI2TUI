@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     io::{self, Read, Write},
-    os::unix::fs::OpenOptionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
 };
 
-pub const EXAMPLE: &str = "# GUI2TUI v0.1: all settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n";
+pub const EXAMPLE: &str = "# GUI2TUI v0.1: all settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n\n# Save launchers with `gui2tui app add`; do not hand-write shell commands.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -14,6 +15,15 @@ pub struct Config {
     pub version: u32,
     pub runtime: RuntimeConfig,
     pub terminal: TerminalConfig,
+    pub launchers: BTreeMap<String, LauncherConfig>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct LauncherConfig {
+    pub program: String,
+    pub args: Vec<String>,
+    pub match_name: String,
+    pub wait_ms: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -32,6 +42,17 @@ impl Default for Config {
             version: 1,
             runtime: RuntimeConfig::default(),
             terminal: TerminalConfig::default(),
+            launchers: BTreeMap::new(),
+        }
+    }
+}
+impl Default for LauncherConfig {
+    fn default() -> Self {
+        Self {
+            program: String::new(),
+            args: Vec::new(),
+            match_name: String::new(),
+            wait_ms: 15_000,
         }
     }
 }
@@ -69,6 +90,30 @@ impl Config {
         }
         if !(4..=65_536).contains(&self.runtime.event_queue_capacity) {
             return Err("runtime.event_queue_capacity must be 4..=65536".into());
+        }
+        for (id, launcher) in &self.launchers {
+            if id.is_empty()
+                || id.len() > 64
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            {
+                return Err(
+                    "launcher id must use 1..=64 ASCII letters, digits, '.', '_' or '-'".into(),
+                );
+            }
+            if launcher.program.is_empty() || launcher.program.len() > 4096 {
+                return Err(format!("launchers.{id}.program must be 1..=4096 bytes"));
+            }
+            if launcher.match_name.is_empty() || launcher.match_name.len() > 256 {
+                return Err(format!("launchers.{id}.match_name must be 1..=256 bytes"));
+            }
+            if launcher.args.len() > 128 || launcher.args.iter().any(|arg| arg.len() > 4096) {
+                return Err(format!("launchers.{id}.args exceeds the safe limit"));
+            }
+            if !(100..=120_000).contains(&launcher.wait_ms) {
+                return Err(format!("launchers.{id}.wait_ms must be 100..=120000"));
+            }
         }
         Ok(())
     }
@@ -116,6 +161,39 @@ impl Config {
         file.write_all(EXAMPLE.as_bytes())?;
         file.sync_all()
     }
+
+    /// Atomically replace the user-owned configuration without following a
+    /// pre-existing config-file symlink.
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        self.validate()?;
+        if let Ok(metadata) = fs::symlink_metadata(path)
+            && metadata.file_type().is_symlink()
+        {
+            return Err(format!("Refusing to replace symlink {}", path.display()));
+        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Configuration path has no parent".to_owned())?;
+        fs::create_dir_all(parent).map_err(|_| "Cannot create configuration directory")?;
+        let mut temporary = tempfile::Builder::new()
+            .prefix(".config-")
+            .tempfile_in(parent)
+            .map_err(|_| "Cannot create temporary configuration file")?;
+        temporary
+            .as_file()
+            .set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|_| "Cannot secure temporary configuration file")?;
+        let encoded = toml::to_string_pretty(self)
+            .map_err(|_| "Cannot serialize configuration".to_owned())?;
+        temporary
+            .write_all(encoded.as_bytes())
+            .and_then(|_| temporary.as_file().sync_all())
+            .map_err(|_| "Cannot write configuration")?;
+        temporary
+            .persist(path)
+            .map_err(|_| format!("Cannot replace {}", path.display()))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -161,12 +239,50 @@ mod tests {
     }
     #[test]
     fn init_never_overwrites_and_readonly_config_loads() {
-        use std::os::unix::fs::PermissionsExt;
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("config.toml");
         Config::init(&path).unwrap();
         assert!(Config::init(&path).is_err());
         fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
         assert!(Config::load(&path).is_ok());
+    }
+
+    #[test]
+    fn launcher_round_trip_and_validation() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("config.toml");
+        let mut config = Config::default();
+        config.launchers.insert(
+            "chromium".into(),
+            LauncherConfig {
+                program: "chromium".into(),
+                args: vec!["--force-renderer-accessibility=complete".into()],
+                match_name: "Google Chrome".into(),
+                wait_ms: 20_000,
+            },
+        );
+        config.save(&path).unwrap();
+        assert_eq!(Config::load(&path).unwrap().launchers, config.launchers);
+        assert_eq!(
+            fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        config
+            .launchers
+            .insert("bad id".into(), LauncherConfig::default());
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn save_refuses_config_symlink() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        fs::write(&target, "untouched").unwrap();
+        let link = temp.path().join("config.toml");
+        symlink(&target, &link).unwrap();
+        assert!(Config::default().save(&link).is_err());
+        assert_eq!(fs::read_to_string(target).unwrap(), "untouched");
     }
 }
