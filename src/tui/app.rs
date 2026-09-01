@@ -598,6 +598,13 @@ impl TuiApplication {
             "initial semantic TUI pipeline breakdown"
         );
         let snapshot_ms = started.elapsed().as_millis();
+        if let Some(reason) = bootstrap.metrics.fallback_reason.as_deref() {
+            tracing::debug!(
+                bootstrap_strategy = %bootstrap.metrics.strategy,
+                fallback_reason = reason,
+                "semantic bootstrap used correctness fallback"
+            );
+        }
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
         let mut runtime = crate::runtime::RuntimeSession::default();
@@ -1355,10 +1362,15 @@ impl TuiApplication {
                     {
                         view.results.clear();
                         view.result_selected = 0;
+                        let scope = if search.progress.total_blocks.is_some() {
+                            "Full document search"
+                        } else {
+                            "Exposed semantic content search"
+                        };
                         view.full_search = Some(search);
-                        self.status =
-                            "Full document search started; Esc cancels immediately between bounded RPCs"
-                                .to_owned();
+                        self.status = format!(
+                            "{scope} started; Esc cancels immediately between bounded RPCs"
+                        );
                     }
                 }
             }
@@ -1370,8 +1382,13 @@ impl TuiApplication {
                 {
                     search.cancel();
                     let cache = self.content.cache_metrics();
+                    let scope = if search.progress.total_blocks.is_some() {
+                        "Full search"
+                    } else {
+                        "Exposed semantic content search"
+                    };
                     self.status = format!(
-                        "Full search cancelled after {} blocks and {} text RPCs; cache={} bytes/{} ranges",
+                        "{scope} cancelled after {} blocks and {} text RPCs; cache={} bytes/{} ranges",
                         search.progress.scanned_blocks,
                         search.progress.text_rpcs,
                         cache.bytes,
@@ -1543,12 +1560,10 @@ impl TuiApplication {
         if let Some(view) = self.content_view.as_mut() {
             view.results = search.results.clone();
             if search.state == SearchState::Complete {
-                self.status = format!(
-                    "Full search complete — {} blocks, {} matches, {} text RPCs, cache={} bytes",
-                    search.progress.scanned_blocks,
+                self.status = completed_search_status(
+                    search.progress,
                     search.results.len(),
-                    search.progress.text_rpcs,
-                    self.content.cache().metrics().bytes
+                    self.content.cache().metrics().bytes,
                 );
             }
             view.full_search = Some(search);
@@ -2731,6 +2746,22 @@ impl TuiApplication {
     }
 }
 
+fn completed_search_status(
+    progress: crate::content::SearchProgress,
+    result_count: usize,
+    cache_bytes: usize,
+) -> String {
+    let scope = if progress.total_blocks.is_some() {
+        "Full search complete"
+    } else {
+        "Exposed semantic content exhausted (document coverage partial or unknown)"
+    };
+    format!(
+        "{} — {} blocks, {} matches, {} text RPCs, cache={} bytes",
+        scope, progress.scanned_blocks, result_count, progress.text_rpcs, cache_bytes
+    )
+}
+
 impl Drop for TuiApplication {
     fn drop(&mut self) {
         self.modality_cancel.cancel();
@@ -3326,5 +3357,32 @@ mod tests {
         };
         assert_eq!(choice_scene_label(&choice, "Alpha"), "Choice: Beta");
         assert_eq!(choice_scene_label(&choice, "Theme"), "Theme: Beta");
+    }
+
+    #[test]
+    fn completed_search_status_distinguishes_source_from_exposed_content() {
+        let complete = completed_search_status(
+            crate::content::SearchProgress {
+                scanned_blocks: 17,
+                total_blocks: Some(17),
+                text_rpcs: 2,
+            },
+            4,
+            100,
+        );
+        assert!(complete.starts_with("Full search complete"));
+
+        let partial = completed_search_status(
+            crate::content::SearchProgress {
+                scanned_blocks: 17,
+                total_blocks: None,
+                text_rpcs: 0,
+            },
+            4,
+            100,
+        );
+        assert!(partial.starts_with("Exposed semantic content exhausted"));
+        assert!(partial.contains("coverage partial or unknown"));
+        assert!(!partial.contains("Full search complete"));
     }
 }

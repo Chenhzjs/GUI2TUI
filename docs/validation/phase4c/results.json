@@ -10,20 +10,25 @@
     },
     "result": "PASS",
     "selector": "Mousepad",
-    "snapshot_wall_ms": 35.68,
+    "snapshot_wall_ms": 13.78,
     "nodes": 319,
+    "advertised_action_nodes": 233,
     "cache_forced_exit": 0,
-    "first_frame_ms": 120.08,
+    "first_frame_ms": 107.25,
+    "tui_bootstrap": {
+      "nodes": 319,
+      "strategy": "AT-SPI Cache",
+      "ms": 12
+    },
     "resources_bootstrap": {
-      "rss_kib": 12856,
+      "rss_kib": 12788,
       "fd": 19
     },
     "resources_after_workflow": {
-      "rss_kib": 16244,
+      "rss_kib": 16248,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-1WOogQ",
-    "advertised_action_nodes": 233
+    "evidence_directory": "gui2tui-p4c-mbwsyZ"
   },
   {
     "application": "gtk",
@@ -35,20 +40,25 @@
     },
     "result": "PASS",
     "selector": "gui2tui-live-fixture",
-    "snapshot_wall_ms": 30.99,
+    "snapshot_wall_ms": 56.05,
     "nodes": 44,
+    "advertised_action_nodes": 31,
     "cache_forced_exit": 0,
-    "first_frame_ms": 117.72,
+    "first_frame_ms": 127.65,
+    "tui_bootstrap": {
+      "nodes": 44,
+      "strategy": "AT-SPI Cache",
+      "ms": 4
+    },
     "resources_bootstrap": {
-      "rss_kib": 10880,
+      "rss_kib": 10816,
       "fd": 18
     },
     "resources_after_workflow": {
-      "rss_kib": 11216,
+      "rss_kib": 11096,
       "fd": 18
     },
-    "evidence_directory": "gui2tui-p4c-DYItY0",
-    "advertised_action_nodes": 31
+    "evidence_directory": "gui2tui-p4c-FpGr5J"
   },
   {
     "application": "qt",
@@ -60,44 +70,56 @@
     },
     "result": "PASS",
     "selector": "gui2tui-qt-fixture",
-    "snapshot_wall_ms": 16.17,
+    "snapshot_wall_ms": 16.27,
     "nodes": 31,
+    "advertised_action_nodes": 19,
     "cache_forced_exit": 1,
-    "first_frame_ms": 105.27,
+    "first_frame_ms": 108.01,
+    "tui_bootstrap": {
+      "nodes": 31,
+      "strategy": "recursive walk",
+      "ms": 26
+    },
     "resources_bootstrap": {
-      "rss_kib": 10724,
+      "rss_kib": 10628,
       "fd": 18
     },
     "resources_after_workflow": {
-      "rss_kib": 10808,
+      "rss_kib": 10720,
       "fd": 18
     },
-    "evidence_directory": "gui2tui-p4c-YZYTmC",
-    "advertised_action_nodes": 19
+    "evidence_directory": "gui2tui-p4c-p7WNYj"
   },
   {
     "application": "designer",
     "mode": "workflow",
     "checks": {
       "discovery_tree": "PASS",
-      "startup_dialog_close_commands": "PASS"
+      "real_choice_navigation": "PASS",
+      "real_form_control_toggle": "PASS",
+      "real_command_dialog_context": "PASS"
     },
     "result": "PASS",
     "selector": "designer",
-    "snapshot_wall_ms": 246.53,
+    "snapshot_wall_ms": 258.52,
     "nodes": 311,
+    "advertised_action_nodes": 165,
     "cache_forced_exit": 1,
-    "first_frame_ms": 330.75,
+    "first_frame_ms": 429.54,
+    "tui_bootstrap": {
+      "nodes": 311,
+      "strategy": "recursive walk",
+      "ms": 319
+    },
     "resources_bootstrap": {
-      "rss_kib": 12632,
+      "rss_kib": 12444,
       "fd": 18
     },
     "resources_after_workflow": {
-      "rss_kib": 13244,
+      "rss_kib": 15536,
       "fd": 18
     },
-    "evidence_directory": "gui2tui-p4c-WMHxGh",
-    "advertised_action_nodes": 165
+    "evidence_directory": "gui2tui-p4c-YXSxRj"
   },
   {
     "application": "chrome",
@@ -108,56 +130,31 @@
       "reader_outline_search_frames": "PASS",
       "external_content_mutation": "PASS",
       "table_navigation": "PASS",
+      "headless_modality_no_fake_open": "PASS",
+      "headless_reference_payload_zero": "PASS",
       "reader_death_restart_stale_generation": "PASS"
     },
     "result": "PASS",
     "selector": "Google Chrome",
-    "snapshot_wall_ms": 307.07,
+    "snapshot_wall_ms": 263.85,
     "nodes": 391,
     "advertised_action_nodes": 391,
     "cache_forced_exit": 1,
-    "first_frame_ms": 343.05,
+    "first_frame_ms": 317.74,
     "tui_bootstrap": {
       "nodes": 391,
       "strategy": "recursive walk",
-      "ms": 307
+      "ms": 279
     },
     "resources_bootstrap": {
-      "rss_kib": 13548,
+      "rss_kib": 13352,
       "fd": 19
     },
     "resources_after_workflow": {
-      "rss_kib": 13688,
+      "rss_kib": 13316,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-KkM2s8"
-  },
-  {
-    "application": "firefox",
-    "mode": "workflow",
-    "checks": {
-      "discovery_tree": "PASS",
-      "progressive_cancellation": "PASS",
-      "reader_outline_search_frames": "PASS",
-      "external_content_mutation": "PASS",
-      "table_navigation": "PASS"
-    },
-    "result": "PASS",
-    "selector": "Firefox",
-    "snapshot_wall_ms": 195.52,
-    "nodes": 289,
-    "advertised_action_nodes": 235,
-    "cache_forced_exit": 1,
-    "first_frame_ms": 315.4,
-    "resources_bootstrap": {
-      "rss_kib": 13308,
-      "fd": 19
-    },
-    "resources_after_workflow": {
-      "rss_kib": 13328,
-      "fd": 19
-    },
-    "evidence_directory": "gui2tui-p4c-9jZlSI"
+    "evidence_directory": "gui2tui-p4c-jIQunL"
   },
   {
     "application": "firefox",
@@ -173,244 +170,117 @@
     },
     "result": "PASS",
     "selector": "Firefox",
-    "snapshot_wall_ms": 217.87,
-    "nodes": 289,
-    "advertised_action_nodes": 235,
+    "snapshot_wall_ms": 215.13,
+    "nodes": 281,
+    "advertised_action_nodes": 226,
     "cache_forced_exit": 1,
-    "first_frame_ms": 328.4,
+    "first_frame_ms": 315.98,
     "resources_bootstrap": {
-      "rss_kib": 13232,
+      "rss_kib": 13108,
       "fd": 19
     },
     "resources_after_workflow": {
-      "rss_kib": 13272,
+      "rss_kib": 13124,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-oDZ39F"
+    "evidence_directory": "gui2tui-p4c-P5gvYe"
   },
   {
     "application": "writer",
     "mode": "workflow",
     "checks": {
       "discovery_tree": "PASS",
+      "progressive_cancellation": "PASS",
       "reader_outline_search_frames": "PASS",
       "command_dialog_close": "PASS"
     },
     "result": "PASS",
     "selector": "soffice",
-    "snapshot_wall_ms": 1533.89,
+    "snapshot_wall_ms": 1677.04,
     "nodes": 1978,
+    "advertised_action_nodes": 1431,
     "cache_forced_exit": 1,
-    "first_frame_ms": 1659.55,
+    "first_frame_ms": 1696.81,
+    "tui_bootstrap": {
+      "nodes": 1978,
+      "strategy": "recursive walk",
+      "ms": 1579
+    },
     "resources_bootstrap": {
-      "rss_kib": 19828,
+      "rss_kib": 19776,
       "fd": 19
     },
     "resources_after_workflow": {
-      "rss_kib": 35760,
+      "rss_kib": 35336,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-d3asz4",
-    "advertised_action_nodes": 1431
+    "evidence_directory": "gui2tui-p4c-TLgTAG"
   },
   {
     "application": "writer-long",
     "mode": "workflow",
     "checks": {
       "discovery_tree": "PASS",
+      "progressive_cancellation": "PASS",
       "reader_outline_search_frames": "PASS",
+      "partial_search_wording": "PASS",
+      "ordinary_realization_attempt": "PASS",
       "command_dialog_close": "PASS"
     },
     "result": "PASS",
     "selector": "soffice",
-    "snapshot_wall_ms": 1357.08,
+    "snapshot_wall_ms": 1649.18,
     "nodes": 1984,
+    "advertised_action_nodes": 1431,
     "cache_forced_exit": 1,
-    "first_frame_ms": 1704.42,
+    "first_frame_ms": 1655.8,
+    "tui_bootstrap": {
+      "nodes": 1984,
+      "strategy": "recursive walk",
+      "ms": 1582
+    },
     "resources_bootstrap": {
-      "rss_kib": 20012,
+      "rss_kib": 19916,
       "fd": 19
+    },
+    "writer_realization": {
+      "before_blocks": 23,
+      "after_blocks": 23,
+      "ordinary_navigation": "Go to Page...",
+      "navigation_result": "SAFE DEGRADATION: page selector exposed only as Slider"
     },
     "resources_after_workflow": {
-      "rss_kib": 36096,
+      "rss_kib": 37716,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-22gTfG",
-    "advertised_action_nodes": 1431
+    "evidence_directory": "gui2tui-p4c-bUk7SS"
   },
   {
-    "application": "pcmanfm-settings",
-    "mode": "probe",
-    "checks": {
-      "discovery_tree": "PASS"
-    },
-    "result": "PROBE PASS",
-    "selector": "pcmanfm-qt",
-    "snapshot_wall_ms": 156.25,
-    "nodes": 176,
-    "advertised_action_nodes": 124,
-    "cache_forced_exit": 1,
-    "first_frame_ms": 224.86,
-    "tui_bootstrap": {
-      "nodes": 176,
-      "strategy": "recursive walk",
-      "ms": 138
-    },
-    "resources_bootstrap": {
-      "rss_kib": 11792,
-      "fd": 18
-    },
-    "evidence_directory": "gui2tui-p4c-8UOdLt"
-  },
-  {
-    "application": "pcmanfm-settings",
-    "mode": "workflow",
-    "checks": {},
-    "result": "BLOCKED",
-    "selector": "pcmanfm-qt",
-    "error_type": "AssertionError",
-    "evidence_directory": "gui2tui-p4c-gWmE6P"
-  },
-  {
-    "application": "chrome-large",
-    "mode": "benchmark",
-    "checks": {
-      "discovery_tree": "PASS"
-    },
-    "result": "PASS",
-    "selector": "Google Chrome",
-    "snapshot_wall_ms": 5037.77,
-    "nodes": 5158,
-    "cache_forced_exit": 1,
-    "first_frame_ms": 4156.93,
-    "resources_bootstrap": {
-      "rss_kib": 38744,
-      "fd": 19
-    },
-    "benchmark": [
-      {
-        "first_frame_ms": 4055.06,
-        "rss_kib": 39132,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 3699.31,
-        "rss_kib": 38560,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 4238.46,
-        "rss_kib": 39240,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 4202.45,
-        "rss_kib": 39160,
-        "fd": 19
-      }
-    ],
-    "warm_first_frame_median_ms": 4202.45,
-    "evidence_directory": "gui2tui-p4c-P2B5b2",
-    "advertised_action_nodes": 5158
-  },
-  {
-    "application": "chrome-large",
-    "mode": "benchmark",
-    "checks": {
-      "discovery_tree": "PASS"
-    },
-    "result": "PASS",
-    "selector": "Google Chrome",
-    "snapshot_wall_ms": 3315.67,
-    "nodes": 5158,
-    "cache_forced_exit": 1,
-    "first_frame_ms": 3630.3,
-    "resources_bootstrap": {
-      "rss_kib": 38920,
-      "fd": 19
-    },
-    "benchmark": [
-      {
-        "first_frame_ms": 3697.61,
-        "rss_kib": 38472,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 4042.27,
-        "rss_kib": 38560,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 4054.31,
-        "rss_kib": 38988,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 4079.62,
-        "rss_kib": 39032,
-        "fd": 19
-      }
-    ],
-    "warm_first_frame_median_ms": 4054.31,
-    "evidence_directory": "gui2tui-p4c-7iUKrn",
-    "advertised_action_nodes": 5158
-  },
-  {
-    "application": "chrome-large",
-    "mode": "benchmark",
-    "checks": {
-      "discovery_tree": "PASS"
-    },
-    "result": "PASS",
-    "selector": "Google Chrome",
-    "snapshot_wall_ms": 3924.38,
-    "nodes": 5166,
-    "cache_forced_exit": 1,
-    "first_frame_ms": 3765.48,
-    "resources_bootstrap": {
-      "rss_kib": 38732,
-      "fd": 19
-    },
-    "benchmark": [
-      {
-        "first_frame_ms": 3783.91,
-        "rss_kib": 39504,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 3771.81,
-        "rss_kib": 39564,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 3852.63,
-        "rss_kib": 39252,
-        "fd": 19
-      },
-      {
-        "first_frame_ms": 3767.19,
-        "rss_kib": 39352,
-        "fd": 19
-      }
-    ],
-    "warm_first_frame_median_ms": 3771.81,
-    "evidence_directory": "gui2tui-p4c-VXZnry",
-    "advertised_action_nodes": 5166
-  },
-  {
-    "application": "static-image",
-    "mode": "modality",
+    "application": "writer-settings",
+    "mode": "settings-probe",
     "checks": {
       "discovery_tree": "PASS",
-      "headless_snapshot_same_host": "PASS"
+      "settings_tree_navigation": "PASS",
+      "settings_checkbox_toggled_and_restored": "PASS",
+      "settings_dialog_context_restored": "PASS"
     },
     "result": "PASS",
-    "selector": "python3",
-    "snapshot_wall_ms": 6.26,
-    "nodes": 4,
-    "cache_forced_exit": 0,
-    "evidence_directory": "gui2tui-p4c-fdDAgb",
-    "advertised_action_nodes": 3
+    "selector": "soffice",
+    "snapshot_wall_ms": 1549.9,
+    "nodes": 1978,
+    "advertised_action_nodes": 1431,
+    "cache_forced_exit": 1,
+    "first_frame_ms": 1474.66,
+    "tui_bootstrap": {
+      "nodes": 1978,
+      "strategy": "recursive walk",
+      "ms": 1400
+    },
+    "resources_bootstrap": {
+      "rss_kib": 19676,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-bYWTbW"
   },
   {
     "application": "electron",
@@ -421,24 +291,323 @@
     },
     "result": "PASS",
     "selector": "Code",
-    "snapshot_wall_ms": 237.47,
+    "snapshot_wall_ms": 254.1,
     "nodes": 367,
     "advertised_action_nodes": 367,
     "cache_forced_exit": 1,
-    "first_frame_ms": 344.48,
+    "first_frame_ms": 323.83,
     "tui_bootstrap": {
       "nodes": 367,
       "strategy": "recursive walk",
-      "ms": 266
+      "ms": 291
     },
     "resources_bootstrap": {
-      "rss_kib": 13616,
+      "rss_kib": 13508,
       "fd": 19
     },
     "resources_after_workflow": {
-      "rss_kib": 13700,
+      "rss_kib": 13584,
       "fd": 19
     },
-    "evidence_directory": "gui2tui-p4c-34wu6I"
+    "evidence_directory": "gui2tui-p4c-AJkN8d"
+  },
+  {
+    "application": "static-image",
+    "mode": "modality",
+    "checks": {
+      "discovery_tree": "PASS",
+      "headless_snapshot_same_host": "PASS"
+    },
+    "result": "PASS",
+    "selector": "python3",
+    "snapshot_wall_ms": 7.27,
+    "nodes": 4,
+    "advertised_action_nodes": 3,
+    "cache_forced_exit": 0,
+    "evidence_directory": "gui2tui-p4c-R5Wbb3"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "UNAVAILABLE"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 7243.08,
+      "initial_frame_ms": null,
+      "nodes": 5158,
+      "strategy": "recursive walk",
+      "bootstrap_ms": 3457,
+      "post_bootstrap_fallbacks": [
+        "? Help | Tab Focus | Enter Use | Full refresh fallback: application dirty \u2014 5158 nodes via recursive walk in 3457 ms full_snapshots=2"
+      ],
+      "rss_kib": 111776,
+      "fd": 19,
+      "cache_items_before": 231
+    },
+    "cache_ready_attempts": 54,
+    "cache_ready": null,
+    "evidence_directory": "gui2tui-p4c-0HjlpI"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 223.23,
+      "initial_frame_ms": 223.2,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 170,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 35424,
+      "fd": 19,
+      "cache_items_before": 5158
+    },
+    "cache_ready_attempts": 1,
+    "cache_ready": {
+      "first_frame_ms": 228.03,
+      "initial_frame_ms": 227.99,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 167,
+      "rss_kib": 35460,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-a3dMmZ"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 226.99,
+      "initial_frame_ms": 226.95,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 168,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 35496,
+      "fd": 19,
+      "cache_items_before": 5158
+    },
+    "cache_ready_attempts": 1,
+    "cache_ready": {
+      "first_frame_ms": 217.57,
+      "initial_frame_ms": 217.54,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 166,
+      "rss_kib": 35496,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-9TCDad"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 215.27,
+      "initial_frame_ms": 215.24,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 165,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 35416,
+      "fd": 19,
+      "cache_items_before": 5158
+    },
+    "cache_ready_attempts": 1,
+    "cache_ready": {
+      "first_frame_ms": 240.18,
+      "initial_frame_ms": 240.15,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 175,
+      "rss_kib": 35420,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-f1UQUU"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "UNAVAILABLE"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 3722.65,
+      "initial_frame_ms": null,
+      "nodes": null,
+      "strategy": null,
+      "bootstrap_ms": null,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 41184,
+      "fd": 19,
+      "cache_items_before": 5142
+    },
+    "cache_ready_attempts": 41,
+    "cache_ready": null,
+    "evidence_directory": "gui2tui-p4c-z394m0"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "UNAVAILABLE"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 4073.23,
+      "initial_frame_ms": null,
+      "nodes": null,
+      "strategy": null,
+      "bootstrap_ms": null,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 41640,
+      "fd": 19,
+      "cache_items_before": 5156
+    },
+    "cache_ready_attempts": 42,
+    "cache_ready": null,
+    "evidence_directory": "gui2tui-p4c-yw1bhv"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "UNAVAILABLE"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 7303.74,
+      "initial_frame_ms": null,
+      "nodes": 5158,
+      "strategy": "recursive walk",
+      "bootstrap_ms": 3446,
+      "post_bootstrap_fallbacks": [
+        "? Help | Tab Focus | Enter Use | Full refresh fallback: application dirty \u2014 5158 nodes via recursive walk in 3446 ms full_snapshots=2"
+      ],
+      "rss_kib": 113016,
+      "fd": 19,
+      "cache_items_before": 231
+    },
+    "cache_ready_attempts": 54,
+    "cache_ready": null,
+    "evidence_directory": "gui2tui-p4c-Pp6v4O"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "UNAVAILABLE"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 3643.89,
+      "initial_frame_ms": null,
+      "nodes": null,
+      "strategy": null,
+      "bootstrap_ms": null,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 42480,
+      "fd": 19,
+      "cache_items_before": 228
+    },
+    "cache_ready_attempts": 54,
+    "cache_ready": null,
+    "evidence_directory": "gui2tui-p4c-PFM02F"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 219.9,
+      "initial_frame_ms": 219.87,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 162,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 36872,
+      "fd": 19,
+      "cache_items_before": 5158
+    },
+    "cache_ready_attempts": 1,
+    "cache_ready": {
+      "first_frame_ms": 216.36,
+      "initial_frame_ms": 216.33,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 160,
+      "rss_kib": 37004,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-75hTGA"
+  },
+  {
+    "application": "chrome-large",
+    "mode": "cache-baseline",
+    "checks": {
+      "fresh_semantics_honest": "PASS",
+      "cache_ready_condition": "PASS"
+    },
+    "result": "PASS",
+    "selector": "Google Chrome",
+    "fresh": {
+      "first_frame_ms": 226.68,
+      "initial_frame_ms": 226.64,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 164,
+      "post_bootstrap_fallbacks": [],
+      "rss_kib": 37104,
+      "fd": 19,
+      "cache_items_before": 5158
+    },
+    "cache_ready_attempts": 1,
+    "cache_ready": {
+      "first_frame_ms": 236.65,
+      "initial_frame_ms": 236.61,
+      "nodes": 5158,
+      "strategy": "AT-SPI Cache",
+      "bootstrap_ms": 156,
+      "rss_kib": 36936,
+      "fd": 19
+    },
+    "evidence_directory": "gui2tui-p4c-E8rpEz"
   }
 ]

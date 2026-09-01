@@ -164,12 +164,18 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
         ContentViewMode::Search => {
             let mut lines = vec![format!("> {}", content.query)];
             if let Some((state, progress)) = &content.full_search {
+                let scope = if content.partial {
+                    "Exposed semantic search"
+                } else {
+                    "Full search"
+                };
                 let scanned = progress.total_blocks.map_or_else(
                     || format!("{} blocks scanned", progress.scanned_blocks),
                     |total| format!("{} / {} blocks scanned", progress.scanned_blocks, total),
                 );
                 lines.push(format!(
-                    "Full search: {:?} — {} — {} matches — {} text RPCs",
+                    "{}: {:?} — {} — {} matches — {} text RPCs",
+                    scope,
                     state,
                     scanned,
                     content.results.len(),
@@ -194,7 +200,11 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
             (
                 format!(" Content search — {} ", content.title),
                 lines,
-                "Type Search | Ctrl-F Full Search | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader",
+                if content.partial {
+                    "Type Search | Ctrl-F Search exposed content | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader"
+                } else {
+                    "Type Search | Ctrl-F Full Search | ↑/↓ Navigate | Enter Read | Esc Cancel/Reader"
+                },
             )
         }
         ContentViewMode::VirtualCollection => (

@@ -1,215 +1,140 @@
-# Phase 4C — real-world validation (incomplete)
+# Phase 4C — real-world validation and release-candidate evidence
 
-**PHASE 4C NOT YET VALIDATED — NOT READY TO RELEASE v0.1.0.**
+**REAL-APPLICATION GATES COMPLETE; FINAL RC PIPELINE PENDING.**
 
-This report separates actual workflow evidence from prior Phase 4A/4B claims.
-No public release/tag was created. Core IR structural changes: **NONE**.
-See the [issue ledger](validation/phase4c-issues.md) and
-[machine-readable results](validation/phase4c/results.json).
+The real-application acceptance gates are closed for the explicitly documented
+v0.1 scope. Final Phase 4C validation additionally requires the non-publishing
+dual-architecture RC pipeline recorded below. This is not a claim that every
+application exposes complete or actionable accessibility semantics. No public
+release or tag has been created. Core IR structural changes: **NONE**.
 
-## Environment and procedure
+See the [issue ledger](validation/phase4c-issues.md), [machine-readable live
+results](validation/phase4c/results.json), [limitations](limitations.md), and
+[compatibility matrix](compatibility.md).
 
-2026-09-01: macOS Darwin 25.3 arm64; OrbStack Ubuntu 24.04.4 aarch64,
-kernel 7.0.5-orbstack, Xvfb X11, AT-SPI 2.52. GTK3 3.24.41, GTK4 4.14.5,
-Qt6 6.4.2, Mousepad 0.6.1, PCManFM-Qt 1.4.1, Chrome 152.0.7977.64,
-Firefox 154.0.1, LibreOffice 24.2.7. Mousepad, PCManFM-Qt and Calc were
-installed from Ubuntu packages without a desktop environment.
+## Environment and method
 
-Each run has its own D-Bus session, Xvfb display, HOME/XDG directories and
-application profile. `NO_AT_BRIDGE=0`, `QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`,
-and both org.a11y.Status booleans are enabled. No user's real desktop daemon
-was stopped. Normal browser tests keep the sandbox enabled. One explicitly
-isolated sandbox-disabled comparison did not fix cache incompleteness.
+Validation ran on 2026-09-01 in isolated OrbStack Ubuntu 24.04.4 aarch64,
+Xvfb/X11 and AT-SPI 2.52, from a macOS arm64 host. Representative versions:
+GTK3 3.24.41, GTK4 4.14.5, Qt 6.4.2, Mousepad 0.6.1, Chrome 152.0.7977.64,
+Firefox 154.0.1, LibreOffice 24.2.7 and VS Code 1.135.0.
 
-```bash
-# First build on Linux (use a disk-backed target if /tmp is a small tmpfs):
-CARGO_TARGET_DIR=/var/tmp/gui2tui-p4c-target cargo build --locked --release --bins
-./scripts/phase4c-live-linux.sh mousepad workflow
-./scripts/phase4c-live-linux.sh gtk workflow
-./scripts/phase4c-live-linux.sh qt workflow
-./scripts/phase4c-live-linux.sh designer workflow
-./scripts/phase4c-live-linux.sh chrome workflow
-./scripts/phase4c-live-linux.sh firefox workflow
-./scripts/phase4c-live-linux.sh writer workflow
-./scripts/phase4c-live-linux.sh writer-long workflow
-./scripts/phase4c-live-linux.sh chrome-large benchmark
-./scripts/phase4c-live-linux.sh static-image modality
-./scripts/phase4c-live-linux.sh qt quarantine
-```
+Every workflow used a private D-Bus session, Xvfb display, HOME/XDG directories
+and application profile. Interactions used terminal events and public AT-SPI
+objects. No DOM/CDP, UNO, toolkit-private API, application adapter, guessed
+keyboard fallback or document parser was used.
 
-`GUI2TUI_BIN` overrides the binary directory. `probe` only means discovery/tree/
-frame observation, never full workflow PASS. `workflow` assertions cover the
-specific paths listed below. Do not edit the shell harness while a run is active.
-No CI browser dependency or default heavyweight live suite was added.
+## Closed gates
 
-## Application/workflow matrix
+### Chrome Cache readiness and first-frame latency
 
-| Application | Actual result | Scope / limitation |
-| --- | --- | --- |
-| Mousepad (real GTK editor) | PASS | Fixed multiline Reader, indexed and explicit full search, About via command palette, dialog Close via advertised AT-SPI action; death during Reader, stale locator refusal, explicit fresh generation. |
-| GTK4 fixture | PASS | Atomic plain edit/commit/cancel, Button state read-back, password refusal, no-action checkbox remains read-only. |
-| Qt6 fixture | PASS | Plain edit/commit/cancel, Button, checkbox Toggle, Choice Beta confirmed independently; no popup required. |
-| Qt Designer (real Qt application) | PARTIAL | Discovery, real New Form dialog Close, command search. Unsupported tree/cell/layered-pane objects remain summaries. Full design workflow not tested. |
-| PCManFM-Qt (real list/settings-heavy app) | PARTIAL / BLOCKED | Real directory and 176-node Preferences probes and frames captured. Repeatable interaction workflow not yet established (C-03). |
-| Chrome | PASS for listed workflows | Reader, Outline, indexed/full search and cancellation, table navigation, explicit diagnostic paragraph replacement followed by Reader Text read-back, headless reference, death/restart/new generation. Anonymous TUI actions remain unavailable. |
-| Firefox | PASS for listed workflows | Reader/Outline, indexed/full search/cancel, table navigation, paragraph replacement/read-back, headless no-fake-Open. First modality reference unresolved, not claimed transported. |
-| LibreOffice Writer | PASS for visible content | Reader, Outline, search, About command and real dialog close. Generated long document remains PartialRealized: whole-document completeness NOT VALIDATED. |
-| LibreOffice Calc | NOT TESTED | Installed, but no completed interactive workflow. |
-| VS Code 1.135.0 (real Electron) | PARTIAL | Official native arm64 package, sandbox enabled, isolated restricted workspace, extensions disabled. 367-node tree, Reader and full search (253 blocks/13 matches/11 RPCs), anonymous Manage action refused. General editor operation is not validated. |
+Fresh browser sessions expose two causally distinct conditions. Five independent
+samples were retained for each condition on the final Linux release binary:
 
-HTML/FODT/text generated by the harness are application **inputs**, not extraction
-side channels. All actions/read-back use AT-SPI and terminal input. No CDP, DOM
-readback, UNO, parser-based content extraction, or toolkit-native operations.
+| Condition | Cache items | First frame samples (ms) | Median |
+| --- | --- | --- | ---: |
+| Cache ready | 5,158 each | 223.23, 226.99, 215.27, 219.90, 226.68 | **223.23 ms** |
+| Cache incomplete | 231, 5,142, 5,156, 231, 228 | 7,243.08, 3,722.65, 4,073.23, 7,303.74, 3,643.89 | **4,073.23 ms** |
 
-## Correctness, content, lifecycle
+Forced Cache diagnostics on incomplete samples reported one to three missing
+reachable child references with zero invalid parent links. Small 228/231-item
+inventories and near-complete 5,142/5,156 inventories both occur. Auto rejects
+these inventories and performs the recursive correctness walk. A reachable
+childless Document cache skeleton is also rejected generically; accepting it
+previously allowed a fast but materially incomplete scene.
 
-Chrome and Firefox have actual `Full search: Cancelled` frames before restarting
-the explicit full search. Table tests enter the Evaluation scores structure,
-move one cell, and return to Reader. Paragraph replacement is invoked through
-the existing explicit low-level Inspector index API on a named fixture button;
-the Reader independently fetches Text and finds the replacement. This is not
-proof of semantic default activation for anonymous browser actions.
+The old binary measured **4,054.31 ms** under the same fresh/incomplete setup.
+The final median is 0.47% slower, far below the 20–25% regression threshold and
+not an unexplained code regression. Historical ~200 ms data was the Cache-ready
+condition, now reproduced at 223.23 ms. There is no fixed startup sleep, busy
+poll, application-name branch, or incomplete-tree performance shortcut.
 
-Mousepad and Chrome were killed during Reader use. The TUI stayed alive,
-`--actions OLD_LOCATOR` failed, and F5 after application restart created a newer
-generation. Qt rich-text quarantine was re-observed and a fresh generation
-returned to Declared (`QT_TEXT_QUARANTINE_GENERATION_RESET=PASS`). No 30-minute
-soak or daemon stress rerun: runtime ownership/lifecycle code is unchanged.
+v0.1 expectation: large browser trees can require a several-second correctness
+fallback while the accessibility cache is incomplete. Once all 5,158 records
+are resident, bulk bootstrap remains about 0.2 seconds.
 
-## Modality / security
+### Real list/settings-heavy workflow
 
-GTK no-reference image: explicit generic capture produced a **480×180, 6,419-byte
-RenderedSnapshot**, labeled CompositedScreenSnapshot. It contains only the target
-diagram (visually inspected), not an original embedded resource or whole desktop.
-Headless materialization, two-second TTL cleanup, scale mismatch refusal, and
-EOG opening the actual materialized filename were observed. Initial TUI/F4
-performed zero captures; explicit `m` performed one; network payload remained 0.
+LibreOffice Writer Options supplies the accepted real workflow (1,978 initial
+nodes; 1,431 advertised-action nodes):
 
-Chrome headless reference inspection returned `payload_bytes=0`; no endpoint
-was running or awaited. Firefox's first candidate safely remained unresolved.
-Four actual controlling-terminal broker authorization requests exercised once,
-deny, session approval and session reuse; deny returned Failed, all reference
-requests transferred zero artifact bytes. Negative doctor/degraded selector tests
-also passed (missing AT-SPI 36 ms; stalled endpoint 1.215 s).
+1. Open `Options...` from the semantic command hierarchy.
+2. Select named `General` through the Options tree's parent Selection interface.
+3. Toggle `Use data for document properties` through TUI, confirm the changed
+   checked state independently with Inspector, then restore it.
+4. Invoke `Cancel`, confirm the modal dialog disappears, and confirm the
+   document context remains usable.
 
-Completed frame/Inspector paths reject password sentinels. Unit suites continue
-covering anonymous action refusal, stale identity, artifact ownership and limits.
-Do not extrapolate these checks to untested applications or payload types.
+Result: **PASS**. PCManFM-Qt remains separate blocked compatibility evidence;
+no product workaround was added.
 
-## Performance / resources
+### Real Qt application workflow
 
-All numbers below are actual release-binary PTY measurements, not a professional
-benchmark. Runs with compilation/other apps in progress are not causal latency
-comparisons. First-frame clock includes process launch; fresh-profile behavior
-can differ from a warm established accessibility cache.
+Qt Designer (311 nodes) completed a real workflow:
 
-| Workload | First-frame / warm median | RSS before → after workflow (KiB) | FD before → after |
-| --- | ---: | ---: | ---: |
-| Mousepad Reader/About/restart run | 120.08 ms | 12,856 → 16,244 | 19 → 19 |
-| GTK fixture | 117.72 ms | 10,880 → 11,216 | 18 → 18 |
-| Qt fixture | 105.27 ms | 10,724 → 10,808 | 18 → 18 |
-| Qt Designer limited workflow | 330.75 ms | 12,632 → 13,244 | 18 → 18 |
-| Chrome Reader/search/table run | 343.05 ms | 13,548 → 13,688 | 19 → 19 |
-| Firefox Reader/search/table run | 315.40 ms | 13,308 → 13,328 | 19 → 19 |
-| Writer visible document | 1,659.55 ms | 19,828 → 35,760 | 19 → 19 |
-| Writer generated long input | 1,704.42 ms | 20,012 → 36,096 | 19 → 19 |
-| VS Code Reader/search/refusal | 344.48 ms | 13,616 → 13,700 | 19 → 19 |
+1. In New Form, invoke the named QVGA portrait option's advertised `Toggle` and
+   independently observe it selected.
+2. Toggle and restore `Show this Dialog on Startup`.
+3. Invoke `Create`, then invoke the real `Form Settings...` command.
+4. Observe the new dialog, close it with its advertised semantic action, and
+   retain the created form context.
 
-Chrome large, 5,158 nodes:
+The Form Settings D-Bus action call timed out after 5 seconds even though the
+dialog appeared. Acceptance therefore uses authoritative GUI/Inspector state,
+not the RPC return alone. Result: **PASS** without a Qt/Designer production branch.
 
-| Binary/setup | run 1 | run 2 | run 3 | run 4 | warm median (last 3) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Current, sandbox enabled | 4055.06 | 3699.31 | 4238.46 | 4202.45 | **4202.45 ms** |
-| Previous release binary, same setup | 3697.61 | 4042.27 | 4054.31 | 4079.62 | **4054.31 ms** |
-| Isolated no-sandbox diagnostic, 5,166 nodes | 3783.91 | 3771.81 | 3852.63 | 3767.19 | **3771.81 ms** |
+### Writer long-document boundary
 
-Forced Cache rejects incomplete reachable records; Auto walks. The historical
-~200 ms fast path was **not reproducible reliably in these fresh sessions**.
-Cache inventory diagnostics found uncached children on ancestor chains reaching
-the application root, not merely harmless orphan records. Disabling correctness
-checks would be unsafe. C-02 remains an RC acceptance blocker. No sustained-leak
-claim is made from short RSS/FD spot checks; prior soak evidence remains separate.
+The generated input contains 150 additional headings. AT-SPI exposed 1,984
+nodes and the Reader model exposed **23 blocks / 7 headings**, marked
+`PartialRealized`. Reader, Outline, indexed/progressive search and cancellation
+remain usable. Presentation now says `Exposed semantic search` and
+`Exposed semantic content exhausted (document coverage partial or unknown)`;
+it never claims the entire source document was searched.
 
-## Fix, tests, freeze
+An ordinary `Go to Page...` semantic command was attempted. LibreOffice exposed
+the page selector as `Slider value="1"`, for which v0.1 has no validated mutation
+contract. GUI2TUI safely cancelled rather than injecting keys or guessing. The
+model remained 23 blocks before and after, so no newly realized content was
+fabricated. Result: **PASS WITH SAFE PARTIAL REALIZATION**.
 
-`bdcd251`: plain multi-line text is read-only document content, never a single-line
-atomic edit target. Live Mousepad reproduced the prior wrong capability without
-writing. Three new Rust regressions cover walk capability, bulk capability,
-Reader classification and password exclusion. Rust tests: **223 → 226**, plus
-6 release-assembly Python tests, **232 total automated unit/CLI tests**.
+## Final workflow matrix
 
-macOS (Rust stable 1.91) and Linux (stable 1.98) both passed fmt, all-target check,
-all-target tests and warnings-denied clippy. Explicit target directories avoid
-cross-OS build collisions. Pinned 1.88 release build is tested by the RC pipeline.
-No production dependency updates. No application/toolkit-name production branch.
-No new core struct/enum/ownership/protocol fields. Reader predicate/capability
-validation changes are generic implementation fixes, not new IR capabilities.
+| Application | Discovery | Controls / commands | Content | Lifecycle / modality | Result |
+| --- | --- | --- | --- | --- | --- |
+| Mousepad | PASS, 319 nodes | About command/dialog | multiline Reader/search | death, stale locator, fresh generation | PASS |
+| GTK fixture | PASS, 44 nodes | edit/cancel/Button; checkbox read-only | password excluded | event cache | PASS |
+| Qt fixture | PASS, 31 nodes | edit/cancel/Button/Checkbox/Choice | password excluded | quarantine resets per generation | PASS |
+| Qt Designer | PASS, 311 nodes | Choice, form option, Create, Form Settings | unsupported complex widgets summarized | modal context | PASS for listed workflow |
+| Chrome | PASS, 391-node fixture | anonymous actions refused; explicit diagnostic mutation only | Reader/Outline/search/table | reference zero-payload; death/restart | PASS for listed workflow |
+| Firefox | PASS, 281 nodes | anonymous actions refused | Reader/Outline/search/table | unresolved modality degrades safely | PASS for listed workflow |
+| Writer | PASS, 1,978 nodes | About and Options workflows | Reader/Outline/search | modal close/context restore | PASS for exposed content |
+| Writer long | PASS, 1,984 nodes | safe page-navigation degradation | 23 blocks/7 headings, PartialRealized | no false completeness | PASS WITH SAFE PARTIAL REALIZATION |
+| VS Code | PASS discovery, 367 nodes | anonymous Manage refused | Reader/search | isolated profile | PARTIAL by declared scope |
+| Static GTK image | PASS, 3 nodes | explicit acquisition only | N/A | headless materialize + same-host viewer | PASS |
+| PCManFM-Qt | prior probe only | bridge disconnected on repeat | N/A | no workaround | BLOCKED / P2 |
+| Calc | NOT TESTED | NOT TESTED | NOT TESTED | NOT TESTED | optional, non-blocking |
 
-VS Code was obtained from the official
-`https://update.code.visualstudio.com/latest/linux-deb-arm64/stable` package,
-resuming bounded downloads after initial tmpfs exhaustion and network timeouts.
-`dpkg-deb -x` extracted into an isolated `/var/tmp` directory; the native binary
-reported version 1.135.0, commit `08d4889f9ec4a1685d257b9b95de036c8e1ce1e5`.
-No `--no-sandbox` was used for the Electron probe/workflow. TUI showed editor text
-through Reader, not a writable Monaco editor. No Copilot request was sent.
+## Security and regression
 
-## Release gate
+Final live runs passed Mousepad multiline-to-Reader, GTK/Qt single-line atomic
+editing, password refusal, Qt Choice, Chrome/Firefox content workflows,
+Writer/Writer-long, Qt Designer, Writer Options, VS Code and static acquisition.
+Chrome headless reference inspection transferred zero payload. Generic unit
+regressions pass for password redaction, anonymous-action refusal, stale identity,
+unsafe capture geometry, denied endpoint payload and artifact ownership.
 
-The final non-publishing candidate is source commit
-`156149b5928d1ce607ba87fd0f6144f42f98f493` (not a tag). Later documentation-only
-commits do not change this artifact identity.
+Automated tests: 225 library + 2 Inspector CLI + 3 user CLI = **230 tests**.
+macOS and Linux both passed fmt, all-target check, all-target test, warnings-denied
+clippy and `git diff --check`.
 
-- [CI 33419070750](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33419070750): PASS.
-- [Release candidate 33419080074](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33419080074):
-  PASS, dispatched on master with `publish=false`, `attest=true`.
-- Both native Ubuntu 22.04 runners built with pinned Rust 1.88; x86_64 and aarch64
-  ABI gates and extracted-package fresh-HOME GTK smoke tests PASS. Each smoke
-  confirmed a GUI action, password absence and local broker capabilities.
-- Assembly accepted exactly two architectures, matching build/ABI/source
-  metadata. Both artifacts require at most GLIBC 2.34 (configured ceiling 2.35).
-- Downloaded both final archives; local SHA256SUMS verification PASS. Manifest
-  source and artifact identities match the run. Signed provenance is available
-  at [attestation 44207338](https://github.com/Chenhzjs/GUI2TUI/attestations/44207338).
-- Local `gh attestation verify` passed separately for both archives,
-  SHA256SUMS and RELEASE-MANIFEST.json, enforcing repository, signer workflow,
-  exact source digest and GitHub-hosted runners. Each returned this run's
-  `attempts/1` invocation, not a historical run.
-- The publish job was **SKIPPED**. Repository release/tag listings remain empty.
+## Freeze and release pipeline
 
-| Artifact | Bytes | SHA-256 |
-| --- | ---: | --- |
-| gui2tui-0.1.0-linux-aarch64.tar.gz | 10,503,841 | `2a8775bcf4c8c47eaa6ccce5a3bc8e6b52ec4b29c0eff84f20966edb7011fb63` |
-| gui2tui-0.1.0-linux-x86_64.tar.gz | 10,705,763 | `80b46f7bb934034effcca9959eb71f7a90c9392b4bac9458b40ddbbfa83cd0b0` |
+Production changes were limited to generic Cache completeness diagnostics/
+fallback and honest partial-content presentation. Core semantic/content/scene/
+modality IR structures are unchanged. A source search found no application or
+toolkit name driving production behavior.
 
-```bash
-gh run download 33419080074 -n gui2tui-0.1.0-release-candidate -D CANDIDATE_DIR
-# From the downloaded directory:
-shasum -a 256 -c SHA256SUMS
-# Executed separately for each of the four final files:
-gh attestation verify FILE --repo Chenhzjs/GUI2TUI \
-  --signer-workflow Chenhzjs/GUI2TUI/.github/workflows/release.yml \
-  --source-digest 156149b5928d1ce607ba87fd0f6144f42f98f493 \
-  --deny-self-hosted-runners --format json
-```
-
-A green packaging run cannot close C-02, C-03 or remaining real-application
-verification. **NOT READY TO RELEASE v0.1.0**.
-`v0.1.0 PUBLIC RELEASE NOT PUBLISHED`. Do not create a v0.1 tag.
-
-### Final settings-discovery diagnostic
-
-Runs `gnseps` and `A4vFsw` (same isolated harness) enabled bridge debug logging.
-PCManFM-Qt's X11 Preferences window existed, but its bridge reported:
-
-```text
-Could not query active accessibility event listeners.
-Error in contacting registry: "org.freedesktop.DBus.Error.Disconnected"
-"Not connected to D-Bus server"
-```
-
-X11 `AT_SPI_BUS` and `org.a11y.Bus.GetAddress` agreed; no inherited
-`AT_SPI_BUS_ADDRESS` was set. An additional experiment explicitly completed
-GetAddress and Registry Ping **before** starting the application; the same
-failure remained. That unhelpful harness change was not retained. This narrows
-the observed failure to bridge registration, but does not establish its cause.
-No application adapter, forced keyboard injection or false workflow PASS was added.
+The final source commit and non-publishing GitHub dual-architecture pipeline are
+recorded after the final run in this document's release evidence update. Public
+release remains **NOT PUBLISHED** until an explicit release action.

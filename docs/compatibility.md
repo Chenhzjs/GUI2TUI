@@ -189,17 +189,18 @@ in 491–496 ms internally, while LibreOffice exposed 478 reachable safe leaves 
 them as 478 default scene rows. Complete cross-family counts and the safe cross-toolkit Choice
 results are in [relations.md](relations.md).
 
-## Phase 4C real-application revalidation (2026-09-01)
+## Phase 4C real-application release-candidate validation (2026-09-01)
 
-See [the current report](phase4c-validation.md): **PHASE 4C NOT YET VALIDATED**.
-Mousepad Reader/search/About/restart, Writer visible Reader/Outline/search/About,
-Chrome and Firefox Reader/search/cancel/table/dynamic read-back, GTK/Qt controls,
-Qt Choice, and headless/static-image/EOG paths have fresh evidence. Qt Designer
-has a limited dialog/command workflow; PCManFM-Qt has probes but a repeatable
-workflow remains blocked. The frozen architecture is unchanged.
+See [the final report](phase4c-validation.md): **real-application gates complete;
+final RC pipeline pending**. Mousepad, GTK/Qt fixtures, a meaningful Qt
+Designer workflow, Chrome, Firefox, Writer, Writer-long, Writer Options,
+VS Code best-effort and static-image paths have fresh evidence. PCManFM-Qt
+remains a documented blocked P2 with no adapter.
 
-Historical Chrome 5K cache timing is not a current fresh-profile guarantee:
-both the previous and current binaries fell back to walk on incomplete cache
-inventories (~4 s first frame). Do not infer complete document coverage from
-Writer's `PartialRealized` visible content. Full matrix, current limitations and
-unaccepted P1 findings are in the linked report/ledger.
+Chrome 5K has two measured startup conditions: five complete-Cache samples had
+a 223.23 ms median; five incomplete-Cache samples had a 4,073.23 ms median and
+used the correctness walk. The same-condition old binary median was 4,054.31 ms,
+so this is not an unexplained product regression. Writer-long remains explicitly
+`PartialRealized`; Reader/search wording never claims complete source coverage.
+The frozen core architecture is unchanged. See the linked report and final
+[issue ledger](validation/phase4c-issues.md) for exact scope.

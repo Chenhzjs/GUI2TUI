@@ -451,6 +451,12 @@ fn analyze_model(
         ContentCompleteness::PartialRealized
     } else if !root_node.truncations.is_empty() {
         ContentCompleteness::Unknown
+    } else if root_node.role == SemanticRole::Document && root_node.children.is_empty() {
+        // A document root with no exposed descendants is not evidence that the
+        // source document is empty. Browsers can briefly publish a structurally
+        // consistent AT-SPI Cache skeleton before its document subtree becomes
+        // resident. Keep the model honest until accessibility exposes content.
+        ContentCompleteness::Unknown
     } else {
         ContentCompleteness::Complete
     };
@@ -806,6 +812,16 @@ mod tests {
                 ContentBlockKind::OpaqueContent(OpaqueContentKind::Image)
             )
         }));
+    }
+
+    #[test]
+    fn empty_document_root_does_not_claim_complete_source_coverage() {
+        let document = node(1, SemanticRole::Document, "Article");
+        let cache = SemanticCache::from_snapshot(document).unwrap();
+        let catalog = ContentCatalog::analyze(&cache);
+        let model = catalog.models().next().unwrap();
+        assert_eq!(model.completeness, ContentCompleteness::Unknown);
+        assert_eq!(model.blocks.len(), 1);
     }
 
     #[test]

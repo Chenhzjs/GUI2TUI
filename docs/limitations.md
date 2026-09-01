@@ -24,7 +24,10 @@ See [compatibility evidence](compatibility.md), [runtime recovery](phase4a-compl
 [real examples](gui-to-tui-examples.md) and [architecture freeze](architecture-freeze.md).
 
 Phase 4C real-application evidence is [tracked separately](phase4c-validation.md).
-Fresh Chrome profiles currently can force a multi-second walk when Cache.GetItems
-is incomplete; the old fast-bootstrap measurement is not universally reproducible.
+Fresh Chrome profiles can force a multi-second correctness walk when Cache.GetItems
+is incomplete. Complete 5,158-item Cache startup remains about 0.2 seconds; five
+fresh incomplete samples had a 4.07-second median. This is a documented P2 startup
+limitation, not an invitation to accept a partial tree.
 Multi-line editor buffers are Reader-only, never atomic single-line edit targets.
-Writer long-document realized subsets do not imply complete-document search.
+Writer long-document realized subsets do not imply complete-document search;
+search completion explicitly refers only to exposed semantic content.

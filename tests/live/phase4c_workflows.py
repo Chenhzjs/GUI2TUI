@@ -82,6 +82,10 @@ class Terminal:
     def __init__(self, selector):
         self.screen = pyte.Screen(160, 50)
         self.stream = pyte.Stream(self.screen)
+        self.transcript = ""
+        self.loaded_status = None
+        self.loaded_ms = None
+        self.fallback_statuses = []
         self.started = time.monotonic()
         self.child = pexpect.spawn(str(BIN / "gui2tui"), ["--app", selector, "--log-level", "debug"],
                                    encoding=None, dimensions=(50, 160), env=os.environ.copy())
@@ -98,10 +102,20 @@ class Terminal:
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             try:
-                self.stream.feed(self.child.read_nonblocking(65536, timeout=.02).decode("utf-8", "replace"))
+                chunk = self.child.read_nonblocking(65536, timeout=.02).decode("utf-8", "replace")
+                self.transcript += chunk
+                self.stream.feed(chunk)
             except pexpect.TIMEOUT:
                 pass
         text = "\n".join(self.screen.display)
+        if self.loaded_status is None:
+            loaded = re.search(r"Loaded ([0-9,]+) semantic nodes via (.*?) in (\d+) ms", text)
+            if loaded:
+                self.loaded_status = loaded.groups()
+                self.loaded_ms = round((time.monotonic() - self.started) * 1000, 2)
+        fallback = next((line.strip() for line in text.splitlines() if "Full refresh fallback:" in line), None)
+        if fallback and (not self.fallback_statuses or self.fallback_statuses[-1] != fallback):
+            self.fallback_statuses.append(fallback)
         assert not any(secret in text for secret in SENTINELS)
         return text
 
@@ -179,7 +193,7 @@ def launch_case():
         shutil.copy(fixture / "firefox-user.js", profile / "user.js")
         return "Firefox", ["/opt/firefox-154.0.1/firefox", "--no-remote", "--profile", str(profile),
                            f"file://{fixture / 'browser_fixture.html'}"]
-    if CASE in ("writer", "writer-long", "calc"):
+    if CASE in ("writer", "writer-long", "writer-settings", "calc"):
         document = work / "review.fodt"
         source = (fixture / "libreoffice_content_fixture.fodt").read_text()
         if CASE == "writer-long":
@@ -201,7 +215,7 @@ def launch_case():
 
 
 def main():
-    if MODE not in {"probe", "workflow", "benchmark", "modality", "reproduce-multiline"}:
+    if MODE not in {"probe", "workflow", "settings-probe", "benchmark", "cache-baseline", "modality", "reproduce-multiline"}:
         raise ValueError("unknown test mode")
     selector, command = launch_case()
     REPORT["selector"] = selector
@@ -228,6 +242,71 @@ def main():
             save("discovery-window-tree.txt", windows.stdout)
             raise AssertionError("Application not discovered through AT-SPI")
         save("applications.txt", apps)
+        if MODE == "cache-baseline":
+            cache_before = save("cache-before.txt", inspect("--app", selector, "--probe-cache").stdout)
+            terminal = Terminal(selector)
+            fresh_frame = save("fresh-frame.txt", terminal.pump())
+            fresh_resources = resources(terminal.child.pid)
+            save("fresh-transcript.txt", terminal.transcript)
+            loaded = terminal.loaded_status
+            fallback_loaded = None
+            if terminal.fallback_statuses:
+                fallback_loaded = re.search(
+                    r"([0-9,]+) nodes via (recursive walk|AT-SPI Cache) in (\d+) ms",
+                    terminal.fallback_statuses[-1])
+            if loaded is None and fallback_loaded:
+                loaded = fallback_loaded.groups()
+            REPORT["fresh"] = {
+                "first_frame_ms": terminal.first_frame_ms,
+                "initial_frame_ms": terminal.loaded_ms,
+                "nodes": int(loaded[0].replace(",", "")) if loaded else None,
+                "strategy": loaded[1] if loaded else None,
+                "bootstrap_ms": int(loaded[2]) if loaded else None,
+                "post_bootstrap_fallbacks": terminal.fallback_statuses,
+                **fresh_resources,
+            }
+            assert "GUI2TUI" in fresh_frame
+            assert not ("0 blocks" in fresh_frame and "completeness: Complete" in fresh_frame), fresh_frame
+            REPORT["fresh"]["cache_items_before"] = int(re.search(r"items: (\d+)", cache_before)[1])
+            terminal.close()
+            terminal = None
+
+            deadline = time.monotonic() + 15
+            attempts = 0
+            forced = None
+            while time.monotonic() < deadline:
+                attempts += 1
+                forced = inspect("--app", selector, "--bootstrap", "cache", ok=False)
+                forced_nodes = len([line for line in forced.stdout.splitlines()
+                                    if line and "… [" not in line])
+                if forced.returncode == 0 and forced_nodes >= 5000:
+                    break
+                time.sleep(.25)
+            save("cache-ready-stdout.txt", forced.stdout)
+            save("cache-ready-stderr.txt", forced.stderr)
+            save("cache-after.txt", inspect("--app", selector, "--probe-cache").stdout)
+            REPORT["cache_ready_attempts"] = attempts
+            REPORT["cache_ready"] = None
+            if forced.returncode == 0 and forced_nodes >= 5000:
+                terminal = Terminal(selector)
+                ready_frame = save("cache-ready-frame.txt", terminal.pump())
+                ready_resources = resources(terminal.child.pid)
+                save("cache-ready-transcript.txt", terminal.transcript)
+                loaded = terminal.loaded_status
+                REPORT["cache_ready"] = {
+                    "first_frame_ms": terminal.first_frame_ms,
+                    "initial_frame_ms": terminal.loaded_ms,
+                    "nodes": int(loaded[0].replace(",", "")) if loaded else None,
+                    "strategy": loaded[1] if loaded else None,
+                    "bootstrap_ms": int(loaded[2]) if loaded else None,
+                    **ready_resources,
+                }
+                assert "GUI2TUI" in ready_frame
+            REPORT["checks"]["fresh_semantics_honest"] = "PASS"
+            REPORT["checks"]["cache_ready_condition"] = (
+                "PASS" if forced.returncode == 0 and forced_nodes >= 5000 else "UNAVAILABLE")
+            REPORT["result"] = "PASS"
+            return
         time.sleep(8 if CASE in ("chrome", "chrome-large", "firefox", "electron") else 2)
         started = time.monotonic()
         tree = save("tree.txt", inspect("--app", selector).stdout)
@@ -261,7 +340,46 @@ def main():
         if loaded:
             REPORT["tui_bootstrap"] = {"nodes": int(loaded[1].replace(",", "")), "strategy": loaded[2], "ms": int(loaded[3])}
         REPORT["resources_bootstrap"] = resources(terminal.child.pid)
-        if MODE == "workflow":
+        if MODE == "settings-probe":
+            command_dialog(terminal, selector, "Options...", "Options - LibreOffice - User Data", close=False)
+            tree = inspect("--app", selector, "--verbose").stdout
+            target = locator_for(tree, "Cell", "General")
+            save("settings-category-actions.txt", inspect("--actions", target).stdout)
+            parent, child_index = selection_parent_and_index(tree, "Tree", "Cell", "General")
+            save("settings-selection-strategy.txt",
+                 f"parent={parent}\nchild=General\nchild_index={child_index}\n")
+            inspect("--select-child", parent, "--child-index", str(child_index))
+            terminal.pump(1)
+            selected = save("settings-selected-tree.txt", inspect("--app", selector).stdout)
+            assert 'Cell "General" [selected' in selected, selected
+
+            checkbox_line = next(line for line in selected.splitlines()
+                                 if 'CheckBox "Use data for document properties"' in line)
+            initially_checked = "[checked" in checkbox_line
+            terminal.focus("Use data for document properties")
+            terminal.send("\r")
+            terminal.pump(1)
+            toggled = save("settings-toggled-tree.txt", inspect("--app", selector).stdout)
+            toggled_line = next(line for line in toggled.splitlines()
+                                if 'CheckBox "Use data for document properties"' in line)
+            assert ("[checked" in toggled_line) != initially_checked, toggled_line
+            terminal.send("\r")
+            terminal.pump(1)
+            restored = save("settings-restored-tree.txt", inspect("--app", selector).stdout)
+            restored_line = next(line for line in restored.splitlines()
+                                 if 'CheckBox "Use data for document properties"' in line)
+            assert ("[checked" in restored_line) == initially_checked, restored_line
+
+            cancel = locator_for(restored, "Button", "Cancel")
+            inspect("--action-name", cancel, "Click")
+            terminal.pump(1)
+            closed = save("settings-closed-tree.txt", inspect("--app", selector).stdout)
+            assert 'Dialog "Options - LibreOffice - User Data"' not in closed
+            assert "Document:" in terminal.pump()
+            REPORT["checks"]["settings_tree_navigation"] = "PASS"
+            REPORT["checks"]["settings_checkbox_toggled_and_restored"] = "PASS"
+            REPORT["checks"]["settings_dialog_context_restored"] = "PASS"
+        elif MODE == "workflow":
             workflow(terminal, selector, app, command)
         elif MODE == "reproduce-multiline":
             terminal.focus("Text input:")
@@ -305,7 +423,32 @@ def locator_for(tree, role, label):
     return re.search(r"atspi1_[A-Za-z0-9_-]+", line)[0]
 
 
-def command_dialog(terminal, selector, query, title):
+def selection_parent_and_index(tree, parent_role, child_role, child_label):
+    """Resolve a named direct child through public tree structure, never a naked guessed index."""
+    lines = tree.splitlines()
+    for parent_at, parent_line in enumerate(lines):
+        if not (re.search(rf"(?:^|[├└]── ){re.escape(parent_role)}(?: |$)", parent_line)
+                and "interfaces=[" in parent_line and "Selection" in parent_line):
+            continue
+        marker = max(parent_line.find("├── "), parent_line.find("└── "))
+        parent_depth = 0 if marker < 0 else marker
+        child_depth = parent_depth + 4
+        direct = []
+        for line in lines[parent_at + 1:]:
+            position = max(line.find("├── "), line.find("└── "))
+            if position >= 0 and position <= parent_depth:
+                break
+            if position == child_depth:
+                direct.append(line)
+        target = next((index for index, line in enumerate(direct)
+                       if f'{child_role} "{child_label}"' in line), None)
+        if target is not None:
+            parent = re.search(r"atspi1_[A-Za-z0-9_-]+", parent_line)[0]
+            return parent, target
+    raise LookupError(f"no Selection parent for {child_role} {child_label!r}")
+
+
+def command_dialog(terminal, selector, query, title, close=True):
     terminal.send(":" + query)
     save("command-search.txt", terminal.pump(.3))
     terminal.send("\r")
@@ -313,6 +456,8 @@ def command_dialog(terminal, selector, query, title):
     tree = save("dialog-tree.txt", inspect("--app", selector).stdout)
     assert f'Dialog "{title}"' in tree or f'Window "{title}"' in tree, tree
     save("dialog-frame.txt", terminal.pump())
+    if not close:
+        return tree
     # Close only the named dialog's advertised Close button (never a window's unrelated Close).
     subtree = tree[tree.index(f'"{title}"'):]
     target = locator_for(subtree, "Button", "Close")
@@ -348,15 +493,65 @@ def workflow(terminal, selector, app, command):
         save("search-indexed.txt", terminal.pump(.5))
         terminal.child.send(b"\x06\x1b")
         cancelled = save("search-cancelled.txt", terminal.pump(.3))
-        assert "Full search: Cancelled" in cancelled, cancelled
+        assert re.search(r"(?:Full|Exposed semantic) search: Cancelled", cancelled), cancelled
+        if CASE == "writer-long":
+            assert "Exposed semantic search: Cancelled" in cancelled, cancelled
+            assert "Full search: Cancelled" not in cancelled, cancelled
         REPORT["checks"]["progressive_cancellation"] = "PASS"
         terminal.send(b"\x06")
-        save("search-progressive.txt", terminal.pump(1))
-        assert re.search(r"[1-9][0-9]* matches", (OUT / "search-progressive.txt").read_text())
+        progressive = save("search-progressive.txt", terminal.pump(1))
+        assert re.search(r"[1-9][0-9]* matches", progressive)
+        if CASE == "writer-long":
+            assert "Exposed semantic search:" in progressive, progressive
+            assert "Full search complete" not in progressive, progressive
         terminal.send(b"\x1b")
         terminal.send(b"\x1b")
         REPORT["checks"]["reader_outline_search_frames"] = "PASS"
         if CASE.startswith("writer"):
+            if CASE == "writer-long":
+                before_content = save("realization-content-before.txt",
+                                      inspect("--app", selector, "--dump-content").stdout)
+                save("realization-outline-before.txt",
+                     inspect("--app", selector, "--dump-outline").stdout)
+                tree = inspect("--app", selector).stdout
+                go_to_page = locator_for(tree, "MenuItem", "Go to Page...")
+                save("go-to-page-actions.txt", inspect("--actions", go_to_page).stdout)
+                invoked = inspect("--action-name", go_to_page, "Click", ok=False)
+                save("go-to-page-invocation.txt", invoked.stdout + invoked.stderr)
+                terminal.pump(1)
+                page_tree = save("go-to-page-tree.txt", inspect("--app", selector).stdout)
+                assert re.search(r'Dialog "[^"]*(?:Go to Page|Navigator)[^"]*"', page_tree), page_tree
+                if 'TextInput' in page_tree:
+                    terminal.focus("Text input:")
+                    terminal.send("\r2\r")
+                    terminal.pump(.5)
+                    terminal.focus("OK")
+                    terminal.send("\r")
+                    terminal.pump(2)
+                    navigation_result = "COMPLETED"
+                else:
+                    # LibreOffice 24.2 exposes the page selector as a Slider.
+                    # GUI2TUI has no validated Slider mutation contract, so the
+                    # honest semantic result is a safe, non-guessed cancel.
+                    assert 'Slider value="1"' in page_tree, page_tree
+                    cancel = locator_for(page_tree, "Button", "Cancel")
+                    inspect("--action-name", cancel, "Click")
+                    terminal.pump(1)
+                    navigation_result = "SAFE DEGRADATION: page selector exposed only as Slider"
+                after_content = save("realization-content-after.txt",
+                                     inspect("--app", selector, "--dump-content").stdout)
+                save("realization-outline-after.txt",
+                     inspect("--app", selector, "--dump-outline").stdout)
+                before_blocks = int(re.search(r"blocks=(\d+)", before_content)[1])
+                after_blocks = int(re.search(r"blocks=(\d+)", after_content)[1])
+                REPORT["writer_realization"] = {
+                    "before_blocks": before_blocks,
+                    "after_blocks": after_blocks,
+                    "ordinary_navigation": "Go to Page...",
+                    "navigation_result": navigation_result,
+                }
+                REPORT["checks"]["partial_search_wording"] = "PASS"
+                REPORT["checks"]["ordinary_realization_attempt"] = "PASS"
             command_dialog(terminal, selector, "About LibreOffice", "About LibreOffice")
         else:
             tree = inspect("--app", selector).stdout
@@ -428,15 +623,58 @@ def workflow(terminal, selector, app, command):
             assert 'ListItem "Beta" [selected,transient]' in tree[tree.index('ComboBox "'):]
         REPORT["checks"]["choice_or_safe_degradation"] = "PASS"
     elif CASE == "designer":
-        tree = inspect("--app", selector).stdout
+        tree = inspect("--app", selector, "--verbose").stdout
         subtree = tree[tree.index('Dialog "New Form"'):]
-        inspect("--activate", locator_for(subtree, "Button", "Close"))
+        choice = locator_for(subtree, "ListItem", "QVGA portrait (240x320)")
+        save("startup-choice-actions.txt", inspect("--actions", choice).stdout)
+        inspect("--action-name", choice, "Toggle")
+        terminal.pump(.5)
+        selected = save("startup-choice-selected.txt", inspect("--app", selector).stdout)
+        assert re.search(r'ListItem "QVGA portrait \(240x320\)" \[[^]]*selected', selected), selected
+
+        checkbox = locator_for(selected[selected.index('Dialog "New Form"'):],
+                               "CheckBox", "Show this Dialog on Startup")
+        initially_checked = re.search(
+            r'CheckBox "Show this Dialog on Startup" \[[^]]*checked', selected) is not None
+        inspect("--action-name", checkbox, "Toggle")
+        terminal.pump(.5)
+        toggled = save("startup-checkbox-toggled.txt", inspect("--app", selector).stdout)
+        assert (re.search(r'CheckBox "Show this Dialog on Startup" \[[^]]*checked', toggled)
+                is not None) != initially_checked
+        checkbox = locator_for(toggled[toggled.index('Dialog "New Form"'):],
+                               "CheckBox", "Show this Dialog on Startup")
+        inspect("--action-name", checkbox, "Toggle")
+        terminal.pump(.5)
+
+        create = locator_for(inspect("--app", selector).stdout, "Button", "Create")
+        inspect("--action-name", create, "Press")
         terminal.pump(1)
         assert 'Dialog "New Form"' not in inspect("--app", selector).stdout
-        save("startup-dialog-closed.txt", terminal.pump())
-        terminal.send(":About")
-        save("commands-about.txt", terminal.pump(.3))
-        REPORT["checks"]["startup_dialog_close_commands"] = "PASS"
+        terminal.send("r")
+        save("form-created-frame.txt", terminal.pump(1))
+        command_tree = inspect("--app", selector).stdout
+        before_dialogs = set(re.findall(r'Dialog "([^"]+)"', command_tree))
+        form_settings = locator_for(command_tree, "MenuItem", "Form Settings...")
+        save("form-settings-actions.txt", inspect("--actions", form_settings).stdout)
+        invoked = inspect("--action-name", form_settings, "Press", ok=False)
+        save("form-settings-invocation.txt", invoked.stdout + invoked.stderr)
+        terminal.pump(1)
+        settings = save("form-settings-tree.txt", inspect("--app", selector).stdout)
+        dialogs = [title for title in re.findall(r'Dialog "([^"]+)"', settings)
+                   if title not in before_dialogs]
+        assert dialogs, settings
+        title = dialogs[-1]
+        settings_subtree = settings[settings.rindex(f'"{title}"'):]
+        close_role = "Cancel" if 'Button "Cancel"' in settings_subtree else "Close"
+        close = locator_for(settings_subtree, "Button", close_role)
+        close_actions = inspect("--actions", close).stdout
+        close_action = "Press" if re.search(r"\bPress\b", close_actions) else "Click"
+        inspect("--action-name", close, close_action)
+        terminal.pump(1)
+        assert title not in inspect("--app", selector).stdout
+        REPORT["checks"]["real_choice_navigation"] = "PASS"
+        REPORT["checks"]["real_form_control_toggle"] = "PASS"
+        REPORT["checks"]["real_command_dialog_context"] = "PASS"
     elif CASE == "pcmanfm":
         terminal.send(":")
         save("commands-frame.txt", terminal.pump())

@@ -65,12 +65,25 @@ pub enum ReconstructionError {
     #[error("bulk cache contains a parent cycle at {0}")]
     ParentCycle(BackendLocator),
     #[error(
-        "bulk cache is incomplete at {locator}: record advertises {expected} children but only {cached} are cached"
+        "bulk cache is incomplete: bulk_items={bulk_items} reachable_nodes={reachable_nodes} missing_child_refs={missing_child_refs} invalid_parent_links={invalid_parent_links}; first mismatch at {locator}: record advertises {expected} children but only {cached} are cached"
     )]
     IncompleteChildren {
         locator: BackendLocator,
         expected: usize,
         cached: usize,
+        bulk_items: usize,
+        reachable_nodes: usize,
+        missing_child_refs: usize,
+        invalid_parent_links: usize,
+    },
+    #[error(
+        "bulk cache contains an unrealized document skeleton: bulk_items={bulk_items} reachable_nodes={reachable_nodes} invalid_parent_links={invalid_parent_links}; document {locator} advertises no exposed children"
+    )]
+    UnrealizedDocument {
+        locator: BackendLocator,
+        bulk_items: usize,
+        reachable_nodes: usize,
+        invalid_parent_links: usize,
     },
 }
 
@@ -134,24 +147,74 @@ pub fn reconstruct_tree(
         child_list.dedup();
     }
 
+    let mut reachable = HashSet::new();
+    let mut pending = vec![application.clone()];
+    while let Some(locator) = pending.pop() {
+        if reachable.insert(locator.clone())
+            && let Some(descendants) = children.get(&locator)
+        {
+            pending.extend(descendants.iter().cloned());
+        }
+    }
+    let invalid_parent_links = by_locator
+        .values()
+        .filter(|record| {
+            record.locator != *application
+                && record
+                    .parent
+                    .as_ref()
+                    .is_some_and(|parent| !by_locator.contains_key(parent))
+        })
+        .count();
+
     // GetItems is a cache inventory, not a guarantee that every realized
     // descendant is resident. Reject a partial ordinary subtree so Auto can
     // fall back to the recursive source-of-truth walk. Virtualized containers
     // explicitly advertising ManagesDescendants are allowed to be partial.
-    for (locator, record) in &by_locator {
-        if locator == application || record.states.contains(atspi::State::ManagesDescendants) {
-            continue;
-        }
-        if let Some(expected) = record.child_count {
-            let cached = children.get(locator).map_or(0, Vec::len);
-            if cached < expected {
-                return Err(ReconstructionError::IncompleteChildren {
-                    locator: locator.clone(),
-                    expected,
-                    cached,
-                });
+    let missing = reachable
+        .iter()
+        .filter_map(|locator| {
+            let record = &by_locator[locator];
+            if locator == application || record.states.contains(atspi::State::ManagesDescendants) {
+                return None;
             }
-        }
+            record.child_count.and_then(|expected| {
+                let cached = children.get(locator).map_or(0, Vec::len);
+                (cached < expected).then(|| (locator.clone(), expected, cached))
+            })
+        })
+        .collect::<Vec<_>>();
+    if let Some((locator, expected, cached)) = missing.first() {
+        return Err(ReconstructionError::IncompleteChildren {
+            locator: locator.clone(),
+            expected: *expected,
+            cached: *cached,
+            bulk_items: input_records,
+            reachable_nodes: reachable.len(),
+            missing_child_refs: missing
+                .iter()
+                .map(|(_, expected, cached)| expected.saturating_sub(*cached))
+                .sum(),
+            invalid_parent_links,
+        });
+    }
+
+    // A reachable childless document can be a transient browser Cache
+    // skeleton even when every advertised child count is internally
+    // consistent. Accepting it would produce a fast but materially incomplete
+    // scene. A recursive walk is the generic correctness fallback; genuinely
+    // empty documents remain correct, only slower during bootstrap.
+    if let Some(locator) = reachable.iter().find(|locator| {
+        let record = &by_locator[*locator];
+        SemanticRole::from(record.role) == SemanticRole::Document
+            && children.get(*locator).is_none_or(Vec::is_empty)
+    }) {
+        return Err(ReconstructionError::UnrealizedDocument {
+            locator: locator.clone(),
+            bulk_items: input_records,
+            reachable_nodes: reachable.len(),
+            invalid_parent_links,
+        });
     }
 
     let mut context = BuildContext {
@@ -435,6 +498,10 @@ mod tests {
             Err(ReconstructionError::IncompleteChildren {
                 expected: 2,
                 cached: 0,
+                bulk_items: 2,
+                reachable_nodes: 2,
+                missing_child_refs: 2,
+                invalid_parent_links: 0,
                 ..
             })
         ));
@@ -452,5 +519,48 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn incomplete_orphan_does_not_reject_a_complete_reachable_tree() {
+        let root = BackendLocator::new(":1.2", "/root");
+        let mut orphan = record("/orphan", Some("/missing"), Some(0));
+        orphan.child_count = Some(5);
+        let (_, stats) = reconstruct_tree(
+            vec![record("/root", None, None), orphan],
+            &root,
+            InspectOptions {
+                verbose: false,
+                max_depth: 10,
+                max_nodes: 10,
+            },
+        )
+        .unwrap();
+        assert_eq!(stats.reachable_records, 1);
+        assert_eq!(stats.orphans_ignored, 1);
+    }
+
+    #[test]
+    fn reachable_empty_document_skeleton_requires_walk_fallback() {
+        let root = BackendLocator::new(":1.2", "/root");
+        let mut document = record("/document", Some("/root"), Some(0));
+        document.role = atspi::Role::DocumentWeb;
+        assert!(matches!(
+            reconstruct_tree(
+                vec![record("/root", None, None), document],
+                &root,
+                InspectOptions {
+                    verbose: false,
+                    max_depth: 10,
+                    max_nodes: 10,
+                }
+            ),
+            Err(ReconstructionError::UnrealizedDocument {
+                bulk_items: 2,
+                reachable_nodes: 2,
+                invalid_parent_links: 0,
+                ..
+            })
+        ));
     }
 }
