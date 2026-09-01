@@ -12,18 +12,20 @@ corrective v0.1.2 package is published, build the current source on Linux with
 `cargo build --release` and use `target/release/gui2tui`. Do not treat v0.1.1
 as launcher-readiness evidence.
 
-Optionally copy the runtime executables into an existing directory on your PATH.
-If the extracted package contains `gui2tui-headless`, install it too:
+The release exposes one user command. Keep its private implementation
+components in the archive layout:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
-install -m 755 bin/gui2tui bin/gui2tui-inspect bin/gui2tui-local "$HOME/.local/bin/"
-test ! -e bin/gui2tui-headless || \
-    install -m 755 bin/gui2tui-headless "$HOME/.local/bin/"
+install -m 755 bin/gui2tui "$HOME/.local/bin/"
+mkdir -p "$HOME/.local/libexec"
+cp -R libexec/gui2tui "$HOME/.local/libexec/"
 ```
 
-Add that directory to PATH through your normal shell configuration. The inspector is also
-used by host artifact TTL reaping; keep it alongside gui2tui. See `DEPENDENCIES.txt` in the archive
+Add that directory to PATH through your normal shell configuration. Use
+`gui2tui inspect ...` for low-level diagnostics and `gui2tui endpoint ...` for
+the optional same-host viewer broker; their implementation executables are
+private libexec components. See `DEPENDENCIES.txt` in the archive
 for actual dynamic linkage. No complete GNOME/KDE installation is required.
 Official x86_64 and aarch64 archives are built natively on Ubuntu 22.04 runners.
 Published archives record measured ELF requirements in
@@ -57,7 +59,7 @@ Use advanced `--id` or `--match` only when discovery is ambiguous.
 
 The id (`chromium`) is the user-owned launcher name. `--id` overrides it;
 `--match` is the AT-SPI
-application name or an unambiguous substring; use `gui2tui-inspect --list`
+application name or an unambiguous substring; use `gui2tui inspect --list`
 after a manual start to discover it. Options after `--` are passed directly to
 the executable. No shell is invoked. Adding an existing id is refused unless
 `--replace` is explicit; remove one with `gui2tui app remove ID`.
@@ -85,47 +87,48 @@ Doctor is explicit, bounded and does not read application text. No DISPLAY is no
 error: the terminal may be headless while a GUI session runs elsewhere on the same host.
 No apps? Start an application in that desktop session, press `r`, or `d` for diagnostics.
 
-## One-command headless session
+## Managed headless session
 
-The package includes a `gui2tui-headless` helper. It creates a private Xvfb,
-D-Bus and AT-SPI session, runs `gui2tui doctor`, then opens an interactive shell:
-
-```bash
-bin/gui2tui-headless
-```
-
-Inside that shell, start a GUI application and GUI2TUI normally. Both processes
-inherit the same private accessibility session:
+Persistent mode creates a private Xvfb, D-Bus and AT-SPI session and verifies it
+with a fresh `doctor` process:
 
 ```bash
-gtk4-demo &
-gui2tui
+gui2tui setup persistent
 ```
 
-The helper preserves the caller's normal XDG configuration, so saved launchers
-remain available after it exits. Only its runtime directory, Xvfb, D-Bus and
-AT-SPI session are temporary. Set a temporary `XDG_CONFIG_HOME` yourself when
-ephemeral launcher configuration is desired. A program already running outside
-the helper's private D-Bus/AT-SPI session is not visible inside it.
+The session remains alive after the setup terminal closes. Future `gui2tui`,
+`gui2tui inspect`, and applications started with `gui2tui launch` automatically
+attach through a current-user-owned mode-0700 state directory and mode-0600
+descriptor. No environment command needs to be sourced.
+
+```bash
+gui2tui setup status
+gui2tui app add mousepad
+gui2tui launch mousepad
+gui2tui setup restart
+gui2tui setup stop
+```
+
+Stopping removes the active descriptor and future invocations return to the
+terminal's normal desktop session. Set `GUI2TUI_NO_MANAGED_SESSION=1` for one
+explicit invocation that must ignore a running managed session.
 
 Strict Snap confinement cannot access the helper's private session bus. A Snap
 launcher is rejected before `exec` with an actionable error; use the normal
 desktop session or a non-Snap package. This restriction is package/session
 isolation, not a semantic-renderer limitation.
 
-Or run everything as one command:
+For a disposable shell whose environment is intentionally not visible to other
+terminals:
 
 ```bash
-bin/gui2tui-headless -- bash -lc './my-gui-app & exec bin/gui2tui'
+gui2tui setup temporary
+gui2tui setup temporary -- bash -lc 'gtk4-demo & exec gui2tui'
 ```
 
-Use `--doctor-only` for a non-interactive environment check. A valid headless
-session may still report WARN for “no accessible applications” before an app is
-started and for the optional same-host viewer; WARN is not a blocking doctor
-failure. Missing Ubuntu dependencies are reported with the corresponding
-`apt install` command. The helper never installs packages automatically, does
-not modify the parent shell, and removes its private Xvfb/runtime directory when
-the child shell or command exits.
+Temporary mode removes its private Xvfb/runtime directory when the child shell
+or command exits. Neither mode installs packages automatically. Missing Ubuntu
+dependencies are reported with the corresponding `apt install` command.
 
 ## First two minutes
 

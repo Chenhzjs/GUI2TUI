@@ -8,8 +8,9 @@ Phase 4B turns the frozen v0.1 runtime into an installable, diagnosable command-
 - `gui2tui run --app NAME` opens a known application directly.
 - `gui2tui doctor` performs bounded environment checks; `--json` emits a stable, content-free report.
 - `gui2tui config init|show|check` manages the versioned XDG TOML configuration.
-- `gui2tui-inspect` remains the low-level AT-SPI diagnostic tool.
-- `gui2tui-local` remains the optional same-host modality endpoint.
+- `gui2tui inspect` is the low-level AT-SPI diagnostic command.
+- `gui2tui endpoint` is the optional same-host modality endpoint command; its
+  executable is a private libexec implementation detail.
 
 Configuration is optional. Precedence is defaults, configuration file, then command-line overrides. Invalid or unknown configuration keys fail with a location and remediation; source values and GUI content are not echoed.
 

@@ -95,7 +95,7 @@ acceptance target and meets the sub-1.5-second stretch target on this host.
 
 ## Collection probe
 
-`gui2tui-inspect --app NAME --probe-collection` is research-only. Neither GTK
+`gui2tui inspect --app NAME --probe-collection` is research-only. Neither GTK
 nor Qt fixture advertised Collection in the observed cache. Chrome advertised
 it broadly (all 5,158 cached objects in the large fixture), but `GetMatches` from the
 application root returned zero Buttons, TextInputs, CheckBoxes, and focusable

@@ -28,7 +28,7 @@ google-chrome-stable \
   file:///workspace/tests/fixtures/browser_fixture.html
 ```
 
-`gui2tui-inspect --list` discovered the application as `Google Chrome`.
+`gui2tui inspect --list` discovered the application as `Google Chrome`.
 
 ## Small fixture observations
 

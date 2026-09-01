@@ -24,9 +24,10 @@ case "$architecture" in x86_64|aarch64) ;; *) echo "Unsupported release architec
 name="gui2tui-${version}-linux-${architecture}"
 stage=$(mktemp -d "$output/package-XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
-mkdir -p "$stage/$name/bin" "$stage/$name/smoke"
-install -m 755 "$target/release/gui2tui" "$target/release/gui2tui-inspect" "$target/release/gui2tui-local" "$stage/$name/bin/"
-install -m 755 scripts/gui2tui-headless "$stage/$name/bin/"
+mkdir -p "$stage/$name/bin" "$stage/$name/libexec/gui2tui" "$stage/$name/smoke"
+install -m 755 "$target/release/gui2tui" "$stage/$name/bin/"
+install -m 755 "$target/release/gui2tui-inspect" "$target/release/gui2tui-local" "$stage/$name/libexec/gui2tui/"
+install -m 755 scripts/headless-session "$stage/$name/libexec/gui2tui/"
 cp README.md LICENSE-MIT LICENSE-APACHE config.example.toml "$stage/$name/"
 cp -R docs "$stage/$name/docs"
 install -m 755 scripts/release-smoke.sh "$stage/$name/smoke/run.sh"

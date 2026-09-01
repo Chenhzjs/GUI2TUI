@@ -95,7 +95,7 @@ gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
   --method org.freedesktop.DBus.Properties.Set org.a11y.Status ScreenReaderEnabled '<true>'
 ```
 
-After restarting the Qt fixture, `GetAll org.a11y.Status` returned both properties as true and `gui2tui-inspect --list` reported `gui2tui-qt-fixture`.
+After restarting the Qt fixture, `GetAll org.a11y.Status` returned both properties as true and `gui2tui inspect --list` reported `gui2tui-qt-fixture`.
 
 ## Measured snapshot samples
 

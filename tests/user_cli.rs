@@ -32,7 +32,9 @@ fn fresh_user_commands_require_no_config_or_desktop() {
     }
     assert!(!temp.path().join("config/gui2tui/config.toml").exists());
     let help = String::from_utf8(run(temp.path(), &["--help"]).stdout).unwrap();
-    for command in ["doctor", "config", "app", "launch", "run"] {
+    for command in [
+        "doctor", "config", "app", "launch", "run", "setup", "inspect", "endpoint",
+    ] {
         assert!(help.contains(command));
     }
     assert!(!help.contains("--max-nodes"));

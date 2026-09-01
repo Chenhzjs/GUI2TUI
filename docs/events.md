@@ -13,7 +13,7 @@ AT-SPI signal
     -> TUI redraw
 ```
 
-`gui2tui-inspect --watch-events --app NAME` prints the normalized, read-only stream for
+`gui2tui inspect --watch-events --app NAME` prints the normalized, read-only stream for
 one application's unique AT-SPI bus name. A newly added object from that bus is retained even
 when it is not yet present in the current tree.
 

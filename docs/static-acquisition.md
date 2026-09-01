@@ -75,9 +75,9 @@ conservative detection, not proof against every broken/malicious accessibility i
 On the graphical-session host (SSH into that session is possible; SSH alone does not create AT-SPI):
 
 ```bash
-gui2tui-inspect --app python3 --verbose
-gui2tui-inspect --app python3 --dump-resource-reference NODE_ID
-gui2tui-inspect --app python3 --materialize-modality NODE_ID --artifact-ttl-secs 300
+gui2tui inspect --app python3 --verbose
+gui2tui inspect --app python3 --dump-resource-reference NODE_ID
+gui2tui inspect --app python3 --materialize-modality NODE_ID --artifact-ttl-secs 300
 
 gui2tui --app python3
 # F4: inspect available modality objects
@@ -87,7 +87,7 @@ gui2tui --app python3
 # Esc: return to semantic TUI; normal focus/Reader position remains unchanged
 ```
 
-No `gui2tui-local` process or socket is needed for materialization. Reference path prints the
+No `gui2tui endpoint` process or socket is needed for materialization. Reference path prints the
 redacted reference and `payload_bytes=0`; even `--materialize-modality` does not capture a
 resource already resolved by reference. Headless does not imply absence of the GUI's graphical
 session: the viewer endpoint is absent, but capture still needs a graphical source.
@@ -110,10 +110,10 @@ outlive the TTL; the file is not extended automatically.
 
 ```bash
 client_dir=$(mktemp -d)
-gui2tui-local serve --socket "$client_dir/broker.sock" \
+gui2tui endpoint serve --socket "$client_dir/broker.sock" \
   --mime 'image/*' --handler-program /usr/bin/eog
 
-gui2tui-inspect --app python3 --materialize-modality NODE_ID \
+gui2tui inspect --app python3 --materialize-modality NODE_ID \
   --open-materialized --modality-socket "$client_dir/broker.sock"
 ```
 

@@ -204,8 +204,24 @@ struct Cli {
     modality_socket: Option<std::path::PathBuf>,
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
+    if let Err(error) = gui2tui::product::headless::apply_at_process_start() {
+        eprintln!("warning: {error}");
+    }
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("error: cannot start async runtime: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> ExitCode {
     let cli = Cli::parse();
     tracing_subscriber::fmt()
         .with_env_filter(

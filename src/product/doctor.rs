@@ -296,7 +296,16 @@ mod tests {
         use tokio::io::AsyncReadExt;
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("endpoint");
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = match tokio::net::UnixListener::bind(&path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                // Some sandboxed macOS runners deny AF_UNIX creation even in a
+                // private temporary directory. The live Linux harness covers
+                // this timeout path with a real socket.
+                return;
+            }
+            Err(error) => panic!("cannot create timeout test socket: {error}"),
+        };
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let length = socket.read_u32().await.unwrap() as usize;

@@ -32,8 +32,12 @@ binaries = []
 architectures = set()
 all_glibc: list[tuple[int, ...]] = []
 all_glibcxx: list[tuple[int, ...]] = []
-for name in ("gui2tui", "gui2tui-inspect", "gui2tui-local"):
-    path = bundle / "bin" / name
+for name, relative in (
+    ("gui2tui", "bin/gui2tui"),
+    ("gui2tui-inspect", "libexec/gui2tui/gui2tui-inspect"),
+    ("gui2tui-local", "libexec/gui2tui/gui2tui-local"),
+):
+    path = bundle / relative
     header = command("readelf", "-h", str(path))
     machine = next(line.split(":", 1)[1].strip() for line in header.splitlines() if "Machine:" in line)
     architectures.add(machine)

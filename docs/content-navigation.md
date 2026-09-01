@@ -116,12 +116,12 @@ Collection nodes. It is not used as the content source.
 ## Diagnostics
 
 ```bash
-gui2tui-inspect --app firefox --dump-content
-gui2tui-inspect --app firefox --dump-outline
-gui2tui-inspect --app firefox --probe-document
-gui2tui-inspect --app firefox --dump-virtual-collections
-gui2tui-inspect --app firefox --audit-content-reachability
-gui2tui-inspect --app firefox --dump-scene
+gui2tui inspect --app firefox --dump-content
+gui2tui inspect --app firefox --dump-outline
+gui2tui inspect --app firefox --probe-document
+gui2tui inspect --app firefox --dump-virtual-collections
+gui2tui inspect --app firefox --audit-content-reachability
+gui2tui inspect --app firefox --dump-scene
 ```
 
 Raster rendering, PDF/ODT parsing, DOM/CDP, UNO, and toolkit-native model access are not used.

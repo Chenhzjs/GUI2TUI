@@ -25,7 +25,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Check headless session helper
         run: |
-          bash -n scripts/gui2tui-headless
-          scripts/gui2tui-headless --help >/dev/null
+          bash -n scripts/headless-session
+          scripts/headless-session --help >/dev/null
       - name: Check patch whitespace
         run: git diff --check

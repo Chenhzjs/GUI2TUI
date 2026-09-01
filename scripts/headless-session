@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Internal implementation for `gui2tui setup`; not a user-facing command.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Internal GUI2TUI managed-session helper.
+Use: gui2tui setup {persistent|temporary|status|stop|restart}
+EOF
+}
+
+state_root() {
+    if [[ -n ${XDG_STATE_HOME:-} && $XDG_STATE_HOME == /* ]]; then
+        printf '%s/gui2tui/headless\n' "$XDG_STATE_HOME"
+    elif [[ -n ${HOME:-} && $HOME == /* ]]; then
+        printf '%s/.local/state/gui2tui/headless\n' "$HOME"
+    else
+        echo 'error: set HOME or an absolute XDG_STATE_HOME' >&2
+        return 1
+    fi
+}
+
+require_linux_dependencies() {
+    [[ $(uname -s) == Linux ]] || { echo 'error: headless setup requires Linux' >&2; return 1; }
+    local missing=() dependency
+    for dependency in bash dbus-daemon dbus-update-activation-environment gdbus Xvfb xdpyinfo python3; do
+        command -v "$dependency" >/dev/null 2>&1 || missing+=("$dependency")
+    done
+    if ((${#missing[@]})); then
+        printf 'error: missing setup dependencies:' >&2
+        printf ' %s' "${missing[@]}" >&2
+        printf '\nUbuntu/Debian: sudo apt install xvfb x11-utils dbus-x11 at-spi2-core libglib2.0-bin\n' >&2
+        return 1
+    fi
+}
+
+secure_root() {
+    local root=$1
+    mkdir -p -- "$root"
+    chmod 700 "$root"
+    [[ ! -L $root ]] || { echo "error: refusing symlink state directory: $root" >&2; return 1; }
+    local owner mode
+    owner=$(stat -c %u "$root")
+    mode=$(stat -c %a "$root")
+    [[ $owner == "$(id -u)" && $mode == 700 ]] || {
+        echo "error: managed session directory must be current-user owned and mode 0700" >&2
+        return 1
+    }
+}
+
+supervisor_alive() {
+    local root=$1 pid
+    [[ -r $root/supervisor.pid ]] || return 1
+    read -r pid <"$root/supervisor.pid"
+    [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    [[ -r /proc/$pid/cmdline ]] || return 1
+    tr '\0' ' ' <"/proc/$pid/cmdline" | grep -Fq -- "_serve $root"
+}
+
+stop_session() {
+    local root=$1 pid
+    if supervisor_alive "$root"; then
+        read -r pid <"$root/supervisor.pid"
+        kill -TERM "$pid"
+        for _ in {1..100}; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.05
+        done
+        kill -0 "$pid" 2>/dev/null && { echo 'error: managed session did not stop' >&2; return 1; }
+        echo 'Stopped persistent GUI2TUI environment.'
+    else
+        echo 'Persistent GUI2TUI environment is not running.'
+    fi
+    rm -f -- "$root/session.json" "$root/supervisor.pid" "$root/session-bus"
+}
+
+start_persistent() {
+    local root=$1 screen=$2
+    require_linux_dependencies
+    [[ $screen =~ ^[0-9]+x[0-9]+x[0-9]+$ ]] || { echo "error: invalid screen geometry: $screen" >&2; return 2; }
+    secure_root "$root"
+    if supervisor_alive "$root" && [[ -s $root/session.json ]]; then
+        echo 'Persistent GUI2TUI environment is already running.'
+        return 0
+    fi
+    rm -f -- "$root/session.json" "$root/supervisor.pid" "$root/session-bus"
+    nohup "$0" _serve "$root" "$screen" >"$root/supervisor.log" 2>&1 </dev/null &
+    local launcher_pid=$!
+    for _ in {1..200}; do
+        if [[ -s $root/session.json ]] && supervisor_alive "$root"; then
+            echo 'Persistent GUI2TUI environment is ready.'
+            echo 'Future `gui2tui`, `gui2tui inspect`, and launched GUI processes attach automatically.'
+            return 0
+        fi
+        kill -0 "$launcher_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    echo 'error: persistent environment failed to start' >&2
+    sed -n '1,30p' "$root/supervisor.log" >&2 || true
+    return 1
+}
+
+serve() {
+    local root=$1 screen=$2 xvfb_pid= dbus_pid= display=
+    secure_root "$root"
+    printf '%s\n' "$$" >"$root/supervisor.pid"
+    chmod 600 "$root/supervisor.pid"
+    cleanup() {
+        rm -f -- "$root/session.json" "$root/supervisor.pid"
+        [[ -z $dbus_pid ]] || kill "$dbus_pid" 2>/dev/null || true
+        [[ -z $xvfb_pid ]] || kill "$xvfb_pid" 2>/dev/null || true
+        [[ -z $dbus_pid ]] || wait "$dbus_pid" 2>/dev/null || true
+        [[ -z $xvfb_pid ]] || wait "$xvfb_pid" 2>/dev/null || true
+        rm -f -- "$root/session-bus" "$root/display"
+    }
+    trap cleanup EXIT
+    trap 'exit 0' HUP INT TERM
+
+    Xvfb -displayfd 3 -screen 0 "$screen" -dpi 96 \
+        3>"$root/display" >>"$root/xvfb.log" 2>&1 &
+    xvfb_pid=$!
+    for _ in {1..100}; do
+        [[ -s $root/display ]] && break
+        kill -0 "$xvfb_pid" 2>/dev/null || return 1
+        sleep 0.05
+    done
+    display=$(tr -d '[:space:]' <"$root/display")
+    [[ $display =~ ^[0-9]+$ ]] || { echo 'Xvfb returned invalid display' >&2; return 1; }
+    export DISPLAY=:$display
+    for _ in {1..100}; do
+        xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 && break
+        sleep 0.05
+    done
+    xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 || { echo 'Xvfb did not become ready' >&2; return 1; }
+
+    rm -f -- "$root/session-bus"
+    dbus-daemon --session --nofork --address="unix:path=$root/session-bus" \
+        >>"$root/dbus.log" 2>&1 &
+    dbus_pid=$!
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$root/session-bus"
+    export XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+    for _ in {1..100}; do
+        gdbus call --session --dest org.freedesktop.DBus \
+            --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames \
+            >/dev/null 2>&1 && break
+        kill -0 "$dbus_pid" 2>/dev/null || return 1
+        sleep 0.05
+    done
+    dbus-update-activation-environment DISPLAY XDG_SESSION_TYPE NO_AT_BRIDGE QT_LINUX_ACCESSIBILITY_ALWAYS_ON
+    for property in IsEnabled ScreenReaderEnabled; do
+        gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
+            --method org.freedesktop.DBus.Properties.Set org.a11y.Status "$property" '<true>' >/dev/null
+    done
+    python3 - "$root/session.json.tmp" "$$" "$DISPLAY" "$DBUS_SESSION_BUS_ADDRESS" <<'PY'
+import json, os, sys
+path, pid, display, bus = sys.argv[1:]
+with open(path, "w") as f:
+    json.dump({"schema_version": 1, "supervisor_pid": int(pid), "display": display,
+               "session_bus_address": bus}, f, sort_keys=True)
+    f.write("\n")
+os.chmod(path, 0o600)
+PY
+    mv -f -- "$root/session.json.tmp" "$root/session.json"
+    while kill -0 "$xvfb_pid" 2>/dev/null && kill -0 "$dbus_pid" 2>/dev/null; do
+        sleep 1
+    done
+    return 1
+}
+
+temporary() {
+    shift
+    [[ ${1:-} != -- ]] || shift
+    require_linux_dependencies
+    local command=("$@")
+    ((${#command[@]})) || command=("${SHELL:-/bin/sh}" -l)
+    local temp
+    temp=$(mktemp -d "${TMPDIR:-/tmp}/gui2tui-temporary.XXXXXX")
+    chmod 700 "$temp"
+    trap 'rm -rf -- "$temp"' RETURN
+    dbus-run-session -- bash -c '
+        set -euo pipefail
+        root=$1; shift
+        Xvfb -displayfd 3 -screen 0 1440x900x24 -dpi 96 3>"$root/display" >"$root/xvfb.log" 2>&1 &
+        xvfb=$!
+        trap '\''kill "$xvfb" 2>/dev/null || true; wait "$xvfb" 2>/dev/null || true'\'' EXIT
+        for _ in {1..100}; do [[ -s $root/display ]] && break; sleep 0.05; done
+        export DISPLAY=:$(tr -d "[:space:]" <"$root/display")
+        export XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+        dbus-update-activation-environment DISPLAY XDG_SESSION_TYPE NO_AT_BRIDGE QT_LINUX_ACCESSIBILITY_ALWAYS_ON
+        for property in IsEnabled ScreenReaderEnabled; do
+            gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
+              --method org.freedesktop.DBus.Properties.Set org.a11y.Status "$property" "<true>" >/dev/null
+        done
+        "$@"
+    ' gui2tui-temporary "$temp" "${command[@]}"
+}
+
+command=${1:-}
+root=$(state_root)
+case "$command" in
+    persistent-start)
+        require_linux_dependencies
+        screen=1440x900x24
+        [[ ${2:-} != --screen ]] || { screen=${3:?--screen requires a value}; }
+        start_persistent "$root" "$screen"
+        ;;
+    restart)
+        require_linux_dependencies
+        screen=1440x900x24
+        [[ ${2:-} != --screen ]] || { screen=${3:?--screen requires a value}; }
+        secure_root "$root"
+        stop_session "$root"
+        start_persistent "$root" "$screen"
+        ;;
+    stop)
+        require_linux_dependencies
+        secure_root "$root"
+        stop_session "$root"
+        ;;
+    status)
+        require_linux_dependencies
+        secure_root "$root"
+        if supervisor_alive "$root" && [[ -s $root/session.json ]]; then
+            echo 'Persistent GUI2TUI environment: RUNNING'
+        else
+            echo 'Persistent GUI2TUI environment: STOPPED'
+            exit 1
+        fi
+        ;;
+    temporary)
+        temporary "$@"
+        ;;
+    _serve)
+        serve "${2:?state root required}" "${3:?screen required}"
+        ;;
+    -h|--help|help|'') usage ;;
+    *) echo "error: unknown internal setup command: $command" >&2; exit 2 ;;
+esac

@@ -52,15 +52,17 @@ AT-SPI bus is reachable. The terminal itself may be headless or connected over
 SSH to that same host. No config file, root privilege, full desktop environment,
 or companion viewer is required.
 
-For a server without a physical desktop, the package includes a helper that
-creates a private Xvfb + D-Bus + AT-SPI session, verifies it with `doctor`, and
-opens a shell:
+For a server without a physical desktop, configure a persistent managed Xvfb +
+D-Bus + AT-SPI session once:
 
 ```bash
-./bin/gui2tui-headless
+./bin/gui2tui setup persistent
 ```
 
-See [one-command headless setup](docs/getting-started.md#one-command-headless-session).
+Every later terminal for the same user automatically uses it; no shell profile,
+`source`, or extra helper command is required. Use `setup status`, `restart`, or
+`stop` to manage it. An isolated one-shell alternative is
+`gui2tui setup temporary`.
 
 To save and launch an application directly (instead of starting it in another
 shell first), register its executable once. The shortest form is:
@@ -86,7 +88,7 @@ Registered applications also appear as `[launch]` entries in the normal
 
 On the first successful launch, GUI2TUI learns and saves the real AT-SPI name;
 for example, `libreoffice` resolves to `soffice`. Strict Snap applications
-cannot reach the private D-Bus created by `gui2tui-headless`; that topology is
+cannot reach a private managed D-Bus due to confinement; that topology is
 now rejected immediately. Use the normal desktop session or a non-Snap build,
 never a weakened sandbox. See [launcher compatibility](docs/launcher-compatibility.md).
 

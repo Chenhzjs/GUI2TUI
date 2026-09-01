@@ -69,7 +69,7 @@ continue using their tested policies; they are **not** pretend TOML settings. Lo
 remain explicit user-owned CLI configuration, not remote executable instructions:
 
 ```bash
-gui2tui-local serve --socket "$XDG_RUNTIME_DIR/viewer.sock" \
+gui2tui endpoint serve --socket "$XDG_RUNTIME_DIR/viewer.sock" \
   --mime image/png --handler-program /usr/bin/eog --authorization once
 gui2tui --modality-socket "$XDG_RUNTIME_DIR/viewer.sock"
 ```

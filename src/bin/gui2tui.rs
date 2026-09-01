@@ -2,7 +2,7 @@ use std::{
     error::Error,
     io::{self, IsTerminal, Write},
     path::Path,
-    process::ExitCode,
+    process::{Command as ProcessCommand, ExitCode},
     time::Duration,
 };
 
@@ -118,6 +118,43 @@ enum Command {
         /// Registered launcher id from `gui2tui app list`.
         id: String,
     },
+    /// Configure a managed headless accessibility session.
+    Setup {
+        #[command(subcommand)]
+        command: SetupCommand,
+    },
+    /// Run the low-level semantic inspector through the unified CLI.
+    Inspect {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Manage the optional same-host modality endpoint.
+    Endpoint {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+}
+#[derive(Debug, Subcommand)]
+enum SetupCommand {
+    /// Start (or reuse) a persistent session used automatically by future terminals.
+    Persistent {
+        #[arg(long, default_value = "1440x900x24")]
+        screen: String,
+    },
+    /// Open a shell or run one command in an isolated session that ends on exit.
+    Temporary {
+        #[arg(last = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Report whether the persistent managed session is running.
+    Status,
+    /// Stop the persistent managed session and disable automatic attachment.
+    Stop,
+    /// Restart the persistent managed session.
+    Restart {
+        #[arg(long, default_value = "1440x900x24")]
+        screen: String,
+    },
 }
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
@@ -160,9 +197,25 @@ enum LogLevel {
     Debug,
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match dispatch(Cli::parse()).await {
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let setup_command = matches!(&cli.command, Some(Command::Setup { .. }));
+    if !setup_command {
+        if let Err(error) = gui2tui::product::headless::apply_at_process_start() {
+            eprintln!("warning: {error}");
+        }
+    }
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("error: cannot start async runtime: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match runtime.block_on(dispatch(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
@@ -178,6 +231,15 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
     };
     let mut launch_id = None;
     match cli.command.take() {
+        Some(Command::Setup { command }) => {
+            return run_setup(command);
+        }
+        Some(Command::Inspect { args }) => {
+            return run_companion("gui2tui-inspect", args);
+        }
+        Some(Command::Endpoint { args }) => {
+            return run_companion("gui2tui-local", args);
+        }
         Some(Command::Doctor {
             verbose,
             json,
@@ -361,6 +423,87 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
     let result = run(cli, config).await;
     tracing::info!(target: "gui2tui::product", success=result.is_ok(), "session stopped");
     result
+}
+
+fn companion_path(name: &str) -> Result<std::path::PathBuf, Box<dyn Error>> {
+    let current = std::env::current_exe()?;
+    let bin = current.parent().ok_or("Current executable has no parent")?;
+    let installed = bin.join("../libexec/gui2tui").join(name);
+    if installed.is_file() {
+        return Ok(installed);
+    }
+    let sibling = bin.join(name);
+    if sibling.is_file() {
+        return Ok(sibling);
+    }
+    #[cfg(debug_assertions)]
+    {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("scripts")
+            .join(name);
+        if source.is_file() {
+            return Ok(source);
+        }
+    }
+    Err(format!("Required internal component '{name}' is missing; reinstall GUI2TUI").into())
+}
+
+fn run_companion(name: &str, args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let status = ProcessCommand::new(companion_path(name)?)
+        .args(args)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{name} exited with {status}").into())
+    }
+}
+
+fn run_setup(command: SetupCommand) -> Result<(), Box<dyn Error>> {
+    let helper = companion_path("headless-session")?;
+    let current = std::env::current_exe()?;
+    let mut args = Vec::new();
+    let run_doctor = match command {
+        SetupCommand::Persistent { screen } => {
+            args.extend(["persistent-start".to_owned(), "--screen".to_owned(), screen]);
+            true
+        }
+        SetupCommand::Temporary { command } => {
+            args.push("temporary".to_owned());
+            if !command.is_empty() {
+                args.push("--".to_owned());
+                args.extend(command);
+            }
+            false
+        }
+        SetupCommand::Status => {
+            args.push("status".to_owned());
+            false
+        }
+        SetupCommand::Stop => {
+            args.push("stop".to_owned());
+            false
+        }
+        SetupCommand::Restart { screen } => {
+            args.extend(["restart".to_owned(), "--screen".to_owned(), screen]);
+            true
+        }
+    };
+    let status = ProcessCommand::new(helper)
+        .env("GUI2TUI_SETUP_BINARY", &current)
+        .args(args)
+        .status()?;
+    if !status.success() {
+        return Err(format!("headless environment setup exited with {status}").into());
+    }
+    if run_doctor {
+        println!("\nVerifying the managed session with a fresh GUI2TUI process...");
+        let status = ProcessCommand::new(current).arg("doctor").status()?;
+        if !status.success() {
+            return Err("Managed session started, but diagnostics did not pass".into());
+        }
+    }
+    Ok(())
 }
 
 fn complete_launcher_fields(

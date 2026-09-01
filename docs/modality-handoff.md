@@ -52,7 +52,7 @@ are **NOT IMPLEMENTED**.
 
 ## Trust boundary
 
-The GUI/session side is an untrusted descriptor producer. `gui2tui-local` owns
+The GUI/session side is an untrusted descriptor producer. `gui2tui endpoint` owns
 Once / Session / Deny authorization, allowed schemes and MIME classes, canonical
 path mappings, local handler registration, and temporary cleanup. Handler
 executable paths are local configuration and are never disclosed as capabilities
@@ -61,16 +61,16 @@ or accepted in a server descriptor.
 ## Debugging
 
 ```bash
-gui2tui-inspect --app APP --dump-modalities
-gui2tui-inspect --app APP --resolve-modality NODE_ID
-gui2tui-inspect --app APP --dump-resource-reference NODE_ID
-gui2tui-inspect --modality-capabilities
+gui2tui inspect --app APP --dump-modalities
+gui2tui inspect --app APP --resolve-modality NODE_ID
+gui2tui inspect --app APP --dump-resource-reference NODE_ID
+gui2tui inspect --modality-capabilities
 
-gui2tui-local capabilities
+gui2tui endpoint capabilities
 # These two commands use a recording handler unless --handler-program is supplied:
-gui2tui-local reference --uri https://example.test/a.png \
+gui2tui endpoint reference --uri https://example.test/a.png \
   --mime image/png --kind image --authorization once
-gui2tui-local artifact --input image.svg --mime image/svg+xml \
+gui2tui endpoint artifact --input image.svg --mime image/svg+xml \
   --kind image --authorization once
 ```
 
@@ -81,12 +81,12 @@ Create a private directory and configure a **trusted local viewer launcher**:
 
 ```bash
 client_dir=$(mktemp -d)
-gui2tui-local serve --socket "$client_dir/broker.sock" \
+gui2tui endpoint serve --socket "$client_dir/broker.sock" \
   --mime 'image/*' --handler-program /absolute/path/to/trusted-viewer-launcher
 
 # In another terminal, in the selected graphical user's D-Bus session:
 gui2tui --app APP --modality-socket "$client_dir/broker.sock"
-gui2tui-inspect --app APP --handoff-modality NODE_ID \
+gui2tui inspect --app APP --handoff-modality NODE_ID \
   --modality-socket "$client_dir/broker.sock"
 ```
 
@@ -105,7 +105,7 @@ denies. `--recording-handler` is test-only and **does not display resources**.
 For explicit minimal-artifact producers (not automatic image extraction):
 
 ```bash
-gui2tui-local send-artifact --socket "$client_dir/broker.sock" \
+gui2tui endpoint send-artifact --socket "$client_dir/broker.sock" \
   --input image.svg --mime image/svg+xml --kind image
 ```
 
