@@ -191,8 +191,8 @@ results are in [relations.md](relations.md).
 
 ## Phase 4C real-application release-candidate validation (2026-09-01)
 
-See [the final report](phase4c-validation.md): **real-application gates complete;
-final RC pipeline pending**. Mousepad, GTK/Qt fixtures, a meaningful Qt
+See [the final report](phase4c-validation.md): **PHASE 4C REAL-WORLD VALIDATION
+& RELEASE CANDIDATE VALIDATED**. Mousepad, GTK/Qt fixtures, a meaningful Qt
 Designer workflow, Chrome, Firefox, Writer, Writer-long, Writer Options,
 VS Code best-effort and static-image paths have fresh evidence. PCManFM-Qt
 remains a documented blocked P2 with no adapter.

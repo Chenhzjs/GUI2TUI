@@ -1,10 +1,9 @@
 # Phase 4C — real-world validation and release-candidate evidence
 
-**REAL-APPLICATION GATES COMPLETE; FINAL RC PIPELINE PENDING.**
+**PHASE 4C REAL-WORLD VALIDATION & RELEASE CANDIDATE VALIDATED.**
 
-The real-application acceptance gates are closed for the explicitly documented
-v0.1 scope. Final Phase 4C validation additionally requires the non-publishing
-dual-architecture RC pipeline recorded below. This is not a claim that every
+The real-application acceptance gates and final non-publishing RC pipeline are
+closed for the explicitly documented v0.1 scope. This is not a claim that every
 application exposes complete or actionable accessibility semantics. No public
 release or tag has been created. Core IR structural changes: **NONE**.
 
@@ -135,6 +134,21 @@ fallback and honest partial-content presentation. Core semantic/content/scene/
 modality IR structures are unchanged. A source search found no application or
 toolkit name driving production behavior.
 
-The final source commit and non-publishing GitHub dual-architecture pipeline are
-recorded after the final run in this document's release evidence update. Public
-release remains **NOT PUBLISHED** until an explicit release action.
+RC source commit:
+`da1d5946634ea138e8b0a49ec5ff6e30b3477315`.
+
+GitHub CI [run 33465366813](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33465366813)
+passed formatting, all-target check/test, warnings-denied clippy and patch
+whitespace. The non-publishing Release Candidate
+[run 33465374946](https://github.com/Chenhzjs/GUI2TUI/actions/runs/33465374946)
+passed native Ubuntu 22.04 x86_64 and aarch64 builds, extracted-package smoke,
+exact two-architecture assembly, checksums and GitHub provenance attestation.
+Both bundles require at most GLIBC 2.34 (within the 2.35 gate):
+
+- aarch64: `a06dfae31445481ba09cf305f46798f9d89ec5948f20c6b3960f798b02d2d696`
+- x86_64: `4f931228fcfba5186a1d120eda8ecf2e422cab9baf1b0506a1ad24e1d986683a`
+
+The downloaded assembly passed `sha256sum -c SHA256SUMS`; `gh attestation
+verify` bound the archives and manifest to the RC source commit and release
+workflow. `publish=false`, so the publish job was skipped. No `v0.1.0` tag or
+GitHub release exists: **v0.1.0 PUBLIC RELEASE NOT PUBLISHED**.

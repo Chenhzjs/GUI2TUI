@@ -25,6 +25,8 @@ PCManFM-Qt bridge workflow. Anonymous actions and unavailable semantics degrade
 without guessed input. Password and multiline editing, DOM/CDP, UNO, remote
 transport, new-TTY attach and Wayland static capture are not implemented.
 
-`v0.1.0 PUBLIC RELEASE NOT PUBLISHED`. The final non-publishing dual-architecture
-pipeline evidence and exact RC source digest are recorded in
+`v0.1.0 PUBLIC RELEASE NOT PUBLISHED`. RC source
+`da1d5946634ea138e8b0a49ec5ff6e30b3477315` passed the final non-publishing
+dual-architecture pipeline with package smoke, GLIBC 2.34 ABI checks, checksums
+and provenance attestation. Exact evidence is recorded in
 [Phase 4C validation](phase4c-validation.md).
