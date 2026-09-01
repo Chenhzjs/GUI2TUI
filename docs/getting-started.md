@@ -6,9 +6,10 @@ are visibly read-only, never guessed mouse clicks or anonymous actions.
 
 ## Manual installation
 
-Use a Linux archive matching `uname -m` (the current built target is aarch64).
-Check the adjacent SHA256 file from your trusted distribution, extract the tarball and
-run `bin/gui2tui --version`. No installer script is downloaded or executed.
+Use the v0.1.0 Linux archive matching `uname -m` (`x86_64` or `aarch64`).
+Download it from the [GitHub Release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.0),
+verify `SHA256SUMS`, extract the tarball and run `bin/gui2tui --version`. No
+installer script is downloaded or executed.
 
 Optionally copy **all three** executables into an existing directory on your PATH:
 
@@ -20,9 +21,9 @@ install -m 755 bin/gui2tui bin/gui2tui-inspect bin/gui2tui-local "$HOME/.local/b
 Add that directory to PATH through your normal shell configuration. The inspector is also
 used by host artifact TTL reaping; keep it alongside gui2tui. See `DEPENDENCIES.txt` in the archive
 for actual dynamic linkage. No complete GNOME/KDE installation is required.
-The tested aarch64 build uses Ubuntu 24.04 / glibc 2.39, and its ELF symbol requirements
-include GLIBC_2.39. Older glibc systems cannot use this artifact; build from source or wait
-for a separately validated older-baseline release. x86_64 artifacts are NOT BUILT in this run.
+Official x86_64 and aarch64 archives are built natively on Ubuntu 22.04 runners.
+Their measured ELF requirements are recorded in `RELEASE-MANIFEST.json`; v0.1.0
+requires no GLIBC symbol newer than 2.34. Other architectures must build from source.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
 cursor/alternate-screen support, and an already running accessible GUI application.

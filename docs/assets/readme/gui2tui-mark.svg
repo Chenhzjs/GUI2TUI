@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" role="img" aria-labelledby="title desc">
+  <title id="title">GUI2TUI</title>
+  <desc id="desc">A GUI window becoming a terminal prompt</desc>
+  <style>
+    .line { fill: none; stroke: #58a6ff; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #8b949e; font: 700 62px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: light) { .line { stroke: #0969da; } .text { fill: #57606a; } }
+  </style>
+  <rect class="line" x="24" y="30" width="210" height="120" rx="14"/>
+  <path class="line" d="M24 62h210M48 46h1M76 46h1M104 46h1M258 90h70M306 68l22 22-22 22"/>
+  <rect class="line" x="352" y="30" width="220" height="120" rx="14"/>
+  <path class="line" d="M382 72l28 22-28 22M430 116h68"/>
+  <text class="text" x="596" y="112">G2T</text>
+</svg>

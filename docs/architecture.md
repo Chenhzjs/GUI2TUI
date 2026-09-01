@@ -45,23 +45,25 @@ is one bounded summary rather than one row per paragraph; interactive descendant
 bindings. Body text is loaded through AT-SPI Text only when a Reader viewport needs it and is kept
 in a separately bounded cache. See [content-navigation.md](content-navigation.md).
 
-## Hybrid semantic + opaque future
+## Semantic runtime and explicit external modality
 
-The current product renders semantic regions and represents fidelity-required
-content as an explicit OpaqueContent placeholder. It performs no capture,
-raster conversion, compositor work, or GUI-pixel hit testing.
+The product renders semantic regions and represents fidelity-required content
+as an explicit OpaqueContent placeholder. It does not use pixels as the tree
+source, perform continuous capture, or use GUI-pixel hit testing.
 
-A future OpaqueSurfaceProvider may be attached behind a narrow boundary:
+External modality resolution remains behind a narrow boundary:
 
-    OpaqueContent region
-      → user explicitly requests visual handoff
-      → provider obtains a surface
-      → optional terminal image or external viewer
+    fidelity-required semantic region
+      → user explicitly requests View or Materialize
+      → reference / original artifact / one rendered snapshot / unavailable
+      → headless materialization or optional same-host viewer
 
-The provider must not become the tree source or the default representation. Its
-surface identity, lifecycle, damage, popup relationship, and input mapping must
-remain separate from semantic identities and semantic actions. Semantic
-controls surrounding an opaque surface continue to use AT-SPI.
+Reference paths transfer zero payload. A generic X11 provider can acquire one
+minimal, explicitly requested static frame when coordinates are trustworthy;
+the result is labelled `RenderedSnapshot`, never original content. Wayland
+snapshot acquisition, continuous streaming, remote transport and compositor
+work are not implemented. See [static acquisition](static-acquisition.md) and
+[deployment](deployment.md).
 
-This makes an independently implemented Wayland provider possible without
-copying compositor code into the MIT OR Apache-2.0 semantic core.
+The modality provider never becomes the semantic tree source. Controls around
+an opaque region continue to use AT-SPI.
