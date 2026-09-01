@@ -1,4 +1,4 @@
-use super::{config::Config, paths};
+use super::{config::Config, launcher, paths};
 use crate::backend::AtspiBackend;
 use serde::Serialize;
 use std::{
@@ -170,6 +170,39 @@ pub async fn run(socket: Option<&Path>) -> Report {
             "Invalid/unreadable configuration. Run gui2tui config check for path and line guidance."
         },
     ));
+    if let Some(config) = paths::config_path()
+        .ok()
+        .and_then(|path| Config::load(&path).ok())
+    {
+        let verified = config
+            .launchers
+            .values()
+            .filter(|entry| entry.verified)
+            .count();
+        let incompatible = config
+            .launchers
+            .values()
+            .filter(|entry| launcher::validate_launch_environment(&entry.program).is_err())
+            .count();
+        let unavailable = config
+            .launchers
+            .values()
+            .filter(|entry| launcher::validate_program(&entry.program).is_err())
+            .count();
+        checks.push(check(
+            "saved-launchers",
+            if incompatible == 0 && unavailable == 0 {
+                Level::Info
+            } else {
+                Level::Warn
+            },
+            format!(
+                "{} saved; {verified} verified by a prior AT-SPI launch; {} unverified; {unavailable} executable unavailable; {incompatible} incompatible with the current session/package isolation",
+                config.launchers.len(),
+                config.launchers.len().saturating_sub(verified),
+            ),
+        ));
+    }
     let runtime = paths::runtime_dir();
     checks.push(check("runtime-directory", if runtime.is_ok() { Level::Pass } else { Level::Fail }, "Requires a current-user-owned 0700 directory, no symlinks. When XDG_RUNTIME_DIR is absent, a verified private temporary fallback is used."));
     let health = runtime.and_then(|path| crate::runtime::artifacts::health_counts(&path));

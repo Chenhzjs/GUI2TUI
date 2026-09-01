@@ -13,8 +13,10 @@ import pexpect
 
 def main() -> int:
     root = pathlib.Path(__file__).resolve().parents[2]
-    binary = root / "target/debug/gui2tui"
-    inspector = root / "target/debug/gui2tui-inspect"
+    binary = pathlib.Path(os.environ.get("GUI2TUI_BINARY", root / "target/debug/gui2tui"))
+    inspector = pathlib.Path(
+        os.environ.get("GUI2TUI_INSPECT", root / "target/debug/gui2tui-inspect")
+    )
     fixture = root / "tests/fixtures/gtk4_live_fixture.py"
     with tempfile.TemporaryDirectory(prefix="gui2tui-launcher-") as temp:
         env = os.environ.copy()
@@ -29,15 +31,11 @@ def main() -> int:
         )
         wizard.expect("Executable:")
         wizard.sendline(sys.executable)
-        wizard.expect("Launcher name")
-        wizard.sendline("gtk-fixture")
-        wizard.expect("Expected AT-SPI name")
-        wizard.sendline("gui2tui-live-fixture")
         wizard.expect("Extra argument")
         wizard.sendline(str(fixture))
         wizard.expect("Extra argument")
         wizard.sendline("")
-        wizard.expect("Registered launcher 'gtk-fixture'")
+        wizard.expect("Registered launcher 'python3'")
         wizard.expect(pexpect.EOF)
         wizard.close()
         assert wizard.exitstatus == 0
@@ -51,7 +49,7 @@ def main() -> int:
             dimensions=(30, 110),
         )
         try:
-            child.expect("gtk-fixture")
+            child.expect("python3")
             child.send("\r")
             child.expect("nodes via AT-SPI Cache")
             listed = subprocess.run(
@@ -69,7 +67,7 @@ def main() -> int:
 
             direct = pexpect.spawn(
                 str(binary),
-                ["launch", "gtk-fixture", "--no-mouse"],
+                ["launch", "python3", "--no-mouse"],
                 env=env,
                 encoding="utf-8",
                 timeout=20,

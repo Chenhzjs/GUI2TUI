@@ -6,10 +6,11 @@ are visibly read-only, never guessed mouse clicks or anonymous actions.
 
 ## Manual installation
 
-Use the v0.1.1 Linux archive matching `uname -m` (`x86_64` or `aarch64`).
-Download it from the [GitHub Release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.1),
-verify `SHA256SUMS`, extract the tarball and run `bin/gui2tui --version`. No
-installer script is downloaded or executed.
+v0.1.1 is marked pre-release because its saved-launcher wait could block and a
+strict Snap/private-D-Bus incompatibility was not diagnosed early. Until the
+corrective v0.1.2 package is published, build the current source on Linux with
+`cargo build --release` and use `target/release/gui2tui`. Do not treat v0.1.1
+as launcher-readiness evidence.
 
 Optionally copy the runtime executables into an existing directory on your PATH.
 If the extracted package contains `gui2tui-headless`, install it too:
@@ -25,8 +26,8 @@ Add that directory to PATH through your normal shell configuration. The inspecto
 used by host artifact TTL reaping; keep it alongside gui2tui. See `DEPENDENCIES.txt` in the archive
 for actual dynamic linkage. No complete GNOME/KDE installation is required.
 Official x86_64 and aarch64 archives are built natively on Ubuntu 22.04 runners.
-Their measured ELF requirements are recorded in `RELEASE-MANIFEST.json`; v0.1.1
-requires no GLIBC symbol newer than 2.34. Other architectures must build from source.
+Published archives record measured ELF requirements in
+`RELEASE-MANIFEST.json`. Other architectures must build from source.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
 cursor/alternate-screen support, and an already running accessible GUI application.
@@ -49,9 +50,10 @@ gui2tui app list
 gui2tui launch chromium
 ```
 
-Or run `gui2tui app add` without an executable to fill in `Executable`, launcher
-name, expected AT-SPI name, and optional argv one field at a time. This wizard
-requires an interactive terminal and shows defaults that Enter accepts.
+Or run `gui2tui app add` without an executable: the wizard asks for the
+executable and optional argv one field at a time. The launcher id is inferred
+from the basename and the authoritative AT-SPI name is learned on first launch.
+Use advanced `--id` or `--match` only when discovery is ambiguous.
 
 The id (`chromium`) is the user-owned launcher name. `--id` overrides it;
 `--match` is the AT-SPI
@@ -65,6 +67,12 @@ Selecting a launcher starts it, waits up to 15 seconds for AT-SPI registration,
 then opens the authoritative accessible application. Registration is still the
 application/toolkit's responsibility; GUI2TUI cannot manufacture an accessibility
 tree for software that exposes none.
+
+The first successful launch compares the AT-SPI application set before and
+after `exec`. If exactly one new application appears, its authoritative name is
+saved automatically. `gui2tui app list` reports `status=verified` only after a
+real AT-SPI launch; saving configuration alone reports `unverified`. Multiple
+new applications are ambiguous and require an explicit `--match`.
 
 Chromium may require an explicit accessibility argv:
 
@@ -94,11 +102,16 @@ gtk4-demo &
 gui2tui
 ```
 
-Launchers saved inside that helper's private HOME are intentionally temporary.
-For persistent launchers, provide your normal configuration HOME deliberately,
-or register them in the ordinary same-user desktop/SSH session. A program that
-is already running outside the helper's private D-Bus/AT-SPI session is not
-visible inside it.
+The helper preserves the caller's normal XDG configuration, so saved launchers
+remain available after it exits. Only its runtime directory, Xvfb, D-Bus and
+AT-SPI session are temporary. Set a temporary `XDG_CONFIG_HOME` yourself when
+ephemeral launcher configuration is desired. A program already running outside
+the helper's private D-Bus/AT-SPI session is not visible inside it.
+
+Strict Snap confinement cannot access the helper's private session bus. A Snap
+launcher is rejected before `exec` with an actionable error; use the normal
+desktop session or a non-Snap package. This restriction is package/session
+isolation, not a semantic-renderer limitation.
 
 Or run everything as one command:
 

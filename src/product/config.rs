@@ -24,6 +24,7 @@ pub struct LauncherConfig {
     pub args: Vec<String>,
     pub match_name: String,
     pub wait_ms: u64,
+    pub verified: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -53,6 +54,7 @@ impl Default for LauncherConfig {
             args: Vec::new(),
             match_name: String::new(),
             wait_ms: 15_000,
+            verified: false,
         }
     }
 }
@@ -259,6 +261,7 @@ mod tests {
                 args: vec!["--force-renderer-accessibility=complete".into()],
                 match_name: "Google Chrome".into(),
                 wait_ms: 20_000,
+                verified: true,
             },
         );
         config.save(&path).unwrap();

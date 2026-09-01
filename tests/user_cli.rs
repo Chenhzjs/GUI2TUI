@@ -46,6 +46,8 @@ fn launcher_registration_is_explicit_and_round_trips_argv() {
         &[
             "app",
             "add",
+            "/usr/bin/true",
+            "--id",
             "chromium",
             "--match",
             "Chromium",
@@ -60,14 +62,20 @@ fn launcher_registration_is_explicit_and_round_trips_argv() {
         String::from_utf8_lossy(&add.stderr)
     );
     assert!(
-        !run(temp.path(), &["app", "add", "other", "--id", "chromium"])
-            .status
-            .success()
+        !run(
+            temp.path(),
+            &["app", "add", "/usr/bin/false", "--id", "chromium"]
+        )
+        .status
+        .success()
     );
 
     let listed = run(temp.path(), &["app", "list"]);
     let listing = String::from_utf8(listed.stdout).unwrap();
-    assert!(listing.contains("chromium\tprogram=chromium\tmatch=Chromium\targs=2"));
+    assert!(
+        listing
+            .contains("chromium\tstatus=unverified\tprogram=/usr/bin/true\tmatch=Chromium\targs=2")
+    );
     let saved = std::fs::read_to_string(temp.path().join("config/gui2tui/config.toml")).unwrap();
     assert!(saved.contains("--force-renderer-accessibility=complete"));
     assert!(saved.contains("about:blank"));

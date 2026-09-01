@@ -27,21 +27,24 @@ This is a real 60-second GTK/AT-SPI/GUI2TUI recording. The terminal opens
 semantic content in Reader, searches it, then invokes a named action; the
 checkbox and status in the original GUI change authoritatively.
 
-[Watch the full 60-second demo](https://github.com/Chenhzjs/GUI2TUI/releases/download/v0.1.1/gui2tui-v0.1-demo.mp4)
+[Watch the full 60-second demo](https://github.com/Chenhzjs/GUI2TUI/releases/download/v0.1.0/gui2tui-v0.1-demo.mp4)
 · [Recording method and text walkthrough](docs/demo/README.md)
 · [More real GUI-to-TUI frames](docs/gui-to-tui-examples.md)
 
 ## Download and quick start
 
-Download **[GUI2TUI v0.1.1](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.1)**
-for Linux `x86_64` or `aarch64`, then:
+The v0.1.1 launcher build is currently marked **pre-release** after a real
+Snap Chromium/private-session failure exposed missing diagnostics and a
+blocking selector wait. The fixes are being validated as v0.1.2; do not use
+v0.1.1 as evidence that a saved browser launcher works.
 
 ```bash
-tar -xzf gui2tui-0.1.1-linux-x86_64.tar.gz
-cd gui2tui-0.1.1-linux-x86_64
+git clone https://github.com/Chenhzjs/GUI2TUI.git
+cd GUI2TUI
+cargo build --release
 
-./bin/gui2tui doctor
-./bin/gui2tui
+./target/release/gui2tui doctor
+./target/release/gui2tui
 ```
 
 The GUI application must already be running in a Linux desktop session whose
@@ -63,11 +66,13 @@ To save and launch an application directly (instead of starting it in another
 shell first), register its executable once. The shortest form is:
 
 ```bash
-./bin/gui2tui app add chromium
-./bin/gui2tui launch chromium
+./bin/gui2tui app add mousepad
+./bin/gui2tui launch mousepad
 ```
 
-Run `./bin/gui2tui app add` with no executable for a fill-in setup wizard.
+Run `./bin/gui2tui app add` with no executable for a fill-in setup wizard. For
+ordinary applications, type the executable and press Enter once more to finish
+the optional argument list; names are inferred/discovered automatically.
 If Chromium does not register accessibility by default, add its required argv
 without a shell command:
 
@@ -78,6 +83,12 @@ without a shell command:
 
 Registered applications also appear as `[launch]` entries in the normal
 `gui2tui` selector; already accessible applications appear as `[running]`.
+
+On the first successful launch, GUI2TUI learns and saves the real AT-SPI name;
+for example, `libreoffice` resolves to `soffice`. Strict Snap applications
+cannot reach the private D-Bus created by `gui2tui-headless`; that topology is
+now rejected immediately. Use the normal desktop session or a non-Snap build,
+never a weakened sandbox. See [launcher compatibility](docs/launcher-compatibility.md).
 
 Verify downloaded archives with:
 
@@ -269,7 +280,9 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Architecture](docs/architecture.md)
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
+- [Unreleased corrective notes for v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
+- [Launcher compatibility and failure classes](docs/launcher-compatibility.md)
 - [Release notes for v0.1.0](docs/release-notes-v0.1.0.md)
 - [v0.1.0 public release verification](docs/release-v0.1.0-validation.md)
 

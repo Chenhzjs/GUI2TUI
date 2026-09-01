@@ -7,11 +7,48 @@ use crate::backend::AtspiBackend;
 
 use super::config::LauncherConfig;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LaunchOutcome {
+    pub application_name: String,
+    /// The configured match did not identify the application, but exactly one
+    /// new AT-SPI application appeared after exec. Callers may persist this
+    /// authoritative name for subsequent launches.
+    pub discovered_name: bool,
+}
+
+pub fn validate_program(program: &str) -> Result<std::path::PathBuf, String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let resolved = if program.contains('/') {
+        Some(std::path::PathBuf::from(program))
+    } else {
+        std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|path| path.join(program))
+                .find(|candidate| candidate.is_file())
+        })
+    }
+    .ok_or_else(|| format!("Executable '{program}' was not found in PATH"))?;
+    let metadata = resolved.metadata().map_err(|error| {
+        format!(
+            "Cannot inspect executable '{}': {error}",
+            resolved.display()
+        )
+    })?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(format!(
+            "Program '{}' is not an executable file",
+            resolved.display()
+        ));
+    }
+    Ok(resolved)
+}
+
 pub async fn ensure_running(
     launcher_id: &str,
     launcher: &LauncherConfig,
     backend_timeout: Duration,
-) -> Result<String, String> {
+) -> Result<LaunchOutcome, String> {
     let backend = AtspiBackend::connect(backend_timeout)
         .await
         .map_err(|_| "Desktop accessibility service unavailable; run gui2tui doctor".to_owned())?;
@@ -24,8 +61,27 @@ pub async fn ensure_running(
             .map(|application| application.name.as_str()),
         &launcher.match_name,
     )? {
-        return Ok(name);
+        return Ok(LaunchOutcome {
+            application_name: name,
+            discovered_name: false,
+        });
     }
+
+    validate_program(&launcher.program)?;
+    validate_launch_environment(&launcher.program)?;
+    // This is the generic desktop accessibility opt-in. Applications remain
+    // responsible for registering with AT-SPI; failure is non-fatal because
+    // some sessions expose read-only status properties while GTK/Qt may
+    // already be active.
+    let _ = tokio::time::timeout(backend_timeout, request_session_accessibility()).await;
+
+    let before = backend
+        .applications()
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|application| application.name)
+        .collect::<std::collections::BTreeSet<_>>();
 
     let mut command = tokio::process::Command::new(&launcher.program);
     command
@@ -52,6 +108,11 @@ pub async fn ensure_running(
         {
             // Some desktop launchers intentionally fork/activate another
             // process and exit. Continue the bounded AT-SPI wait.
+            if !status.success() {
+                return Err(format!(
+                    "Launcher '{launcher_id}' exited with {status} before exposing an AT-SPI application"
+                ));
+            }
             exited = Some(status);
             child = None;
         }
@@ -72,7 +133,36 @@ pub async fn ensure_running(
                     let _ = child.wait().await;
                 });
             }
-            return Ok(name);
+            return Ok(LaunchOutcome {
+                application_name: name,
+                discovered_name: false,
+            });
+        }
+        let newly_visible = applications
+            .iter()
+            .map(|application| application.name.as_str())
+            .filter(|name| !before.iter().any(|existing| existing == *name))
+            .collect::<Vec<_>>();
+        if newly_visible.len() == 1 {
+            if let Some(mut child) = child {
+                tokio::spawn(async move {
+                    let _ = child.wait().await;
+                });
+            }
+            return Ok(LaunchOutcome {
+                application_name: newly_visible[0].to_owned(),
+                discovered_name: true,
+            });
+        }
+        if newly_visible.len() > 1 {
+            return Err(format!(
+                "Launcher '{launcher_id}' exposed multiple new AT-SPI applications: {}. Re-register it with --match NAME",
+                newly_visible
+                    .iter()
+                    .map(|name| format!("'{name}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         if tokio::time::Instant::now() >= deadline {
             if let Some(mut child) = child {
@@ -82,14 +172,76 @@ pub async fn ensure_running(
             }
             let exit_note = exited
                 .map(|status| format!(" (launcher process exited with {status})"))
-                .unwrap_or_default();
+                .unwrap_or_else(|| " (launcher process is still running)".into());
             return Err(format!(
-                "Started launcher '{launcher_id}'{exit_note}, but no AT-SPI application matching '{}' appeared within {} ms. Ensure the program exposes accessibility in this same session; Chromium commonly needs --force-renderer-accessibility=complete",
-                launcher.match_name, launcher.wait_ms,
+                "Started launcher '{launcher_id}'{exit_note}, but no accessible application appeared within {} ms (configured match '{}'). The program may not expose AT-SPI, may require accessibility-specific argv, or may be attached to a different desktop session. Start it manually and run `gui2tui-inspect --list`; then re-register with the required argv or --match name.",
+                launcher.wait_ms, launcher.match_name,
             ));
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+pub fn validate_launch_environment(program: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::path::PathBuf;
+
+        let resolved = validate_program(program).ok().or_else(|| {
+            if program.contains('/') {
+                Some(PathBuf::from(program))
+            } else {
+                None
+            }
+        });
+        let bus_address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
+        if is_snap_launcher_in_private_bus(resolved.as_deref(), bus_address.as_deref()) {
+            return Err(format!(
+                "Cannot launch Snap program '{program}' inside this private D-Bus session: strict Snap confinement cannot reach the session bus. Use the normal desktop session, or register a non-Snap build (for example google-chrome when installed)."
+            ));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = program;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn is_snap_launcher_in_private_bus(
+    program: Option<&std::path::Path>,
+    bus_address: Option<&str>,
+) -> bool {
+    program.is_some_and(|path| path.starts_with("/snap/bin"))
+        && bus_address.is_some_and(|address| !address.contains("/run/user/"))
+}
+
+#[cfg(target_os = "linux")]
+async fn request_session_accessibility() -> Result<(), String> {
+    let connection = zbus::Connection::session()
+        .await
+        .map_err(|error| error.to_string())?;
+    let proxy = zbus::Proxy::new(
+        &connection,
+        "org.a11y.Bus",
+        "/org/a11y/bus",
+        "org.a11y.Status",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    proxy
+        .set_property("IsEnabled", true)
+        .await
+        .map_err(|error| error.to_string())?;
+    proxy
+        .set_property("ScreenReaderEnabled", true)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn request_session_accessibility() -> Result<(), String> {
+    Ok(())
 }
 
 fn find_match<'a>(
@@ -135,5 +287,30 @@ mod tests {
         );
         assert!(find_match(["App one", "App two"].into_iter(), "app").is_err());
         assert_eq!(find_match(["Firefox"].into_iter(), "chrome").unwrap(), None);
+    }
+
+    #[test]
+    fn registration_rejects_missing_program_and_accepts_executable_path() {
+        assert!(validate_program("gui2tui-program-that-cannot-exist-19f37").is_err());
+        assert!(validate_program(std::env::current_exe().unwrap().to_str().unwrap()).is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn snap_private_session_is_rejected_without_app_specific_logic() {
+        use std::path::Path;
+
+        assert!(is_snap_launcher_in_private_bus(
+            Some(Path::new("/snap/bin/example")),
+            Some("unix:path=/tmp/dbus-private")
+        ));
+        assert!(!is_snap_launcher_in_private_bus(
+            Some(Path::new("/snap/bin/example")),
+            Some("unix:path=/run/user/1000/bus")
+        ));
+        assert!(!is_snap_launcher_in_private_bus(
+            Some(Path::new("/usr/bin/example")),
+            Some("unix:path=/tmp/dbus-private")
+        ));
     }
 }

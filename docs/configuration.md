@@ -29,6 +29,7 @@ program = "chromium"
 args = ["--force-renderer-accessibility=complete", "about:blank"]
 match_name = "Chromium"
 wait_ms = 15000
+verified = false # managed by GUI2TUI; true only after a real AT-SPI launch
 ```
 
 `backend_timeout_ms`: 50–30000 inclusive, existing per-backend operation deadline.
@@ -58,6 +59,10 @@ environment override, password, privilege escalation, or automatic sandbox
 disable. Add advanced argv after `--`; override inferred values with `--id` and
 `--match`. Existing ids require explicit `--replace`. The config is atomically
 written mode 0600 and a config-file symlink is refused.
+
+Do not hand-edit `verified`: it records observed runtime evidence, not user
+intent. A uniquely discovered AT-SPI name replaces the initial basename match
+after the first successful launch.
 
 Only existing runtime knobs are exposed. Content budgets, artifact size/TTL bounds and authorization
 continue using their tested policies; they are **not** pretend TOML settings. Local broker handlers

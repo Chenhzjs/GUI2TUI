@@ -1,5 +1,10 @@
 # GUI2TUI v0.1.1
 
+> **Status: pre-release.** A real Snap Chromium test found that the private
+> headless session is inaccessible to strict Snap confinement, and selector
+> launch waiting was not cancellable. These issues are corrected on the v0.1.2
+> development branch; v0.1.1 should not be used as launcher-readiness evidence.
+
 GUI2TUI v0.1.1 is a focused usability update for headless Linux hosts. Core
 semantic, content, scene, modality and runtime contracts are unchanged.
 
