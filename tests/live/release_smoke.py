@@ -50,8 +50,7 @@ def wait_for(child, needle, timeout=10):
 
 screen = pyte.Screen(130, 38)
 stream = pyte.Stream(screen)
-for command in ["gui2tui", "gui2tui-inspect", "gui2tui-local"]:
-    assert subprocess.run([str(binary / command), "--version"], capture_output=True).returncode == 0
+assert subprocess.run([str(binary / "gui2tui"), "--version"], capture_output=True).returncode == 0
 save("help.txt", run(["--help"]).stdout)
 save("version.txt", run(["--version"]).stdout)
 assert "doctor" in run(["--help"]).stdout
@@ -72,7 +71,7 @@ broker = None
 try:
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
-        apps = subprocess.run([str(binary / "gui2tui-inspect"), "--list"], capture_output=True, text=True, timeout=5)
+        apps = subprocess.run([str(binary / "gui2tui"), "inspect", "--list"], capture_output=True, text=True, timeout=5)
         if "gui2tui-release-demo" in apps.stdout:
             break
         time.sleep(.15)
@@ -110,7 +109,7 @@ try:
     save("scene-help.txt", help_frame)
     child.send(f"\x1b[<0;{button_x + 1};{button_y + 1}M\x1b[<0;{button_x + 1};{button_y + 1}m".encode())
     frame(child)
-    unchanged = subprocess.check_output([str(binary / "gui2tui-inspect"), "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
+    unchanged = subprocess.check_output([str(binary / "gui2tui"), "inspect", "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
     assert "Status: idle" in unchanged, "help overlay let a click reach the GUI"
     child.send(b"\x1b")
     for _ in range(20):
@@ -123,7 +122,7 @@ try:
     child.send(b"\r")
     after = wait_for(child, "Status: activated")
     assert "[x] Enable feature" in after, after
-    tree = subprocess.check_output([str(binary / "gui2tui-inspect"), "--app", "gui2tui-release-demo"], text=True, timeout=10)
+    tree = subprocess.check_output([str(binary / "gui2tui"), "inspect", "--app", "gui2tui-release-demo"], text=True, timeout=10)
     assert 'CheckBox "Enable feature" [checked' in tree and 'Status: activated' in tree
     assert sentinel not in tree
     save("after-action.txt", after)
@@ -141,7 +140,7 @@ try:
     fixture = subprocess.Popen(["python3", str(bundle / "smoke/release_smoke_gtk.py")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
-        apps = subprocess.run([str(binary / "gui2tui-inspect"), "--list"], capture_output=True, text=True, timeout=5)
+        apps = subprocess.run([str(binary / "gui2tui"), "inspect", "--list"], capture_output=True, text=True, timeout=5)
         if "gui2tui-release-demo" in apps.stdout:
             break
         time.sleep(.15)
@@ -151,7 +150,7 @@ try:
     no_mouse_frame = wait_for(child, "Activate safely")
     child.send(f"\x1b[<0;{button_x + 1};{button_y + 1}M\x1b[<0;{button_x + 1};{button_y + 1}m".encode())
     frame(child)
-    unchanged = subprocess.check_output([str(binary / "gui2tui-inspect"), "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
+    unchanged = subprocess.check_output([str(binary / "gui2tui"), "inspect", "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
     assert "Status: idle" in unchanged
     child.send(b"q")
     child.expect(pexpect.EOF, timeout=5)
@@ -171,7 +170,7 @@ try:
     config.write_text(valid)
 
     socket = result / "runtime/viewer.sock"
-    broker = subprocess.Popen([str(binary / "gui2tui-local"), "serve", "--socket", str(socket), "--mime", "image/png", "--recording-handler", "--authorization", "once"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    broker = subprocess.Popen([str(binary / "gui2tui"), "endpoint", "serve", "--socket", str(socket), "--mime", "image/png", "--recording-handler", "--authorization", "once"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(.5)
     connected = json.loads(run(["--modality-socket", str(socket), "doctor", "--json"]).stdout)
     assert any(c["name"] == "same-host-endpoint" and c["level"] == "PASS" for c in connected["checks"])
