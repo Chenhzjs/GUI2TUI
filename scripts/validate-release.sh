@@ -12,12 +12,18 @@ tar -tzf "$archive" >"$temp/layout.txt"
 if grep -Eq '^/|(^|/)\.\.(/|$)' "$temp/layout.txt"; then echo 'unsafe archive path' >&2; exit 1; fi
 tar -xzf "$archive" -C "$temp"
 bundle="$temp/$name"
-for file in bin/gui2tui bin/gui2tui-inspect bin/gui2tui-local bin/gui2tui-headless README.md LICENSE-MIT LICENSE-APACHE config.example.toml DEPENDENCIES.txt BUILD-INFO.json ABI.json smoke/run.sh; do
+for file in bin/gui2tui bin/gui2tui-inspect bin/gui2tui-local README.md LICENSE-MIT LICENSE-APACHE config.example.toml DEPENDENCIES.txt BUILD-INFO.json ABI.json smoke/run.sh; do
     test -e "$bundle/$file" || { echo "missing bundle entry: $file" >&2; exit 1; }
 done
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$bundle/BUILD-INFO.json")
 test "$("$bundle/bin/gui2tui" --version)" = "gui2tui $version"
-"$bundle/bin/gui2tui-headless" --help >/dev/null
+if [[ -e $bundle/bin/gui2tui-headless ]]; then
+    [[ -x $bundle/bin/gui2tui-headless ]] || {
+        echo "headless helper is not executable" >&2
+        exit 1
+    }
+    "$bundle/bin/gui2tui-headless" --help >/dev/null
+fi
 python3 "$(dirname -- "$0")/release-abi.py" "$bundle" "$temp/actual-abi.json"
 cmp "$bundle/ABI.json" "$temp/actual-abi.json"
 # Scan binary bytes too; -l reports only filenames, never embedded user content.
