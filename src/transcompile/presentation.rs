@@ -180,26 +180,35 @@ impl SceneCompiler<'_> {
                 if region.children.is_empty() {
                     return;
                 }
+                let label = region.label.clone().unwrap_or_else(|| "Actions".to_owned());
+                let inline = region.children.len() <= 8;
                 self.push(
                     SceneElementKind::CommandHeader {
                         label: format!(
-                            "{} ({} available — press : to browse/search)",
-                            region
-                                .label
-                                .clone()
-                                .unwrap_or_else(|| "Commands".to_owned()),
-                            region.children.len()
+                            "{label} ({} actions{})",
+                            region.children.len(),
+                            if inline {
+                                ""
+                            } else {
+                                "; press : to browse/search"
+                            }
                         ),
                     },
                     region.source_nodes.clone(),
                     None,
                     PresentationStrategy::CommandList,
                 );
+                if inline {
+                    for child in &region.children {
+                        self.compile_region(child);
+                    }
+                }
                 // CommandHierarchy is the canonical interactive presentation.
                 // Emitting every command into the document scene would flatten
                 // large applications can expose hundreds of commands and defeat
                 // contextual browse/search. Safe leaf reachability is audited
-                // against CommandHierarchy, not duplicated here.
+                // against CommandHierarchy; only small, local action groups are
+                // duplicated into the primary task view.
             }
             SemanticRegionKind::Status => {
                 self.push(
@@ -270,14 +279,28 @@ impl SceneCompiler<'_> {
                         .and_then(|id| self.nodes.get(id))
                         .map_or_else(|| "Unknown".to_owned(), |node| node.role.to_string())
                 });
+                let all_unsupported = !region.children.is_empty()
+                    && region
+                        .children
+                        .iter()
+                        .all(|child| child.kind == SemanticRegionKind::Unknown);
+                let display_label = if all_unsupported {
+                    format!("Additional controls: {} unsupported", region.children.len())
+                } else {
+                    label
+                };
                 self.push(
-                    SceneElementKind::Unsupported { label },
+                    SceneElementKind::Unsupported {
+                        label: display_label,
+                    },
                     region.source_nodes.clone(),
                     None,
                     PresentationStrategy::Unsupported,
                 );
-                for child in &region.children {
-                    self.compile_region(child);
+                if !all_unsupported {
+                    for child in &region.children {
+                        self.compile_region(child);
+                    }
                 }
             }
         }
@@ -626,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn command_set_is_summarized_in_scene_for_hierarchical_palette() {
+    fn small_command_set_is_visible_in_scene_and_palette() {
         let mut root = node(0, SemanticRole::MenuBar, "Commands");
         let mut command = node(1, SemanticRole::MenuItem, "Save");
         command.actions.push(SemanticAction {
@@ -639,11 +662,15 @@ mod tests {
         let analysis = analyze_regions(&root);
         assert_eq!(analysis.root.kind, SemanticRegionKind::CommandSet);
         let scene = compile_scene(&root, &analysis);
-        assert_eq!(scene.metrics.commands, 0);
-        assert_eq!(scene.commands().count(), 0);
+        assert_eq!(scene.metrics.commands, 1);
+        assert_eq!(scene.commands().count(), 1);
         assert!(matches!(
             &scene.elements[0].kind,
-            SceneElementKind::CommandHeader { label } if label.contains("1 available")
+            SceneElementKind::CommandHeader { label } if label.contains("1 actions")
+        ));
+        assert!(matches!(
+            scene.elements[1].kind,
+            SceneElementKind::Command { .. }
         ));
     }
 

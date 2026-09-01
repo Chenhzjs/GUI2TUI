@@ -157,8 +157,7 @@ impl SceneElement {
     pub fn height_for_width(&self, width: u16) -> u16 {
         match self.kind {
             SceneElementKind::Field { .. } if width < 100 => 2,
-            SceneElementKind::OpaqueContent { dimensions, .. } if dimensions.is_some() => 3,
-            SceneElementKind::OpaqueContent { .. } => 2,
+            SceneElementKind::OpaqueContent { .. } => 5,
             SceneElementKind::DocumentSummary { .. } => 7,
             SceneElementKind::Group { .. } | SceneElementKind::CommandHeader { .. } => 3,
             _ => 1,

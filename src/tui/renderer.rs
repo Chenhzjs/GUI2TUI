@@ -348,8 +348,11 @@ fn element_lines_for_width(
             ""
         };
     match &element.kind {
-        SceneElementKind::Text { text } | SceneElementKind::Status { text } => {
-            vec![format!("  {text}")]
+        SceneElementKind::Text { text } => vec![format!("  {text}")],
+        SceneElementKind::Status { text } => {
+            let available = usize::from(width.clamp(20, 100).saturating_sub(14));
+            let status = truncate(text, available);
+            vec![format!("  ── Status: {status} ──")]
         }
         SceneElementKind::Hint { text } => vec![format!("    Hint: {text}")],
         SceneElementKind::Error { text } => vec![format!("    Error: {text}")],
@@ -409,13 +412,19 @@ fn element_lines_for_width(
             if *selected { "*" } else { "•" }
         )],
         SceneElementKind::Command { path } => vec![format!("{marker}{path}{unavailable}")],
-        SceneElementKind::OpaqueContent { label, dimensions } => vec![
-            format!("  {label}"),
-            dimensions.map_or_else(
-                || "  [fidelity-required content]".to_owned(),
-                |(w, h)| format!("  [fidelity-required content: {w}×{h} GUI pixels]"),
-            ),
-        ],
+        SceneElementKind::OpaqueContent { label, dimensions } => {
+            let detail = dimensions.map_or_else(
+                || "[static visual; fidelity preferred]".to_owned(),
+                |(w, h)| format!("[static visual; source {w}×{h} GUI pixels]"),
+            );
+            compact_boxed_lines(
+                label,
+                &[detail, "Enter: request visual handoff".to_owned()],
+                focused,
+                width,
+                5,
+            )
+        }
         SceneElementKind::Unsupported { label } => vec![format!("  <Unsupported: {label}>")],
     }
 }
@@ -459,6 +468,39 @@ fn boxed_lines(title: &str, body: &[String], focused: bool, width: u16) -> Vec<S
         lines.push(format!("  │ {text}{:padding$} │", "", padding = padding));
     }
     while lines.len() < 6 {
+        lines.push(format!(
+            "  │{:inner_width$}│",
+            "",
+            inner_width = inner_width + 2
+        ));
+    }
+    lines.push(format!("  └{}┘", "─".repeat(inner_width + 2)));
+    lines
+}
+
+fn compact_boxed_lines(
+    title: &str,
+    body: &[String],
+    focused: bool,
+    width: u16,
+    height: usize,
+) -> Vec<String> {
+    let box_width = usize::from(width.clamp(24, 100).saturating_sub(2));
+    let inner_width = box_width.saturating_sub(4).max(8);
+    let title = truncate(title, inner_width.saturating_sub(2));
+    let top_fill = inner_width.saturating_sub(title.chars().count() + 2);
+    let marker = if focused { "> " } else { "  " };
+    let mut lines = vec![format!(
+        "{marker}┌─ {title} {:─<top_fill$}┐",
+        "",
+        top_fill = top_fill
+    )];
+    for line in body {
+        let text = truncate(line, inner_width);
+        let padding = inner_width.saturating_sub(text.chars().count());
+        lines.push(format!("  │ {text}{:padding$} │", "", padding = padding));
+    }
+    while lines.len() + 1 < height {
         lines.push(format!(
             "  │{:inner_width$}│",
             "",
@@ -637,7 +679,7 @@ mod tests {
             dimensions: Some((640, 480)),
         });
         opaque.binding = None;
-        assert!(element_lines(&opaque, false)[1].contains("fidelity-required"));
+        assert!(element_lines(&opaque, false)[1].contains("static visual"));
     }
 
     #[test]

@@ -498,7 +498,9 @@ impl Analyzer {
             SemanticRegionKind::CommandSet,
             vec![node.runtime_id],
         );
-        region.label = node.name.clone().or_else(|| Some("Commands".to_owned()));
+        // Keep a useful semantic fallback without implying that every action
+        // belongs to one global command bucket.
+        region.label = node.name.clone().or_else(|| Some("Actions".to_owned()));
         let mut path = inherited_path.to_vec();
         if let Some(name) = &node.name {
             path.push(name.clone());
