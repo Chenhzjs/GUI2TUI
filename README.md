@@ -92,6 +92,86 @@ accessibility information exposed by each application.
 - Reference-first external resources and explicit static visual snapshots
 - GTK, Qt, Chromium, Firefox and LibreOffice representative workflows
 
+## Examples from real GUI applications
+
+The following are shortened exports from real Linux AT-SPI sessions, not UI
+mockups. GUI2TUI reorganizes the exposed semantics instead of copying the GUI's
+pixel layout.
+
+### Chrome and Firefox: web page → Reader, outline and search
+
+A normal browser page with headings, links, form controls and tables becomes a
+bounded document task:
+
+```text
+┌ GUI2TUI — GUI2TUI Browser Fixture - Google Chrome ───────┐
+│> Document: GUI2TUI Browser Fixture                       │
+│    114 blocks | 4 headings | 3 links | 18 forms          │
+│    completeness: Complete                                │
+│    [ Enter: Read document ]                              │
+│    o Outline | / Content search                          │
+└──────────────────────────────────────────────────────────┘
+
+┌ Reader — GUI2TUI Browser Fixture ────────────────────────┐
+│ # Semantic architecture                                 │
+│ GUI2TUI turns accessibility semantics into               │
+│ terminal-native tasks and readable content.              │
+│ [Link] Architecture                                      │
+│ [Link] Evaluation                                        │
+└──────────────────────────────────────────────────────────┘
+```
+
+Chrome and Firefox both completed Reader, Outline, Search and semantic-table
+workflows. This path uses AT-SPI only—no DOM/CDP or browser-specific adapter.
+
+![Real browser content search rendered by GUI2TUI](docs/assets/readme/reader-search.png)
+
+### LibreOffice Writer: document canvas → reflowed content
+
+Writer content is presented as headings and semantic blocks rather than a
+terminal copy of the page canvas:
+
+```text
+┌ Reader — LibreOffice Writer — partial ───────────────────┐
+│ # GUI2TUI Semantic Content                               │
+│ This document is read through AT-SPI only.                │
+│ # Architecture                                           │
+│ • Controls remain task-oriented.                         │
+│ • Paragraphs are progressively materialized.             │
+└──────────────────────────────────────────────────────────┘
+```
+
+GUI2TUI does not parse ODT or use UNO. If Writer exposes only the realized
+portion of a long document, the Reader says `partial` instead of claiming full
+document coverage.
+
+### GTK and Qt applications: controls → terminal tasks
+
+Mousepad multiline content becomes a Reader. Qt Designer choices, commands and
+dialogs remain navigable. Controlled GTK/Qt applications additionally validate
+safe text editing, choices, checkboxes and authoritative action read-back:
+
+```text
+┌ GUI2TUI — Qt form ────────────────────────────────────────┐
+│ Username: alice                                          │
+│ Password: [password]  (read-only)                        │
+│ [x] Enable feature                                       │
+│> [ Theme: Light ▼ ]                                      │
+│ [ Choice: Beta ▼ ]                                       │
+│ [ Activate safely ]                                      │
+└──────────────────────────────────────────────────────────┘
+```
+
+In the recorded GTK workflow, activating a TUI button changed the checkbox and
+status in the original GUI; GUI2TUI then refreshed from AT-SPI rather than
+changing local state optimistically.
+
+![Original GTK application confirming a semantic TUI action](docs/assets/readme/action-confirmed.png)
+
+[See the full collection of real GUI → TUI exports](docs/gui-to-tui-examples.md),
+including browser tables, Writer, GTK rich text, Qt Choice overlays and static
+visual modality.
+
 ### Safe degradation is a feature
 
 When accessibility information is incomplete, GUI2TUI does not guess:
