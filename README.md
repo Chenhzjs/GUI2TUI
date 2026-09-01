@@ -49,6 +49,18 @@ AT-SPI bus is reachable. The terminal itself may be headless or connected over
 SSH to that same host. No config file, root privilege, full desktop environment,
 or companion viewer is required.
 
+For a server without a physical desktop, the current source tree includes a
+helper that creates a private Xvfb + D-Bus + AT-SPI session, verifies it with
+`doctor`, and opens a shell:
+
+```bash
+./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui
+```
+
+The immutable v0.1.0 archives predate this post-release helper; their bundled
+`smoke/run.sh` remains available for a one-command demonstration. See
+[one-command headless setup](docs/getting-started.md#one-command-headless-session).
+
 Verify downloaded archives with:
 
 ```bash

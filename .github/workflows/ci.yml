@@ -23,5 +23,9 @@ jobs:
         run: cargo test --all-targets
       - name: Lint all targets
         run: cargo clippy --all-targets -- -D warnings
+      - name: Check headless session helper
+        run: |
+          bash -n scripts/gui2tui-headless
+          scripts/gui2tui-headless --help >/dev/null
       - name: Check patch whitespace
         run: git diff --check

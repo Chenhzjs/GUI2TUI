@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# Start a private Xvfb + D-Bus + AT-SPI session, then run a shell or command.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: gui2tui-headless [OPTIONS] [-- COMMAND [ARG...]]
+
+Create an isolated headless graphical/accessibility session, run
+`gui2tui doctor`, then run COMMAND. With no command, open $SHELL.
+
+Options:
+  --doctor-only       Exit after the environment preflight
+  --no-doctor         Do not run gui2tui doctor before COMMAND
+  --gui2tui PATH      gui2tui binary (default: sibling binary or PATH)
+  --screen GEOMETRY   Xvfb screen geometry (default: 1440x900x24)
+  -h, --help          Show this help
+
+Examples:
+  gui2tui-headless
+  gui2tui-headless --doctor-only
+  gui2tui-headless -- bash -lc 'gtk4-demo & gui2tui'
+
+The session ends and Xvfb is cleaned up when the shell/command exits.
+EOF
+}
+
+doctor=true
+doctor_only=false
+screen=1440x900x24
+gui2tui_bin=
+command_args=()
+
+while (($#)); do
+    case "$1" in
+        --doctor-only)
+            doctor_only=true
+            shift
+            ;;
+        --no-doctor)
+            doctor=false
+            shift
+            ;;
+        --gui2tui)
+            (($# >= 2)) || { echo "error: --gui2tui requires PATH" >&2; exit 2; }
+            gui2tui_bin=$2
+            shift 2
+            ;;
+        --screen)
+            (($# >= 2)) || { echo "error: --screen requires GEOMETRY" >&2; exit 2; }
+            screen=$2
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            command_args=("$@")
+            break
+            ;;
+        -*)
+            echo "error: unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+        *)
+            command_args=("$@")
+            break
+            ;;
+    esac
+done
+
+$doctor_only && ! $doctor && {
+    echo "error: --doctor-only conflicts with --no-doctor" >&2
+    exit 2
+}
+$doctor_only && ((${#command_args[@]} > 0)) && {
+    echo "error: --doctor-only cannot be combined with COMMAND" >&2
+    exit 2
+}
+
+[[ $(uname -s) == Linux ]] || {
+    echo "error: gui2tui-headless requires Linux" >&2
+    exit 1
+}
+[[ $screen =~ ^[0-9]+x[0-9]+x[0-9]+$ ]] || {
+    echo "error: invalid --screen geometry: $screen" >&2
+    exit 2
+}
+
+missing=()
+for dependency in bash dbus-run-session dbus-update-activation-environment gdbus Xvfb xdpyinfo; do
+    command -v "$dependency" >/dev/null 2>&1 || missing+=("$dependency")
+done
+if ((${#missing[@]})); then
+    printf 'error: missing headless-session dependencies:' >&2
+    printf ' %s' "${missing[@]}" >&2
+    printf '\nUbuntu/Debian: sudo apt install xvfb x11-utils dbus-x11 at-spi2-core libglib2.0-bin\n' >&2
+    exit 1
+fi
+
+if [[ -z $gui2tui_bin ]]; then
+    script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+    if [[ -x $script_dir/gui2tui ]]; then
+        gui2tui_bin=$script_dir/gui2tui
+    elif command -v gui2tui >/dev/null 2>&1; then
+        gui2tui_bin=$(command -v gui2tui)
+    else
+        echo "error: gui2tui not found; install it or pass --gui2tui PATH" >&2
+        exit 1
+    fi
+fi
+[[ -x $gui2tui_bin ]] || {
+    echo "error: gui2tui binary is not executable: $gui2tui_bin" >&2
+    exit 1
+}
+gui2tui_bin=$(cd -- "$(dirname -- "$gui2tui_bin")" && pwd)/$(basename -- "$gui2tui_bin")
+
+if $doctor_only; then
+    command_args=()
+elif ((${#command_args[@]} == 0)); then
+    command_args=("${SHELL:-/bin/sh}" -l)
+fi
+
+export GUI2TUI_HEADLESS_BIN=$gui2tui_bin
+export GUI2TUI_HEADLESS_SCREEN=$screen
+export GUI2TUI_HEADLESS_DOCTOR=$doctor
+export GUI2TUI_HEADLESS_DOCTOR_ONLY=$doctor_only
+
+inner_script=$(cat <<'INNER'
+set -euo pipefail
+
+session_root=$(mktemp -d "${TMPDIR:-/tmp}/gui2tui-headless.XXXXXX")
+chmod 700 "$session_root"
+mkdir -m 700 "$session_root/runtime"
+export XDG_RUNTIME_DIR="$session_root/runtime"
+export XDG_SESSION_TYPE=x11
+export NO_AT_BRIDGE=0
+export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+
+xvfb_pid=
+cleanup() {
+    if [[ -n $xvfb_pid ]]; then
+        kill "$xvfb_pid" 2>/dev/null || true
+        wait "$xvfb_pid" 2>/dev/null || true
+    fi
+    rm -rf -- "$session_root"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+Xvfb -displayfd 3 -screen 0 "$GUI2TUI_HEADLESS_SCREEN" -dpi 96 \
+    3>"$session_root/display" >"$session_root/xvfb.log" 2>&1 &
+xvfb_pid=$!
+
+for ((attempt = 0; attempt < 100; attempt++)); do
+    [[ -s $session_root/display ]] && break
+    kill -0 "$xvfb_pid" 2>/dev/null || {
+        echo "error: Xvfb exited before publishing a display" >&2
+        sed -n '1,20p' "$session_root/xvfb.log" >&2
+        exit 1
+    }
+    sleep 0.05
+done
+[[ -s $session_root/display ]] || {
+    echo "error: Xvfb display allocation timed out" >&2
+    exit 1
+}
+display_number=$(tr -d '[:space:]' <"$session_root/display")
+[[ $display_number =~ ^[0-9]+$ ]] || {
+    echo "error: Xvfb returned an invalid display number" >&2
+    exit 1
+}
+export DISPLAY=:$display_number
+
+display_ready=false
+for ((attempt = 0; attempt < 100; attempt++)); do
+    if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
+        display_ready=true
+        break
+    fi
+    sleep 0.05
+done
+$display_ready || {
+    echo "error: Xvfb did not become ready" >&2
+    exit 1
+}
+
+dbus-update-activation-environment \
+    DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE NO_AT_BRIDGE \
+    QT_LINUX_ACCESSIBILITY_ALWAYS_ON
+for property in IsEnabled ScreenReaderEnabled; do
+    gdbus call --session \
+        --dest org.a11y.Bus \
+        --object-path /org/a11y/bus \
+        --method org.freedesktop.DBus.Properties.Set \
+        org.a11y.Status "$property" '<true>' >/dev/null
+done
+
+echo "GUI2TUI headless session ready: DISPLAY=$DISPLAY"
+if [[ $GUI2TUI_HEADLESS_DOCTOR == true ]]; then
+    "$GUI2TUI_HEADLESS_BIN" doctor
+fi
+if [[ $GUI2TUI_HEADLESS_DOCTOR_ONLY == true ]]; then
+    exit 0
+fi
+
+"$@"
+INNER
+)
+
+dbus-run-session -- bash -c "$inner_script" gui2tui-headless "${command_args[@]}"

@@ -11,11 +11,14 @@ Download it from the [GitHub Release](https://github.com/Chenhzjs/GUI2TUI/releas
 verify `SHA256SUMS`, extract the tarball and run `bin/gui2tui --version`. No
 installer script is downloaded or executed.
 
-Optionally copy **all three** executables into an existing directory on your PATH:
+Optionally copy the runtime executables into an existing directory on your PATH.
+If the extracted package contains `gui2tui-headless`, install it too:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
 install -m 755 bin/gui2tui bin/gui2tui-inspect bin/gui2tui-local "$HOME/.local/bin/"
+test ! -e bin/gui2tui-headless || \
+    install -m 755 bin/gui2tui-headless "$HOME/.local/bin/"
 ```
 
 Add that directory to PATH through your normal shell configuration. The inspector is also
@@ -39,6 +42,44 @@ gui2tui --app NAME     # exact or unambiguous accessible application name
 Doctor is explicit, bounded and does not read application text. No DISPLAY is not itself an
 error: the terminal may be headless while a GUI session runs elsewhere on the same host.
 No apps? Start an application in that desktop session, press `r`, or `d` for diagnostics.
+
+## One-command headless session
+
+The current source tree includes a `gui2tui-headless` helper. It creates a
+private Xvfb, D-Bus and AT-SPI session, runs `gui2tui doctor`, then opens an
+interactive shell:
+
+```bash
+./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui
+```
+
+Future packages built from the current branch install the same helper as
+`bin/gui2tui-headless`. The immutable v0.1.0 archives were published before the
+helper was added; their existing `smoke/run.sh` remains the one-command bundled
+demonstration.
+
+Inside that shell, start a GUI application and GUI2TUI normally. Both processes
+inherit the same private accessibility session:
+
+```bash
+gtk4-demo &
+gui2tui
+```
+
+Or run everything as one command:
+
+```bash
+./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui -- \
+    bash -lc 'gtk4-demo & exec gui2tui'
+```
+
+Use `--doctor-only` for a non-interactive environment check. A valid headless
+session may still report WARN for “no accessible applications” before an app is
+started and for the optional same-host viewer; WARN is not a blocking doctor
+failure. Missing Ubuntu dependencies are reported with the corresponding
+`apt install` command. The helper never installs packages automatically, does
+not modify the parent shell, and removes its private Xvfb/runtime directory when
+the child shell or command exits.
 
 ## First two minutes
 
