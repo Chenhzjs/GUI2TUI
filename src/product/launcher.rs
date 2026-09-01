@@ -71,8 +71,8 @@ pub async fn ensure_running(
     validate_launch_environment(&launcher.program)?;
     // This is the generic desktop accessibility opt-in. Applications remain
     // responsible for registering with AT-SPI; failure is non-fatal because
-    // some sessions expose read-only status properties while GTK/Qt may
-    // already be active.
+    // some sessions expose read-only status properties while toolkit bridges
+    // may already be active.
     let _ = tokio::time::timeout(backend_timeout, request_session_accessibility()).await;
 
     let before = backend
@@ -197,7 +197,7 @@ pub fn validate_launch_environment(program: &str) -> Result<(), String> {
         let bus_address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
         if is_snap_launcher_in_private_bus(resolved.as_deref(), bus_address.as_deref()) {
             return Err(format!(
-                "Cannot launch Snap program '{program}' inside this private D-Bus session: strict Snap confinement cannot reach the session bus. Use the normal desktop session, or register a non-Snap build (for example google-chrome when installed)."
+                "Cannot launch Snap program '{program}' inside this private D-Bus session: strict Snap confinement cannot reach the session bus. Use the normal desktop session, or register a non-Snap build of the application."
             ));
         }
     }
@@ -282,11 +282,18 @@ mod tests {
     #[test]
     fn matching_is_exact_first_and_ambiguity_safe() {
         assert_eq!(
-            find_match(["Chromium", "Chromium helper"].into_iter(), "chromium").unwrap(),
-            Some("Chromium".into())
+            find_match(
+                ["Example Editor", "Example Editor helper"].into_iter(),
+                "example editor"
+            )
+            .unwrap(),
+            Some("Example Editor".into())
         );
         assert!(find_match(["App one", "App two"].into_iter(), "app").is_err());
-        assert_eq!(find_match(["Firefox"].into_iter(), "chrome").unwrap(), None);
+        assert_eq!(
+            find_match(["Another Application"].into_iter(), "missing").unwrap(),
+            None
+        );
     }
 
     #[test]

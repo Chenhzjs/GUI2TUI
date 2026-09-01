@@ -197,7 +197,7 @@ impl SceneCompiler<'_> {
                 );
                 // CommandHierarchy is the canonical interactive presentation.
                 // Emitting every command into the document scene would flatten
-                // large applications (LibreOffice exposes hundreds) and defeat
+                // large applications can expose hundreds of commands and defeat
                 // contextual browse/search. Safe leaf reachability is audited
                 // against CommandHierarchy, not duplicated here.
             }

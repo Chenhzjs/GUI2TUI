@@ -2723,7 +2723,7 @@ mod tests {
     }
 
     fn applications() -> Vec<ApplicationRef> {
-        ["Firefox", "GNOME Settings", "GNOME Text Editor"]
+        ["Example Browser", "Example Settings", "Example Editor"]
             .into_iter()
             .enumerate()
             .map(|(index, name)| ApplicationRef {
@@ -2752,22 +2752,22 @@ mod tests {
     fn selects_application_by_exact_or_unique_partial_name() {
         let apps = applications();
         assert_eq!(
-            AtspiBackend::select_application(&apps, Some("firefox"), None)
+            AtspiBackend::select_application(&apps, Some("example browser"), None)
                 .unwrap()
                 .name,
-            "Firefox"
+            "Example Browser"
         );
         assert_eq!(
             AtspiBackend::select_application(&apps, Some("settings"), None)
                 .unwrap()
                 .name,
-            "GNOME Settings"
+            "Example Settings"
         );
         assert_eq!(
             AtspiBackend::select_application(&apps, None, Some(3))
                 .unwrap()
                 .name,
-            "GNOME Text Editor"
+            "Example Editor"
         );
     }
 
@@ -2775,7 +2775,7 @@ mod tests {
     fn rejects_ambiguous_application_name() {
         let apps = applications();
         assert!(matches!(
-            AtspiBackend::select_application(&apps, Some("gnome"), None),
+            AtspiBackend::select_application(&apps, Some("example"), None),
             Err(BackendError::AmbiguousApplication { .. })
         ));
     }

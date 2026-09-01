@@ -255,11 +255,11 @@ mod tests {
         let path = temp.path().join("config.toml");
         let mut config = Config::default();
         config.launchers.insert(
-            "chromium".into(),
+            "example-launcher".into(),
             LauncherConfig {
-                program: "chromium".into(),
-                args: vec!["--force-renderer-accessibility=complete".into()],
-                match_name: "Google Chrome".into(),
+                program: "/path/to/gui-application".into(),
+                args: vec!["--accessibility-mode=enabled".into()],
+                match_name: "Accessible Application".into(),
                 wait_ms: 20_000,
                 verified: true,
             },

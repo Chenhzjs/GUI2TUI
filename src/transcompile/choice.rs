@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn unavailable_and_anonymous_options_are_read_only_without_guessing() {
-        let mut empty = node(1, SemanticRole::ComboBox, "GTK choice");
+        let mut empty = node(1, SemanticRole::ComboBox, "Example choice");
         let mut disclosure = node(2, SemanticRole::ToggleButton, "Alpha");
         disclosure.actions.push(action("Click"));
         empty.children.push(disclosure);

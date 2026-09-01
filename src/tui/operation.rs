@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn gtk_style_selection_uses_parent_container_and_original_child_index() {
+    fn nested_selection_uses_parent_container_and_original_child_index() {
         let mut root = node(0, SemanticRole::Window, "Demo");
         let mut list = node(1, SemanticRole::List, "Items");
         list.capabilities.push(SemanticCapability::SelectChildren);
@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn qt_style_toggle_action_resolves_to_select_not_toggle_semantics() {
+    fn toggle_action_resolves_to_select_not_toggle_semantics() {
         let mut root = node(0, SemanticRole::Window, "Demo");
         let mut item = node(1, SemanticRole::ListItem, "Beta");
         item.index_in_parent = Some(1);

@@ -354,7 +354,7 @@ fn element_lines_for_width(
         SceneElementKind::Hint { text } => vec![format!("    Hint: {text}")],
         SceneElementKind::Error { text } => vec![format!("    Error: {text}")],
         SceneElementKind::Group { label } | SceneElementKind::CommandHeader { label } => {
-            vec![format!("  {label}:")]
+            section_lines(label, focused, width)
         }
         SceneElementKind::Button { label } => vec![format!("{marker}[ {label} ]{unavailable}")],
         SceneElementKind::Toggle { label, pressed } => vec![format!(
@@ -393,13 +393,17 @@ fn element_lines_for_width(
             links,
             forms,
             completeness,
-        } => vec![
-            format!("{marker}Document: {title}"),
-            format!("    {blocks} blocks | {headings} headings | {links} links | {forms} forms"),
-            format!("    completeness: {completeness}"),
-            "    [ Enter: Read document ]".to_owned(),
-            "    o Outline | / Content search".to_owned(),
-        ],
+        } => boxed_lines(
+            &format!("Document: {title}"),
+            &[
+                format!("{blocks} blocks | {headings} headings | {links} links | {forms} forms"),
+                format!("completeness: {completeness}"),
+                "[ Enter: Read document ]".to_owned(),
+                "o Outline | / Content search".to_owned(),
+            ],
+            focused,
+            width,
+        ),
         SceneElementKind::SelectionItem { label, selected } => vec![format!(
             "{marker}{} {label}{unavailable}",
             if *selected { "*" } else { "•" }
@@ -414,6 +418,59 @@ fn element_lines_for_width(
         ],
         SceneElementKind::Unsupported { label } => vec![format!("  <Unsupported: {label}>")],
     }
+}
+
+fn section_lines(label: &str, focused: bool, width: u16) -> Vec<String> {
+    let available = usize::from(width.clamp(20, 100).saturating_sub(6));
+    let title = truncate(label, available);
+    let inner = format!("─ {title} ");
+    let horizontal = "─".repeat(inner.chars().count().max(available));
+    let marker = if focused { "> " } else { "  " };
+    vec![
+        format!(
+            "{marker}┌{inner}{:─<width$}┐",
+            "",
+            width = horizontal
+                .chars()
+                .count()
+                .saturating_sub(inner.chars().count())
+        ),
+        "  │".to_owned(),
+        format!("  └{}┘", horizontal),
+    ]
+}
+
+fn boxed_lines(title: &str, body: &[String], focused: bool, width: u16) -> Vec<String> {
+    // Reserve the two-column focus marker so the border remains inside the
+    // terminal viewport even when the document is focused.
+    let box_width = usize::from(width.clamp(24, 100).saturating_sub(2));
+    let inner_width = box_width.saturating_sub(4).max(8);
+    let title = truncate(title, inner_width.saturating_sub(2));
+    let top_fill = inner_width.saturating_sub(title.chars().count() + 2);
+    let marker = if focused { "> " } else { "  " };
+    let mut lines = vec![format!(
+        "{marker}┌─ {title} {:─<top_fill$}┐",
+        "",
+        top_fill = top_fill
+    )];
+    for line in body {
+        let text = truncate(line, inner_width);
+        let padding = inner_width.saturating_sub(text.chars().count());
+        lines.push(format!("  │ {text}{:padding$} │", "", padding = padding));
+    }
+    while lines.len() < 6 {
+        lines.push(format!(
+            "  │{:inner_width$}│",
+            "",
+            inner_width = inner_width + 2
+        ));
+    }
+    lines.push(format!("  └{}┘", "─".repeat(inner_width + 2)));
+    lines
+}
+
+fn truncate(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
 }
 
 fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
@@ -581,5 +638,37 @@ mod tests {
         });
         opaque.binding = None;
         assert!(element_lines(&opaque, false)[1].contains("fidelity-required"));
+    }
+
+    #[test]
+    fn document_summary_is_a_bounded_enterable_region() {
+        let document = element(SceneElementKind::DocumentSummary {
+            title: "A long document title that should be clipped".into(),
+            blocks: 12,
+            headings: 3,
+            links: 4,
+            forms: 1,
+            completeness: "partial".into(),
+        });
+        let lines = element_lines_for_width(&document, true, None, 32);
+        assert_eq!(lines.len(), 7);
+        assert!(lines.iter().all(|line| line.chars().count() <= 32));
+        assert!(lines[0].starts_with("> ┌─ Document:"));
+        assert!(
+            lines
+                .last()
+                .is_some_and(|line| line.trim_end().ends_with('┘'))
+        );
+    }
+
+    #[test]
+    fn group_headers_use_three_line_sections_and_fit_narrow_widths() {
+        let group = element(SceneElementKind::Group {
+            label: "Toolbar controls".into(),
+        });
+        let lines = element_lines_for_width(&group, false, None, 24);
+        assert_eq!(lines.len(), 3);
+        assert!(lines.iter().all(|line| line.chars().count() <= 24));
+        assert!(lines[0].contains("Toolbar controls"));
     }
 }

@@ -2072,7 +2072,7 @@ impl TuiApplication {
         }
         // The target is always refreshed explicitly below from the GUI's
         // authoritative Text/EditableText interfaces.  Do not feed echoed
-        // target events through the generic dirty-scope path: older Qt emits
+        // target events through the generic dirty-scope path: older bridges emit
         // a legacy PropertyChange body alongside TextChanged, and treating an
         // otherwise-unparsed echo as Unknown would unnecessarily promote this
         // local commit to a full-application refresh.

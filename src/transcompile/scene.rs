@@ -159,7 +159,8 @@ impl SceneElement {
             SceneElementKind::Field { .. } if width < 100 => 2,
             SceneElementKind::OpaqueContent { dimensions, .. } if dimensions.is_some() => 3,
             SceneElementKind::OpaqueContent { .. } => 2,
-            SceneElementKind::DocumentSummary { .. } => 5,
+            SceneElementKind::DocumentSummary { .. } => 7,
+            SceneElementKind::Group { .. } | SceneElementKind::CommandHeader { .. } => 3,
             _ => 1,
         }
     }

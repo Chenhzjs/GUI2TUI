@@ -302,7 +302,8 @@ mod tests {
     #[test]
     fn selector_filter_shortcuts_and_refresh_preserve_selection() {
         use crossterm::event::KeyModifiers;
-        let mut selector = ApplicationSelector::new(vec!["GTK".into(), "Browser".into()]);
+        let mut selector =
+            ApplicationSelector::new(vec!["Example One".into(), "Example Browser".into()]);
         for character in ['/', 'r'] {
             assert!(
                 selector.filter_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
@@ -310,13 +311,17 @@ mod tests {
         }
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Browser".into()))
+            Some(&SelectorTarget::Running("Example Browser".into()))
         );
         selector.filter_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        selector.replace(vec!["Other".into(), "Browser".into()], Vec::new(), None);
+        selector.replace(
+            vec!["Example Other".into(), "Example Browser".into()],
+            Vec::new(),
+            None,
+        );
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Browser".into()))
+            Some(&SelectorTarget::Running("Example Browser".into()))
         );
     }
 
@@ -331,20 +336,21 @@ mod tests {
 
     #[test]
     fn selector_navigation_wraps_and_opens_the_selected_application() {
-        let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
+        let mut selector =
+            ApplicationSelector::new(vec!["Example One".to_owned(), "Example Two".to_owned()]);
         selector.handle(SelectorIntent::Previous);
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Qt".into()))
+            Some(&SelectorTarget::Running("Example Two".into()))
         );
         selector.handle(SelectorIntent::Next);
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("GTK".into()))
+            Some(&SelectorTarget::Running("Example One".into()))
         );
         assert_eq!(
             selector.handle(SelectorIntent::Open),
-            Some(SelectorTarget::Running("GTK".to_owned()))
+            Some(SelectorTarget::Running("Example One".to_owned()))
         );
     }
 
@@ -352,28 +358,31 @@ mod tests {
     fn selector_terminal_hit_testing_opens_the_clicked_row() {
         let backend = TestBackend::new(40, 8);
         let mut terminal = Terminal::new(backend).unwrap();
-        let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
+        let mut selector =
+            ApplicationSelector::new(vec!["Example One".to_owned(), "Example Two".to_owned()]);
         terminal.draw(|frame| selector.render(frame)).unwrap();
 
         assert_eq!(
             selector.click(2, 2),
-            Some(SelectorTarget::Running("Qt".to_owned()))
+            Some(SelectorTarget::Running("Example Two".to_owned()))
         );
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Qt".into()))
+            Some(&SelectorTarget::Running("Example Two".into()))
         );
         assert!(selector.click(39, 7).is_none());
     }
 
     #[test]
     fn selector_exposes_registered_launchers_distinctly() {
-        let mut selector =
-            ApplicationSelector::with_launchers(vec!["GTK".into()], vec!["chromium".into()]);
+        let mut selector = ApplicationSelector::with_launchers(
+            vec!["Example App".into()],
+            vec!["example-launcher".into()],
+        );
         selector.handle(SelectorIntent::Next);
         assert_eq!(
             selector.handle(SelectorIntent::Open),
-            Some(SelectorTarget::Launcher("chromium".into()))
+            Some(SelectorTarget::Launcher("example-launcher".into()))
         );
     }
 }

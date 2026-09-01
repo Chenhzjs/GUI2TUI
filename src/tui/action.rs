@@ -128,7 +128,7 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::RadioButton, UiIntent::Activate | UiIntent::Toggle) => {
             &["toggle", "click", "press"]
         }
-        // Qt 6 QListWidgetItem exposes Toggle, but the user operation is Select.
+        // Some toolkit list items expose Toggle, but the user operation is Select.
         (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
@@ -137,7 +137,7 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::ComboBox, UiIntent::OpenMenu) => {
             &["showmenu", "show-menu", "click", "press"]
         }
-        // Opening actions are not assumed to be reversible. Qt advertises
+        // Opening actions are not assumed to be reversible. A toolkit may advertise
         // both `ShowMenu` and `Press` as "Open the combo box selection popup";
         // invoking either after a selection can reselect an item or leave the
         // popup open. Until a backend advertises an explicit, verified close
@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn parent_selection_makes_a_gtk_style_list_item_selectable() {
+    fn parent_selection_makes_a_nested_list_item_selectable() {
         assert_eq!(
             interaction_capability(
                 &SemanticRole::ListItem,
