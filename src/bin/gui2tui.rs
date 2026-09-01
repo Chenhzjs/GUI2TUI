@@ -436,11 +436,14 @@ fn companion_path(name: &str) -> Result<std::path::PathBuf, Box<dyn Error>> {
     if sibling.is_file() {
         return Ok(sibling);
     }
-    #[cfg(debug_assertions)]
+    // A release binary built directly from a checkout is also a supported
+    // developer install (`cargo build --release`). Locate the repository by
+    // walking from target/{debug,release}; packaged archives are handled by
+    // the libexec path above and never contain this layout.
+    if let Some(target_dir) = bin.parent()
+        && let Some(project_dir) = target_dir.parent()
     {
-        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("scripts")
-            .join(name);
+        let source = project_dir.join("scripts").join(name);
         if source.is_file() {
             return Ok(source);
         }
