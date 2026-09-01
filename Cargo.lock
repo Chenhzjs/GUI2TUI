@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "gui2tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "atspi",
  "base64",

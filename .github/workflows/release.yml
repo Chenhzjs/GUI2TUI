@@ -40,6 +40,7 @@ jobs:
           set -euo pipefail
           version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
           test -n "$version"
+          test -f "docs/release-notes-v${version}.md"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             test "${GITHUB_REF_NAME#v}" = "$version" || {
               echo "tag $GITHUB_REF_NAME does not match Cargo.toml $version" >&2
@@ -175,6 +176,8 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF_TYPE" = tag
           test "$GITHUB_REF_NAME" = "v${{ needs.version.outputs.version }}"
+          notes_file="docs/release-notes-v${{ needs.version.outputs.version }}.md"
+          test -f "$notes_file"
           gh release create "$GITHUB_REF_NAME" "${RUNNER_TEMP}/release/"* \
             --verify-tag --title "GUI2TUI $GITHUB_REF_NAME" \
-            --notes-file docs/release-notes-v0.1.md
+            --notes-file "$notes_file"

@@ -6,8 +6,8 @@ are visibly read-only, never guessed mouse clicks or anonymous actions.
 
 ## Manual installation
 
-Use the v0.1.0 Linux archive matching `uname -m` (`x86_64` or `aarch64`).
-Download it from the [GitHub Release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.0),
+Use the v0.1.1 Linux archive matching `uname -m` (`x86_64` or `aarch64`).
+Download it from the [GitHub Release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.1),
 verify `SHA256SUMS`, extract the tarball and run `bin/gui2tui --version`. No
 installer script is downloaded or executed.
 
@@ -25,7 +25,7 @@ Add that directory to PATH through your normal shell configuration. The inspecto
 used by host artifact TTL reaping; keep it alongside gui2tui. See `DEPENDENCIES.txt` in the archive
 for actual dynamic linkage. No complete GNOME/KDE installation is required.
 Official x86_64 and aarch64 archives are built natively on Ubuntu 22.04 runners.
-Their measured ELF requirements are recorded in `RELEASE-MANIFEST.json`; v0.1.0
+Their measured ELF requirements are recorded in `RELEASE-MANIFEST.json`; v0.1.1
 requires no GLIBC symbol newer than 2.34. Other architectures must build from source.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
@@ -45,18 +45,12 @@ No apps? Start an application in that desktop session, press `r`, or `d` for dia
 
 ## One-command headless session
 
-The current source tree includes a `gui2tui-headless` helper. It creates a
-private Xvfb, D-Bus and AT-SPI session, runs `gui2tui doctor`, then opens an
-interactive shell:
+The package includes a `gui2tui-headless` helper. It creates a private Xvfb,
+D-Bus and AT-SPI session, runs `gui2tui doctor`, then opens an interactive shell:
 
 ```bash
-./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui
+bin/gui2tui-headless
 ```
-
-Future packages built from the current branch install the same helper as
-`bin/gui2tui-headless`. The immutable v0.1.0 archives were published before the
-helper was added; their existing `smoke/run.sh` remains the one-command bundled
-demonstration.
 
 Inside that shell, start a GUI application and GUI2TUI normally. Both processes
 inherit the same private accessibility session:
@@ -69,8 +63,7 @@ gui2tui
 Or run everything as one command:
 
 ```bash
-./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui -- \
-    bash -lc 'gtk4-demo & exec gui2tui'
+bin/gui2tui-headless -- bash -lc './my-gui-app & exec bin/gui2tui'
 ```
 
 Use `--doctor-only` for a non-interactive environment check. A valid headless

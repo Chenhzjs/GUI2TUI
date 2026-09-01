@@ -27,18 +27,18 @@ This is a real 60-second GTK/AT-SPI/GUI2TUI recording. The terminal opens
 semantic content in Reader, searches it, then invokes a named action; the
 checkbox and status in the original GUI change authoritatively.
 
-[Watch the full 60-second demo](https://github.com/Chenhzjs/GUI2TUI/releases/download/v0.1.0/gui2tui-v0.1-demo.mp4)
+[Watch the full 60-second demo](https://github.com/Chenhzjs/GUI2TUI/releases/download/v0.1.1/gui2tui-v0.1-demo.mp4)
 · [Recording method and text walkthrough](docs/demo/README.md)
 · [More real GUI-to-TUI frames](docs/gui-to-tui-examples.md)
 
 ## Download and quick start
 
-Download **[GUI2TUI v0.1.0](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.0)**
+Download **[GUI2TUI v0.1.1](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v0.1.1)**
 for Linux `x86_64` or `aarch64`, then:
 
 ```bash
-tar -xzf gui2tui-0.1.0-linux-x86_64.tar.gz
-cd gui2tui-0.1.0-linux-x86_64
+tar -xzf gui2tui-0.1.1-linux-x86_64.tar.gz
+cd gui2tui-0.1.1-linux-x86_64
 
 ./bin/gui2tui doctor
 ./bin/gui2tui
@@ -49,17 +49,15 @@ AT-SPI bus is reachable. The terminal itself may be headless or connected over
 SSH to that same host. No config file, root privilege, full desktop environment,
 or companion viewer is required.
 
-For a server without a physical desktop, the current source tree includes a
-helper that creates a private Xvfb + D-Bus + AT-SPI session, verifies it with
-`doctor`, and opens a shell:
+For a server without a physical desktop, the package includes a helper that
+creates a private Xvfb + D-Bus + AT-SPI session, verifies it with `doctor`, and
+opens a shell:
 
 ```bash
-./scripts/gui2tui-headless --gui2tui ./target/release/gui2tui
+./bin/gui2tui-headless
 ```
 
-The immutable v0.1.0 archives predate this post-release helper; their bundled
-`smoke/run.sh` remains available for a one-command demonstration. See
-[one-command headless setup](docs/getting-started.md#one-command-headless-session).
+See [one-command headless setup](docs/getting-started.md#one-command-headless-session).
 
 Verify downloaded archives with:
 
@@ -251,6 +249,7 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Architecture](docs/architecture.md)
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
+- [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
 - [Release notes for v0.1.0](docs/release-notes-v0.1.0.md)
 - [v0.1.0 public release verification](docs/release-v0.1.0-validation.md)
 

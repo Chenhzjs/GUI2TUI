@@ -16,6 +16,7 @@ PUBLIC_FILES = {
     ROOT / "README.md",
     ROOT / "docs" / "release-notes-v0.1.md",
     ROOT / "docs" / "release-notes-v0.1.0.md",
+    ROOT / "docs" / "release-notes-v0.1.1.md",
     ROOT / "docs" / "demo" / "README.md",
 }
 PRIVATE_PATTERNS = (

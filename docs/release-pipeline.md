@@ -1,7 +1,8 @@
 # Binary release pipeline
 
 The dual-native pipeline is [live validated](release-pipeline-validation.md).
-Public v0.1.0 release remains pending; workflow artifacts are validation candidates.
+Public v0.1.0 was released through this pipeline. Later patch releases use the
+same native build, smoke, ABI, checksum, assembly and attestation gates.
 
 The normal CI workflow checks formatting, all targets, tests, Clippy, and patch whitespace.
 It does not package or publish releases. The separate release workflow supports manual validation
@@ -35,8 +36,8 @@ maximum GLIBC version at 2.35 rather than inferring it from a runner label.
 
 ```bash
 sha256sum -c SHA256SUMS
-gh attestation verify gui2tui-0.1.0-linux-x86_64.tar.gz --repo Chenhzjs/GUI2TUI
-gh attestation verify gui2tui-0.1.0-linux-aarch64.tar.gz --repo Chenhzjs/GUI2TUI
+gh attestation verify gui2tui-0.1.1-linux-x86_64.tar.gz --repo Chenhzjs/GUI2TUI
+gh attestation verify gui2tui-0.1.1-linux-aarch64.tar.gz --repo Chenhzjs/GUI2TUI
 ```
 
 GitHub attestations require OIDC and repository attestation permission. No user-managed signing
