@@ -15,6 +15,20 @@ export DISPLAY="${DISPLAY_NUMBER:-:145}" XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 TER
 Xvfb "$DISPLAY" -screen 0 1280x800x24 -dpi 96 >"$RESULT_DIR/xvfb.log" 2>&1 &
 xvfb_pid=$!
 trap '\''kill "$xvfb_pid" 2>/dev/null || true'\'' EXIT
+# Xvfb startup is observably slower on some native runners.  Activating the
+# AT-SPI registry before the display accepts connections leaves that registry
+# permanently detached from X11, so wait on capability rather than timing.
+for _ in $(seq 1 100); do
+    if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
+        display_ready=true
+        break
+    fi
+    sleep 0.05
+done
+test "${display_ready:-false}" = true || {
+    echo "Xvfb did not become ready" >&2
+    exit 1
+}
 dbus-update-activation-environment DISPLAY XDG_SESSION_TYPE NO_AT_BRIDGE XDG_RUNTIME_DIR
 for property in IsEnabled ScreenReaderEnabled; do
     gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus --method org.freedesktop.DBus.Properties.Set org.a11y.Status "$property" "<true>" >/dev/null
