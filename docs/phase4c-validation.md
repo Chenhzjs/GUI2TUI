@@ -150,5 +150,6 @@ Both bundles require at most GLIBC 2.34 (within the 2.35 gate):
 
 The downloaded assembly passed `sha256sum -c SHA256SUMS`; `gh attestation
 verify` bound the archives and manifest to the RC source commit and release
-workflow. `publish=false`, so the publish job was skipped. No `v0.1.0` tag or
-GitHub release exists: **v0.1.0 PUBLIC RELEASE NOT PUBLISHED**.
+workflow. `publish=false`, so the publish job was skipped. This paragraph records
+the Phase 4C pre-release checkpoint. The subsequent public `v0.1.0` release is
+documented in [v0.1.0 public release verification](release-v0.1.0-validation.md).

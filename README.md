@@ -160,6 +160,7 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
 - [Release notes for v0.1.0](docs/release-notes-v0.1.0.md)
+- [v0.1.0 public release verification](docs/release-v0.1.0-validation.md)
 
 ## Development
 

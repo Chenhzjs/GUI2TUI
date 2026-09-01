@@ -3,7 +3,10 @@
 PHASE 4B RELEASE PIPELINE SUPPLEMENT VALIDATED
 
 Core IR structural changes: NONE. CORE ARCHITECTURE FROZEN FOR v0.1.
-Public v0.1.0 release: NOT PUBLISHED. No release tag was created.
+This document records the earlier Phase 4B non-publishing pipeline validation.
+At that historical checkpoint, no release tag existed. GUI2TUI v0.1.0 was later
+published from source commit `b4f4c530326cf5623bc75c9a16d54dfd55e6e81a`;
+see the [final public release verification](release-v0.1.0-validation.md).
 
 ## Source and GitHub evidence
 
@@ -167,8 +170,9 @@ the six assembly regression tests. Do not distribute the superseded candidate.
 
 Manual validation defaults to no publication. Only a matching existing `v*` tag,
 successful version/build/smoke/ABI/assembly gates and the publish condition can
-reach the isolated contents-write job. Tag publication: NOT TRIGGERED / NOT TESTED.
-No public release or tag existed when checked after this run.
+reach the isolated contents-write job. Publication was intentionally not triggered
+in this historical Phase 4B run; it was subsequently exercised successfully for
+the immutable `v0.1.0` tag as recorded in the final verification report.
 
 musl: NOT PURSUED. deb/rpm/AppImage/Flatpak: NOT IMPLEMENTED, OUT OF SCOPE.
 Remote production endpoint, new-TTY attach and Wayland capture: NOT IMPLEMENTED.

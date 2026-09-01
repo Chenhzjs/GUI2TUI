@@ -11,9 +11,11 @@ universal GUI conversion:
 - Phase 4 hardened lifecycle recovery, installation/release UX, and real-world
   representative workflows for the v0.1 boundary.
 
-The v0.1 core architecture is frozen. Detailed historical measurements remain
-in `docs/validation/` and the phase-specific technical reports; they are
-development evidence, not current product roadmap promises.
+GUI2TUI v0.1.0 was publicly released on 2026-09-01 from the immutable
+`v0.1.0` tag. The v0.1 core architecture is frozen. Detailed historical
+measurements remain in `docs/validation/` and the phase-specific technical
+reports; they are development evidence, not current product roadmap promises.
 
-Post-v0.1 work is maintenance-oriented: broader compatibility evidence,
-accessibility-cache readiness, optional deployment features, and user experience.
+The repository is now in **POST-v0.1 MAINTENANCE**. Work is
+maintenance-oriented: broader compatibility evidence, accessibility-cache
+readiness, optional deployment features, and user experience.
