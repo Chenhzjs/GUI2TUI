@@ -140,7 +140,7 @@ class Terminal:
         # AT-SPI events may replace the transient Loaded status before the PTY
         # is drained; readiness is the fully rendered interactive scene.
         try:
-            ready = "? Help | F6 Region" if layout == "spatial" else "? Help | Tab Focus"
+            ready = "? Help · F6 Region" if layout == "spatial" else "? Help | Tab Focus"
             self.wait(ready, timeout=40)
         except Exception:
             self.child.close(force=True)
@@ -924,6 +924,25 @@ def workflow(terminal, selector, app, command):
         REPORT["checks"]["dynamic_control_visibility"] = "PASS"
         REPORT["checks"]["normal_scene_grouping"] = "PASS"
     elif CASE == "designer":
+        initial_navigation = save("region-navigation-initial.txt", terminal.pump())
+        initial_major = re.search(r"Major:\s*\[([^]]+)\]", initial_navigation)[1]
+        initial_pane = re.search(r"Pane:\s*\[([^]]+)\]", initial_navigation)[1]
+
+        terminal.send(b"\x1b[9;5u")  # Ctrl-Tab in CSI-u form.
+        next_pane_frame = save("region-navigation-next-pane.txt", terminal.pump(.3))
+        assert re.search(r"Pane:\s*\[([^]]+)\]", next_pane_frame)[1] != initial_pane
+        terminal.send(b"\x1b[9;6u")  # Ctrl-Shift-Tab.
+        previous_pane_frame = save("region-navigation-previous-pane.txt", terminal.pump(.3))
+        assert re.search(r"Pane:\s*\[([^]]+)\]", previous_pane_frame)[1] == initial_pane
+
+        terminal.send(b"\x1b[17~")  # F6.
+        next_major_frame = save("region-navigation-next-major.txt", terminal.pump(.3))
+        assert re.search(r"Major:\s*\[([^]]+)\]", next_major_frame)[1] != initial_major
+        terminal.send(b"\x1b[17;2~")  # Shift-F6.
+        previous_major_frame = save("region-navigation-previous-major.txt", terminal.pump(.3))
+        assert re.search(r"Major:\s*\[([^]]+)\]", previous_major_frame)[1] == initial_major
+        REPORT["checks"]["hierarchical_region_navigation"] = "PASS"
+
         tree = inspect("--app", selector, "--verbose").stdout
         subtree = tree[tree.index('Dialog "New Form"'):]
         choice = locator_for(subtree, "ListItem", "QVGA portrait (240x320)")
