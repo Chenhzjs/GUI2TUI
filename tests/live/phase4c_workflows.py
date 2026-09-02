@@ -78,21 +78,70 @@ def cache_diagnostics(tree):
     return {"items": len(items), "modern": True, "incomplete": incomplete}
 
 
+def structural_noise_audit(scene, spatial_plan):
+    """Classify rows from the flat scene using only presentation diagnostics."""
+    presentation_by_node = {}
+    rank = {"DiagnosticOnly": 0, "Empty": 0, "Structural": 1}
+    for match in re.finditer(r"presentation=(\w+).*?nodes=\[([^]]*)\]", spatial_plan):
+        kind = match[1]
+        kind_rank = rank.get(kind, 2)
+        for raw in re.findall(r"RuntimeNodeId\((\d+)\)", match[2]):
+            node = int(raw)
+            current = presentation_by_node.get(node)
+            if current is None or kind_rank > current[0]:
+                presentation_by_node[node] = (kind_rank, kind)
+    counts = {"user_relevant": 0, "supporting": 0, "structural_only": 0,
+              "diagnostic_only": 0, "duplicate_command_summary": 0}
+    for line in scene.splitlines():
+        if not line.lstrip().startswith("Element "):
+            continue
+        if "kind=CommandHeader" in line:
+            counts["duplicate_command_summary"] += 1
+            continue
+        if "kind=Status" in line:
+            counts["supporting"] += 1
+            continue
+        if "kind=Unsupported" not in line:
+            counts["user_relevant"] += 1
+            continue
+        sources = [int(raw) for raw in re.findall(r"\d+", line.rsplit("sources=", 1)[-1])]
+        kinds = {presentation_by_node[node][1] for node in sources
+                 if node in presentation_by_node}
+        if "Structural" in kinds:
+            counts["structural_only"] += 1
+        elif kinds - {"DiagnosticOnly", "Empty"}:
+            counts["supporting"] += 1
+        else:
+            counts["diagnostic_only"] += 1
+    counts["flat_rows"] = sum(counts.values())
+    return counts
+
+
 class Terminal:
     def __init__(self, selector):
-        self.screen = pyte.Screen(160, 50)
+        self.columns = int(os.environ.get("TERMINAL_COLUMNS", "160"))
+        self.rows = int(os.environ.get("TERMINAL_ROWS", "50"))
+        self.screen = pyte.Screen(self.columns, self.rows)
         self.stream = pyte.Stream(self.screen)
         self.transcript = ""
         self.loaded_status = None
         self.loaded_ms = None
         self.fallback_statuses = []
         self.started = time.monotonic()
-        self.child = pexpect.spawn(str(BIN / "gui2tui"), ["--app", selector, "--log-level", "debug"],
-                                   encoding=None, dimensions=(50, 160), env=os.environ.copy())
+        # Product diagnostics are optional for visual validation; individual
+        # lifecycle tests may opt in when they need the private log.
+        args = ["--app", selector, "--log-level",
+                os.environ.get("GUI2TUI_TEST_LOG_LEVEL", "off")]
+        layout = os.environ.get("GUI2TUI_LAYOUT")
+        if layout:
+            args.extend(["--layout", layout])
+        self.child = pexpect.spawn(str(BIN / "gui2tui"), args,
+                                   encoding=None, dimensions=(self.rows, self.columns), env=os.environ.copy())
         # AT-SPI events may replace the transient Loaded status before the PTY
         # is drained; readiness is the fully rendered interactive scene.
         try:
-            self.wait("? Help | Tab Focus | Enter Use", timeout=40)
+            ready = "? Help | F6 Region" if layout == "spatial" else "? Help | Tab Focus"
+            self.wait(ready, timeout=40)
         except Exception:
             self.child.close(force=True)
             raise
@@ -132,11 +181,16 @@ class Terminal:
         return self.pump()
 
     def focus(self, label):
-        for _ in range(250):
-            text = self.pump(.025)
-            if any(line.strip("│ ").startswith("> ") and label in line for line in text.splitlines()):
-                return text
-            self.child.send(b"\t")
+        for region in range(8):
+            for _ in range(32):
+                text = self.pump(.025)
+                if any((line.strip("│ ").startswith("> ") or f"[> {label}" in line)
+                       and label in line for line in text.splitlines()):
+                    return text
+                self.child.send(b"\t")
+            # Responsive spatial mode has region and local-control focus
+            # levels. F6 is harmless in the legacy flat scene.
+            self.child.send(b"\x1b[17~")
         raise AssertionError(f"no focus target {label!r}\n{text}")
 
     def close(self):
@@ -153,16 +207,35 @@ class Terminal:
         clean = "\n".join(line.strip().strip("│").strip() for line in frame.splitlines())
         value = json.loads(clean[clean.index("{"):clean.rindex("}") + 1])
         self.send(b"\x1b")
-        self.child.setwinsize(50, 160)
-        self.screen.resize(50, 160)
+        self.child.setwinsize(self.rows, self.columns)
+        self.screen.resize(self.rows, self.columns)
         return value
 
 
 def launch_case():
     work = OUT / "work"
     work.mkdir()
-    text = "GUI2TUI real editor review\n" + "\n".join(
-        f"Section {i}: accessibility workflow paragraph for semantic navigation." for i in range(100))
+    if os.environ.get("SPATIAL_UX_FIXTURE") == "1":
+        text = """GUI2TUI v0.2 Review
+
+Spatial reconstruction
+
+The current prototype identifies important semantic regions and organizes them
+into a terminal-native layout.
+
+Accessibility boundaries
+
+GUI2TUI consumes semantics exposed through AT-SPI. Missing or unreliable
+information is degraded safely rather than guessed.
+
+Next steps
+
+Responsive region composition will improve navigation and adapt the interface
+to smaller terminals.
+"""
+    else:
+        text = "GUI2TUI real editor review\n" + "\n".join(
+            f"Section {i}: accessibility workflow paragraph for semantic navigation." for i in range(100))
     (work / "review.txt").write_text(text)
     for i in range(40):
         (work / f"item-{i:03}.txt").write_text(f"Local validation item {i}\n")
@@ -175,6 +248,12 @@ def launch_case():
         return "pcmanfm-qt", ["pcmanfm-qt", "--profile", OUT.name, "--show-pref", "behavior"]
     if CASE == "designer":
         return "designer", ["/usr/lib/qt6/bin/designer"]
+    if CASE == "eog":
+        image = work / "viewer.png"
+        shutil.copy("/usr/share/pixmaps/debian-logo.png", image)
+        return "eog", ["eog", "--new-instance", str(image)]
+    if CASE == "gtk-demo":
+        return "gtk4-demo", ["gtk4-demo"]
     if CASE in ("gtk", "qt"):
         return ("gui2tui-live-fixture" if CASE == "gtk" else "gui2tui-qt-fixture"), [
             "python3", str(fixture / ("gtk4_live_fixture.py" if CASE == "gtk" else "qt6_live_fixture.py"))]
@@ -183,10 +262,12 @@ def launch_case():
         return "python3", ["python3", str(fixture / "gtk4_modality_fixture.py")]
     if CASE in ("chrome", "chrome-large"):
         page = "browser_fixture.html" if CASE == "chrome" else "browser_large_fixture.html?count=700"
+        location = ("about:blank" if os.environ.get("PRELAUNCH_CACHE_LISTENER") == "1"
+                    else f"file://{fixture / page}")
         return "Google Chrome", ["google-chrome", "--disable-gpu", "--disable-dev-shm-usage",
             "--no-first-run", "--no-default-browser-check", "--disable-background-networking",
             "--force-renderer-accessibility=complete", f"--user-data-dir={OUT / 'profile'}",
-            f"file://{fixture / page}"] + (["--no-sandbox"] if os.environ.get("ISOLATED_SANDBOX_COMPARISON") == "1" else [])
+            location] + (["--no-sandbox"] if os.environ.get("ISOLATED_SANDBOX_COMPARISON") == "1" else [])
     if CASE == "firefox":
         profile = OUT / "profile"
         profile.mkdir()
@@ -215,13 +296,14 @@ def launch_case():
 
 
 def main():
-    if MODE not in {"probe", "workflow", "settings-probe", "benchmark", "cache-baseline", "modality", "reproduce-multiline"}:
+    if MODE not in {"probe", "workflow", "settings-probe", "benchmark", "cache-baseline", "fresh-benchmark", "modality", "reproduce-multiline"}:
         raise ValueError("unknown test mode")
     selector, command = launch_case()
     REPORT["selector"] = selector
     app_log = (OUT / "application.log").open("w")
     app = subprocess.Popen(command, stdout=app_log, stderr=subprocess.STDOUT, start_new_session=True)
     terminal = None
+    cache_listener = None
     try:
         if CASE.startswith("pcmanfm"):
             time.sleep(3)
@@ -242,7 +324,23 @@ def main():
             save("discovery-window-tree.txt", windows.stdout)
             raise AssertionError("Application not discovered through AT-SPI")
         save("applications.txt", apps)
-        if MODE == "cache-baseline":
+        if MODE in ("cache-baseline", "fresh-benchmark"):
+            if CASE == "chrome-large" and os.environ.get("PRELAUNCH_CACHE_LISTENER") == "1":
+                listener_log = (OUT / "cache-listener.txt").open("w")
+                cache_listener = subprocess.Popen(
+                    [str(BIN / "gui2tui-inspect"), "--app", selector, "--watch-events"],
+                    stdout=listener_log, stderr=subprocess.STDOUT, start_new_session=True)
+                time.sleep(1)
+                page = ROOT / "tests/fixtures/browser_large_fixture.html?count=700"
+                open_result = subprocess.run(
+                    ["google-chrome", f"--user-data-dir={OUT / 'profile'}", f"file://{page}"],
+                    text=True, capture_output=True, timeout=15)
+                save("cache-listener-open.txt", open_result.stdout + open_result.stderr)
+            if CASE in ("chrome", "chrome-large", "firefox", "electron"):
+                # Application discovery precedes completion of the bulk AT-SPI
+                # Cache.  Sample the cache-ready condition only after the same
+                # stabilization interval used by the normal workflow path.
+                time.sleep(8)
             cache_before = save("cache-before.txt", inspect("--app", selector, "--probe-cache").stdout)
             terminal = Terminal(selector)
             fresh_frame = save("fresh-frame.txt", terminal.pump())
@@ -268,9 +366,44 @@ def main():
             assert "GUI2TUI" in fresh_frame
             assert not ("0 blocks" in fresh_frame and "completeness: Complete" in fresh_frame), fresh_frame
             REPORT["fresh"]["cache_items_before"] = int(re.search(r"items: (\d+)", cache_before)[1])
-            terminal.close()
-            terminal = None
-
+            forced = inspect("--app", selector, "--bootstrap", "cache", ok=False)
+            save("cache-rejection.txt", forced.stderr)
+            REPORT["fresh"]["cache_fallback_reason"] = forced.stderr.strip()
+            if MODE == "fresh-benchmark" and os.environ.get("GUI2TUI_LAYOUT") == "spatial":
+                spatial_evidence = save(
+                    "spatial-evidence.txt",
+                    inspect("--app", selector, "--dump-spatial-evidence").stdout)
+                spatial_plan_result = inspect("--app", selector, "--dump-layout-plan")
+                spatial_plan = save(
+                    "spatial-plan.txt",
+                    spatial_plan_result.stdout + spatial_plan_result.stderr)
+                evidence_header = re.search(
+                    r"nodes=(\d+) candidates=(\d+) requests=(\d+) successes=(\d+) failures=(\d+) rejected=(\d+) elapsed_ms=([0-9.]+)",
+                    spatial_evidence)
+                timing_header = re.search(
+                    r"surface_ms=([0-9.]+) topology_ms=([0-9.]+) "
+                    r"composition_ms=([0-9.]+) layout_ms=([0-9.]+)", spatial_plan)
+                if evidence_header:
+                    REPORT["spatial_evidence"] = {
+                        "nodes": int(evidence_header[1]),
+                        "candidates": int(evidence_header[2]),
+                        "requests": int(evidence_header[3]),
+                        "successes": int(evidence_header[4]),
+                        "failures": int(evidence_header[5]),
+                        "rejected": int(evidence_header[6]),
+                        "elapsed_ms": float(evidence_header[7]),
+                    }
+                if timing_header:
+                    REPORT["spatial_overhead_ms"] = {
+                        "surface_inference": float(timing_header[1]),
+                        "topology_inference": float(timing_header[2]),
+                        "composition_planning": float(timing_header[3]),
+                        "layout_compilation": float(timing_header[4]),
+                    }
+            if MODE == "fresh-benchmark":
+                REPORT["checks"]["fresh_semantics_honest"] = "PASS"
+                REPORT["result"] = "PASS"
+                return
             deadline = time.monotonic() + 15
             attempts = 0
             forced = None
@@ -288,6 +421,7 @@ def main():
             REPORT["cache_ready_attempts"] = attempts
             REPORT["cache_ready"] = None
             if forced.returncode == 0 and forced_nodes >= 5000:
+                fresh_terminal = terminal
                 terminal = Terminal(selector)
                 ready_frame = save("cache-ready-frame.txt", terminal.pump())
                 ready_resources = resources(terminal.child.pid)
@@ -302,6 +436,7 @@ def main():
                     **ready_resources,
                 }
                 assert "GUI2TUI" in ready_frame
+                fresh_terminal.close()
             REPORT["checks"]["fresh_semantics_honest"] = "PASS"
             REPORT["checks"]["cache_ready_condition"] = (
                 "PASS" if forced.returncode == 0 and forced_nodes >= 5000 else "UNAVAILABLE")
@@ -324,6 +459,61 @@ def main():
                            ("outline", "--dump-outline"), ("commands", "--dump-commands"),
                            ("choices", "--dump-choices"), ("scopes", "--dump-scopes")):
             save(f"{name}.txt", inspect("--app", selector, flag).stdout)
+        if os.environ.get("GUI2TUI_LAYOUT") == "spatial":
+            spatial_evidence = save(
+                "spatial-evidence.txt",
+                inspect("--app", selector, "--dump-spatial-evidence").stdout)
+            spatial_plan_result = inspect("--app", selector, "--dump-layout-plan")
+            spatial_plan = save(
+                "spatial-plan.txt",
+                spatial_plan_result.stdout + spatial_plan_result.stderr)
+            plan_header = re.search(
+                r"composition=(\w+) regions=(\d+) leaves=(\d+) primary=(\d+) structural=(\d+)",
+                spatial_plan)
+            layout_timing_header = re.search(
+                r"surface_ms=([0-9.]+) topology_ms=([0-9.]+) "
+                r"composition_ms=([0-9.]+) layout_ms=([0-9.]+)", spatial_plan)
+            evidence_header = re.search(
+                r"nodes=(\d+) candidates=(\d+) requests=(\d+) successes=(\d+) failures=(\d+) rejected=(\d+) elapsed_ms=([0-9.]+)",
+                spatial_evidence)
+            if plan_header:
+                REPORT["spatial_plan"] = {
+                    "composition": plan_header[1], "regions": int(plan_header[2]),
+                    "leaves": int(plan_header[3]), "primary": int(plan_header[4]),
+                    "structural": int(plan_header[5])}
+            if layout_timing_header:
+                REPORT["layout_timings_ms"] = {
+                    "surface_inference": float(layout_timing_header[1]),
+                    "topology_inference": float(layout_timing_header[2]),
+                    "composition_planning": float(layout_timing_header[3]),
+                    "layout_compilation": float(layout_timing_header[4]),
+                }
+            reachability = re.search(r"actionable=(\d+) unplaced=(\d+)", spatial_plan)
+            if reachability:
+                REPORT["layout_reachability"] = {
+                    "actionable": int(reachability[1]),
+                    "unplaced": int(reachability[2])}
+                assert int(reachability[2]) == 0, spatial_plan
+                REPORT["checks"]["layout_reachability"] = "PASS"
+            REPORT["structural_noise"] = structural_noise_audit(
+                (OUT / "scene.txt").read_text(), spatial_plan)
+            if evidence_header:
+                REPORT["spatial_evidence"] = {
+                    "nodes": int(evidence_header[1]), "candidates": int(evidence_header[2]),
+                    "requests": int(evidence_header[3]), "successes": int(evidence_header[4]),
+                    "failures": int(evidence_header[5]), "rejected": int(evidence_header[6]),
+                    "elapsed_ms": float(evidence_header[7])}
+            coverage = save(
+                "presentation-coverage.txt",
+                inspect("--app", selector, "--dump-presentation-coverage").stdout)
+            missing = [int(node) for group in re.findall(r"^missing: \[(.*?)\]$", coverage, re.M)
+                       for node in re.findall(r"SpatialRegionId\((\d+)\)", group)]
+            assert not missing, coverage
+            REPORT["presentation_coverage"] = {
+                "terminal_classes": len(re.findall(r"^Terminal ", coverage, re.M)),
+                "missing": len(missing),
+            }
+            REPORT["checks"]["presentation_coverage"] = "PASS"
         if MODE == "modality":
             result = subprocess.run(["python3", str(ROOT / "tests/live/phase3h_probe.py")],
                                     env={**os.environ, "APP_SELECTOR": selector},
@@ -334,7 +524,12 @@ def main():
             REPORT["result"] = "PASS"
             return
         terminal = Terminal(selector)
-        save("scene-frame.txt", terminal.pump())
+        scene_frame = save("scene-frame.txt", terminal.pump())
+        if os.environ.get("GUI2TUI_LAYOUT") == "spatial":
+            assert "<Unsupported:" not in scene_frame, scene_frame
+            assert "Primary Content" not in scene_frame, scene_frame
+            assert "Supporting regions" not in scene_frame, scene_frame
+            REPORT["checks"]["normal_scene_has_no_compiler_dump"] = "PASS"
         REPORT["first_frame_ms"] = terminal.first_frame_ms
         loaded = re.search(r"Loaded ([0-9,]+) semantic nodes via (.*?) in (\d+) ms", terminal.pump())
         if loaded:
@@ -402,6 +597,9 @@ def main():
     finally:
         if terminal:
             terminal.close()
+        if cache_listener and cache_listener.poll() is None:
+            os.killpg(cache_listener.pid, signal.SIGTERM)
+            cache_listener.wait(timeout=5)
         try:
             os.killpg(app.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -481,6 +679,38 @@ def workflow(terminal, selector, app, command):
         terminal.send(b"\x1b")  # completed search -> Reader
         terminal.send(b"\x1b")  # Reader -> Scene (another Esc would quit)
         REPORT["checks"]["multiline_reader"] = "PASS"
+
+        before_tabs = inspect("--app", selector).stdout
+        new_line = next(line for line in before_tabs.splitlines()
+                        if 'MenuItem "New      "' in line and "actions=[Click]" in line)
+        new_tab = re.search(r"atspi1_[A-Za-z0-9_-]+", new_line)[0]
+        inspect("--action-name", new_tab, "Click")
+        after_new = save(
+            "dynamic-tab-new-tree.txt", inspect("--app", selector, "--verbose").stdout)
+        assert re.search(r'Tab "Untitled 1" \[[^]]*selected', after_new), after_new
+        save("dynamic-tab-new-frame.txt", terminal.wait("Current · Untitled 1"))
+        coverage = save(
+            "dynamic-tab-new-coverage.txt",
+            inspect("--app", selector, "--dump-presentation-coverage").stdout)
+        assert "improperly collapsed: []" in coverage, coverage
+
+        parent, child_index = selection_parent_and_index(
+            after_new, "TabList", "Tab", "review.txt")
+        inspect("--select-child", parent, "--child-index", str(child_index))
+        after_switch = save("dynamic-tab-switched-tree.txt", inspect("--app", selector).stdout)
+        assert re.search(r'Tab "review.txt" \[[^]]*selected', after_switch), after_switch
+        old_context = next(line for line in after_switch.splitlines()
+                           if 'Tab "Untitled 1"' in line)
+        assert "selected" not in old_context, old_context
+        save("dynamic-tab-switched-frame.txt", terminal.wait("Current · review.txt"))
+        coverage = save(
+            "dynamic-tab-switched-coverage.txt",
+            inspect("--app", selector, "--dump-presentation-coverage").stdout)
+        assert "improperly collapsed: []" in coverage, coverage
+        terminal.child.send(b"\x1b[17~")
+        save("dynamic-tab-f6-frame.txt", terminal.pump(.5))
+        assert terminal.child.isalive()
+        REPORT["checks"]["dynamic_current_context"] = "PASS"
         command_dialog(terminal, selector, "About", "About Mousepad")
     elif CASE in ("chrome", "firefox", "writer", "writer-long"):
         terminal.focus("Document:")
@@ -622,6 +852,60 @@ def workflow(terminal, selector, app, command):
             tree = save("choice-confirmed-tree.txt", inspect("--app", selector).stdout)
             assert 'ListItem "Beta" [selected,transient]' in tree[tree.index('ComboBox "'):]
         REPORT["checks"]["choice_or_safe_degradation"] = "PASS"
+    elif CASE == "eog":
+        frame = terminal.pump()
+        assert "Graphical content" in frame, frame
+        assert "<Unsupported:" not in frame, frame
+        command_dialog(terminal, selector, "About Image Viewer", "About Image Viewer")
+        REPORT["checks"]["graphical_primary_normal_scene"] = "PASS"
+        REPORT["checks"]["structural_noise_suppressed"] = "PASS"
+    elif CASE == "gtk-demo":
+        frame = terminal.pump()
+        assert "GTK Demo" in frame, frame
+        assert "<Unsupported:" not in frame, frame
+        if "Document:" in frame:
+            terminal.focus("Document:")
+            terminal.send("\r")
+            save("reader-frame.txt", terminal.wait("GTK Demo is a collection"))
+            terminal.send(b"\x1b")
+            REPORT["checks"]["semantic_detail_reader"] = "PASS"
+        before = inspect("--app", selector).stdout
+        if 'TextInput "Text input:"' not in before:
+            search = locator_for(before, "ToggleButton", "Search")
+            inspect("--action-name", search, "Click")
+            terminal.pump(1)
+        opened = save("search-opened-tree.txt", inspect("--app", selector).stdout)
+        opened_search = next(line for line in opened.splitlines()
+                             if 'ToggleButton "Search"' in line)
+        assert "checked" in opened_search or "pressed" in opened_search, opened_search
+        opened_scene = save(
+            "search-opened-scene.txt", inspect("--app", selector, "--dump-scene").stdout)
+        if "capability=EditText" in opened_scene:
+            terminal.focus("Text input:")
+            terminal.send("\rbutton\r")
+            terminal.pump(1)
+            after = save("search-toggle-tree.txt", inspect("--app", selector).stdout)
+            assert after != before, "Search input produced no accessible state change"
+            assert "TextInput" in after and 'value="button"' in after, after
+            REPORT["checks"]["search_text_input"] = "PASS"
+        else:
+            assert 'TextInput "Search"' in opened, opened
+            assert "capability=EditText" not in opened_scene, opened_scene
+            REPORT["checks"]["search_text_input_safe_fallback"] = "PASS"
+        search = locator_for(inspect("--app", selector).stdout, "ToggleButton", "Search")
+        inspect("--action-name", search, "Click")
+        hidden_frame = save("search-hidden-frame.txt", terminal.pump(1))
+        hidden = save("search-hidden-tree.txt", inspect("--app", selector).stdout)
+        hidden_search = next(line for line in hidden.splitlines()
+                             if 'ToggleButton "Search"' in line)
+        assert "checked" not in hidden_search and "pressed" not in hidden_search, hidden_search
+        coverage = save(
+            "search-hidden-coverage.txt",
+            inspect("--app", selector, "--dump-presentation-coverage").stdout)
+        assert "improperly collapsed: []" in coverage, coverage
+        assert "GUI2TUI" in hidden_frame and terminal.child.isalive()
+        REPORT["checks"]["dynamic_control_visibility"] = "PASS"
+        REPORT["checks"]["normal_scene_grouping"] = "PASS"
     elif CASE == "designer":
         tree = inspect("--app", selector, "--verbose").stdout
         subtree = tree[tree.index('Dialog "New Form"'):]

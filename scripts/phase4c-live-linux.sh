@@ -7,7 +7,7 @@ export GUI2TUI_BIN=${GUI2TUI_BIN:-/var/tmp/gui2tui-p4c-target/release}
 export TMPDIR=${TMPDIR:-/var/tmp}
 export RESULT_DIR
 RESULT_DIR=$(mktemp -d "$TMPDIR/gui2tui-p4c-XXXXXX")
-export TEST_APP=${1:?usage: phase4c-live-linux.sh APP [probe|workflow|benchmark]}
+export TEST_APP=${1:?usage: phase4c-live-linux.sh APP [probe|workflow|benchmark|fresh-benchmark]}
 export TEST_MODE=${2:-probe}
 printf 'RESULT_DIR=%s\n' "$RESULT_DIR"
 cd "$PROJECT_ROOT"
