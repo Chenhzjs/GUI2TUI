@@ -2,6 +2,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
@@ -21,6 +22,7 @@ use super::{
     content_view::ContentViewMode,
     edit::EditSession,
     hit_test::{HitInteraction, HitRegion},
+    region_navigation::{RegionNavigationItem, RegionNavigator},
 };
 
 pub struct RenderContext<'a> {
@@ -75,22 +77,30 @@ pub struct ContentRender {
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
+    let navigator = context
+        .spatial
+        .map(|plan| RegionNavigator::derive(plan, context.scene));
     let hints = if context.edit_session.is_some() {
-        "F1 Help | Enter Commit | Esc Cancel"
+        "? Help · Enter Apply · Esc Cancel"
     } else if context.choice.is_some() {
-        "? Help | ↑/↓ Choose | Enter Select | Esc Cancel"
+        "? Help · ↑/↓ Select · Enter Apply · Esc Cancel"
     } else if context.palette.is_some() {
-        "F1 Help | F2 Scope | Enter Choose | Esc Back"
+        "? Help · F2 Scope · Enter Use · Esc Back"
     } else if let Some(content) = &context.content {
         match content.mode {
-            ContentViewMode::Reader => "? Help | j/k Blocks | / Search | Esc Back",
-            ContentViewMode::Search => "F1 Help | Ctrl-F Search more | Enter Go | Esc Back",
-            ContentViewMode::Table => "? Help | Arrows Cells | Esc Back",
-            ContentViewMode::Outline => "? Help | ↑/↓ Headings | Enter Go | Esc Back",
-            ContentViewMode::VirtualCollection => "? Help | ↑/↓ Items | Esc Back",
+            ContentViewMode::Reader => "? Help · j/k Scroll · / Search · o Outline · Esc Back",
+            ContentViewMode::Search => "? Help · Ctrl-F Search more · Enter Go · Esc Back",
+            ContentViewMode::Table => "? Help · Arrows Cells · Esc Back",
+            ContentViewMode::Outline => "? Help · ↑/↓ Headings · Enter Go · Esc Back",
+            ContentViewMode::VirtualCollection => "? Help · ↑/↓ Items · Esc Back",
         }
+    } else if navigator
+        .as_ref()
+        .is_some_and(RegionNavigator::has_subregions)
+    {
+        "? Help · F6 Region · Ctrl+Tab Pane · Tab Control · Enter Use · : Commands"
     } else {
-        "? Help | F6 Region | Tab Control | Enter Use"
+        "? Help · F6 Region · Tab Control · Enter Use · : Commands"
     };
     let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(frame.area());
     let main_area = areas[0];
@@ -103,7 +113,14 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     let mut hit_regions = Vec::new();
     if context.application_available {
         if let Some(plan) = context.spatial {
-            render_spatial(frame, content_area, &context, plan, &mut hit_regions);
+            render_spatial(
+                frame,
+                content_area,
+                &context,
+                plan,
+                navigator.as_ref(),
+                &mut hit_regions,
+            );
         } else {
             render_elements(frame, content_area, &context, &mut hit_regions);
         }
@@ -122,7 +139,11 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     if let Some(content) = context.content {
         render_content(frame, content_area, content);
     }
-    let footer = format!("{hints} | {}", context.status);
+    let footer = if normal_footer_status(context.status) {
+        format!("{hints} · {}", context.status)
+    } else {
+        hints.to_owned()
+    };
     frame.render_widget(
         Paragraph::new(footer).style(Style::default().fg(Color::Cyan)),
         footer_area,
@@ -256,31 +277,213 @@ fn render_spatial(
     area: Rect,
     context: &RenderContext<'_>,
     plan: &TuiLayoutPlan,
+    navigator: Option<&RegionNavigator>,
     hit_regions: &mut Vec<HitRegion>,
 ) {
     // Runtime accessibility events can change composition between frames.
     // Clear the old terminal realization so borders from a larger prior pane
     // cannot survive after a surface collapses or moves.
     frame.render_widget(Clear, area);
-    let responsive =
-        realize_responsive_layout(plan, area.width, area.height, context.active_region);
-    let (main, collapsed) = if responsive.collapsed.is_empty() || area.height < 7 {
-        (area, None)
+    let main = if let Some(navigator) = navigator.filter(|navigator| navigator.region_count() > 1)
+        && area.height >= 7
+    {
+        let height = if navigator.has_subregions() { 4 } else { 3 };
+        let areas = Layout::vertical([Constraint::Length(height), Constraint::Min(3)]).split(area);
+        render_region_navigator(frame, areas[0], navigator, context.active_region);
+        areas[1]
     } else {
-        let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(3)]).split(area);
-        (areas[0], Some(areas[1]))
+        area
     };
-    let main = bounded_non_expanding_composition_area(plan, &responsive.root, main);
-    render_spatial_node(frame, main, context, plan, &responsive.root, hit_regions);
-    if let Some(area) = collapsed {
-        render_collapsed_surfaces(
-            frame,
-            area,
-            plan,
-            &responsive.collapsed,
-            context.active_region,
+    let responsive =
+        realize_responsive_layout(plan, main.width, main.height, context.active_region);
+    let root = simplify_empty_direct_surfaces(plan, &responsive.root, context.active_region)
+        .unwrap_or_else(|| responsive.root.clone());
+    let main = bounded_non_expanding_composition_area(plan, &root, main);
+    render_spatial_node(frame, main, context, plan, &root, hit_regions);
+}
+
+fn simplify_empty_direct_surfaces(
+    plan: &TuiLayoutPlan,
+    node: &LayoutNode,
+    active: Option<SpatialRegionId>,
+) -> Option<LayoutNode> {
+    match node {
+        LayoutNode::Leaf(id) => plan
+            .regions
+            .iter()
+            .find(|region| region.id == *id)
+            .filter(|region| {
+                Some(region.id) == active
+                    || region.demand != crate::transcompile::LayoutDemand::Minimal
+                    || region.visibility == crate::transcompile::VisibilityGuarantee::Pinned
+            })
+            .map(|_| node.clone()),
+        LayoutNode::Stack(children) => {
+            simplified_children(plan, children, active).map(LayoutNode::Stack)
+        }
+        LayoutNode::HorizontalSplit { children, weights } => {
+            let children = simplified_children(plan, children, active)?;
+            Some(LayoutNode::HorizontalSplit {
+                weights: simplified_weights(plan, &children, weights),
+                children,
+            })
+        }
+        LayoutNode::VerticalSplit { children, weights } => {
+            let children = simplified_children(plan, children, active)?;
+            Some(LayoutNode::VerticalSplit {
+                weights: simplified_weights(plan, &children, weights),
+                children,
+            })
+        }
+        LayoutNode::Overlay { base, overlays } => {
+            let base = simplify_empty_direct_surfaces(plan, base, active)?;
+            let overlays = overlays
+                .iter()
+                .filter_map(|overlay| simplify_empty_direct_surfaces(plan, overlay, active))
+                .collect();
+            Some(LayoutNode::Overlay {
+                base: Box::new(base),
+                overlays,
+            })
+        }
+    }
+}
+
+fn simplified_children(
+    plan: &TuiLayoutPlan,
+    children: &[LayoutNode],
+    active: Option<SpatialRegionId>,
+) -> Option<Vec<LayoutNode>> {
+    let children = children
+        .iter()
+        .filter_map(|child| simplify_empty_direct_surfaces(plan, child, active))
+        .collect::<Vec<_>>();
+    (!children.is_empty()).then_some(children)
+}
+
+fn simplified_weights(plan: &TuiLayoutPlan, children: &[LayoutNode], original: &[u16]) -> Vec<u16> {
+    if children.len() == original.len() {
+        original.to_vec()
+    } else {
+        children
+            .iter()
+            .map(
+                |child| match region_for_node(plan, child).map(|region| region.demand) {
+                    Some(crate::transcompile::LayoutDemand::Expand) => 5,
+                    Some(crate::transcompile::LayoutDemand::Supporting) => 3,
+                    Some(crate::transcompile::LayoutDemand::Compact) => 2,
+                    _ => 1,
+                },
+            )
+            .collect()
+    }
+}
+
+fn render_region_navigator(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    navigator: &RegionNavigator,
+    active: Option<SpatialRegionId>,
+) {
+    let active_group = navigator.active_group_index(active).unwrap_or(0);
+    let groups = navigator.groups();
+    let hierarchical = navigator.has_subregions();
+    let title = if hierarchical {
+        " Regions — F6 major · Ctrl+Tab pane "
+    } else {
+        " Regions — F6 switch "
+    };
+    let block = Block::default().title(title).borders(Borders::ALL);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let major = groups
+        .iter()
+        .map(|group| RegionNavigationItem {
+            id: group
+                .regions
+                .first()
+                .map_or(SpatialRegionId(u64::MAX), |item| item.id),
+            title: group.title.clone(),
+            empty: group.regions.iter().all(|region| region.empty),
+        })
+        .collect::<Vec<_>>();
+    frame.render_widget(
+        Paragraph::new(navigation_line(
+            if hierarchical { "Major" } else { "Region" },
+            &major,
+            active_group,
+            inner.width,
+        )),
+        Rect::new(inner.x, inner.y, inner.width, 1),
+    );
+    if hierarchical
+        && inner.height > 1
+        && let Some(group) = groups.get(active_group)
+    {
+        let selected = active
+            .and_then(|active| group.regions.iter().position(|region| region.id == active))
+            .unwrap_or(0);
+        frame.render_widget(
+            Paragraph::new(navigation_line(
+                "Pane",
+                &group.regions,
+                selected,
+                inner.width,
+            )),
+            Rect::new(inner.x, inner.y + 1, inner.width, 1),
         );
     }
+}
+
+fn navigation_line(
+    label: &str,
+    items: &[RegionNavigationItem],
+    selected: usize,
+    width: u16,
+) -> Line<'static> {
+    let prefix = format!("{label}: ");
+    let mut spans = vec![Span::raw(prefix.clone())];
+    let mut used = prefix.chars().count();
+    for offset in 0..items.len() {
+        let index = (selected + offset) % items.len();
+        let item = &items[index];
+        let suffix = if item.empty { " · empty" } else { "" };
+        let text = if index == selected {
+            format!("[{}{}]", item.title, suffix)
+        } else {
+            format!("{}{}", item.title, suffix)
+        };
+        let separator = usize::from(offset > 0) * 3;
+        let text_width = text.chars().count();
+        if used.saturating_add(separator).saturating_add(text_width) > usize::from(width) {
+            if used.saturating_add(2) <= usize::from(width) {
+                spans.push(Span::raw(" …"));
+            }
+            break;
+        }
+        if offset > 0 {
+            spans.push(Span::raw(" · "));
+            used = used.saturating_add(3);
+        }
+        let style = if index == selected {
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD | Modifier::REVERSED)
+        } else {
+            Style::default()
+        };
+        spans.push(Span::styled(text, style));
+        used = used.saturating_add(text_width);
+    }
+    Line::from(spans)
+}
+
+fn normal_footer_status(status: &str) -> bool {
+    !status.is_empty()
+        && !status.starts_with("Loaded ")
+        && !status.starts_with("Live update")
+        && !status.starts_with("Replayed bootstrap events")
+        && !status.starts_with("Full refresh fallback:")
 }
 
 fn bounded_non_expanding_composition_area(
@@ -392,65 +595,6 @@ fn collect_visible_regions<'a>(
             }
         }
     }
-}
-
-fn render_collapsed_surfaces(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    plan: &TuiLayoutPlan,
-    collapsed: &[SpatialRegionId],
-    active: Option<SpatialRegionId>,
-) {
-    let all_labels = collapsed
-        .iter()
-        .filter_map(|id| plan.regions.iter().find(|region| region.id == *id))
-        .map(|region| {
-            let marker = if Some(region.id) == active { ">" } else { "" };
-            let state = if region.demand == crate::transcompile::LayoutDemand::Minimal {
-                " · empty"
-            } else {
-                ""
-            };
-            format!("[{marker}{}{state}]", spatial_title(region))
-        })
-        .collect::<Vec<_>>();
-    let available = usize::from(area.width.saturating_sub(2));
-    let mut labels = Vec::new();
-    let mut used = 0_usize;
-    for (index, label) in all_labels.iter().enumerate() {
-        let separator = usize::from(!labels.is_empty());
-        let remaining = all_labels.len().saturating_sub(index + 1);
-        let reserve = if remaining > 0 {
-            format!(" +{remaining} more").chars().count()
-        } else {
-            0
-        };
-        let width = label.chars().count();
-        if used
-            .saturating_add(separator)
-            .saturating_add(width)
-            .saturating_add(reserve)
-            > available
-        {
-            break;
-        }
-        used = used.saturating_add(separator).saturating_add(width);
-        labels.push(label.clone());
-    }
-    if labels.is_empty()
-        && let Some(label) = all_labels.first()
-    {
-        labels.push(label.chars().take(available).collect());
-    }
-    let more = all_labels.len().saturating_sub(labels.len());
-    let mut text = labels.join(" ");
-    if more > 0 {
-        text.push_str(&format!("  +{more} more"));
-    }
-    let block = Block::default()
-        .title(" Surfaces — F6 switch ")
-        .borders(Borders::ALL);
-    frame.render_widget(Paragraph::new(text).block(block), area);
 }
 
 fn render_spatial_node(
@@ -854,16 +998,38 @@ fn render_spatial_leaf(
         render_compact_surface(frame, inner, context, region, hit_regions);
         return;
     }
-    let mut rendered = 0_u16;
     let sources = &region.presentation.source_nodes;
-    for element in context.scene.elements.iter().filter(|element| {
-        element
-            .sources
-            .iter()
-            .any(|source| sources.contains(source))
-            && !matches!(element.kind, SceneElementKind::Unsupported { .. })
-            && !matches!(element.kind, SceneElementKind::CommandHeader { .. })
-    }) {
+    let mut elements = context
+        .scene
+        .elements
+        .iter()
+        .filter(|element| {
+            element
+                .sources
+                .iter()
+                .any(|source| sources.contains(source))
+                && !matches!(element.kind, SceneElementKind::Unsupported { .. })
+                && !matches!(element.kind, SceneElementKind::CommandHeader { .. })
+        })
+        .collect::<Vec<_>>();
+    let contextual_limit =
+        if region.presentation.kind == RegionPresentationKind::ControlGroup && elements.len() > 4 {
+            // Large coalesced action sets stay bound individually, but ordinary
+            // scene rendering shows only a bounded contextual sample. The focused
+            // control is kept visible; the existing palette remains the complete
+            // command surface.
+            elements.sort_by_key(|element| context.focused != Some(element.id));
+            usize::from(if context.active_region == Some(region.id) {
+                inner.height.saturating_sub(1).min(8)
+            } else {
+                inner.height.saturating_sub(1).min(3)
+            })
+        } else {
+            elements.len()
+        };
+    let hidden = elements.len().saturating_sub(contextual_limit);
+    let mut rendered = 0_u16;
+    for element in elements.into_iter().take(contextual_limit) {
         if rendered >= inner.height {
             break;
         }
@@ -892,10 +1058,17 @@ fn render_spatial_leaf(
             });
         }
     }
+    if hidden > 0 && rendered < inner.height {
+        frame.render_widget(
+            Paragraph::new(format!("… {hidden} more · Tab cycles controls")),
+            Rect::new(inner.x, inner.y + rendered, inner.width, 1),
+        );
+        rendered += 1;
+    }
     if rendered == 0 {
         let text = match region.presentation.kind {
             RegionPresentationKind::CommandBar => "Press : to browse and search commands",
-            RegionPresentationKind::InputSurface => "Current value unavailable · read-only",
+            RegionPresentationKind::InputSurface => "— unavailable · ro",
             RegionPresentationKind::Navigation
                 if region.kind == crate::transcompile::SpatialRegionKind::TabStrip =>
             {
@@ -904,7 +1077,7 @@ fn render_spatial_leaf(
             RegionPresentationKind::GraphicalPlaceholder => {
                 "Graphical content\n[View / Materialize]"
             }
-            _ => "No currently realized items",
+            _ => "— empty",
         };
         frame.render_widget(Paragraph::new(text), inner);
     }
@@ -964,14 +1137,14 @@ fn render_compact_surface(
     }
     if shown < elements.len() {
         frame.render_widget(
-            Paragraph::new("[: More]"),
-            Rect::new(x.min(area.right().saturating_sub(1)), area.y, 8, 1),
+            Paragraph::new("[: More…]"),
+            Rect::new(x.min(area.right().saturating_sub(1)), area.y, 9, 1),
         );
     } else if shown == 0 {
         let label = match region.presentation.kind {
             RegionPresentationKind::CommandBar => ": Commands",
-            RegionPresentationKind::InputSurface => "Current value unavailable · read-only",
-            _ => "No currently realized items",
+            RegionPresentationKind::InputSurface => "— unavailable · ro",
+            _ => "— empty",
         };
         frame.render_widget(Paragraph::new(label), area);
     }
@@ -1088,7 +1261,7 @@ fn element_lines_for_width(
     let marker = if focused { "> " } else { "  " };
     let unavailable =
         if element.capability() == InteractionCapability::None && element.is_focusable() {
-            "  (read-only)"
+            " · ro"
         } else {
             ""
         };
@@ -1101,10 +1274,10 @@ fn element_lines_for_width(
         SceneElementKind::Group { label } | SceneElementKind::CommandHeader { label } => {
             vec![format!("  {label}:")]
         }
-        SceneElementKind::Button { label } => vec![format!("{marker}[ {label} ]{unavailable}")],
+        SceneElementKind::Button { label } => vec![format!("{marker}[{label}]{unavailable}")],
         SceneElementKind::Toggle { label, pressed } => vec![format!(
-            "{marker}[{} {label}]{unavailable}",
-            if *pressed { "*" } else { " " }
+            "{marker}[{}] {label}{unavailable}",
+            if *pressed { "x" } else { " " }
         )],
         SceneElementKind::Checkbox { label, checked } => vec![format!(
             "{marker}[{}] {label}{unavailable}",
@@ -1130,7 +1303,7 @@ fn element_lines_for_width(
                 ]
             }
         }
-        SceneElementKind::Selector { label } => vec![format!("{marker}[ {label} ▼ ]{unavailable}")],
+        SceneElementKind::Selector { label } => vec![format!("{marker}[{label} ▾]{unavailable}")],
         SceneElementKind::DocumentSummary {
             title,
             blocks,
@@ -1291,7 +1464,7 @@ mod tests {
                 }),
                 true
             ),
-            vec!["> [ Apply ]"]
+            vec!["> [Apply]"]
         );
         assert_eq!(
             element_lines(
@@ -1335,7 +1508,7 @@ mod tests {
         checkbox.binding.as_mut().unwrap().capability = InteractionCapability::None;
         assert_eq!(
             element_lines(&checkbox, false),
-            vec!["  [ ] Enable feature  (read-only)"]
+            vec!["  [ ] Enable feature · ro"]
         );
     }
 
@@ -1457,35 +1630,27 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(rendered.contains("line 3"));
+        assert!(!rendered.contains("Regions —"));
         assert!(!rendered.contains("line 0"));
         assert!(!rendered.contains("line 19"));
     }
 
     #[test]
-    fn collapsed_surface_bar_reports_width_overflow() {
-        let regions = (0..6)
-            .map(|id| {
-                spatial_region(
-                    id,
-                    &format!("Surface {id}"),
-                    RegionPresentationKind::ControlGroup,
-                    crate::transcompile::LayoutDemand::Compact,
-                )
+    fn region_navigation_reports_width_overflow_compactly() {
+        let items = (0..6)
+            .map(|id| RegionNavigationItem {
+                id: SpatialRegionId(id),
+                title: format!("Surface {id}"),
+                empty: false,
             })
             .collect::<Vec<_>>();
-        let collapsed = regions.iter().map(|region| region.id).collect::<Vec<_>>();
-        let plan = TuiLayoutPlan {
-            root: LayoutNode::Stack(Vec::new()),
-            regions,
-            topology: crate::transcompile::SpatialTopology::default(),
-            generation: ApplicationGenerationId(1),
-            geometry_trust: GeometryTrust::Unavailable,
-            composition: CompositionKind::FallbackStack,
-        };
-        let mut terminal = Terminal::new(TestBackend::new(32, 3)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(32, 1)).unwrap();
         terminal
             .draw(|frame| {
-                render_collapsed_surfaces(frame, frame.area(), &plan, &collapsed, None);
+                frame.render_widget(
+                    Paragraph::new(navigation_line("Region", &items, 0, frame.area().width)),
+                    frame.area(),
+                );
             })
             .unwrap();
         let rendered = terminal
@@ -1495,7 +1660,8 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(rendered.contains("more"));
+        assert!(rendered.contains("[Surface 0]"));
+        assert!(!rendered.contains("Surface 5"));
     }
 
     #[test]
