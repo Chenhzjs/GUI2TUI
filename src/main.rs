@@ -115,6 +115,22 @@ struct Cli {
     #[arg(long, requires = "app")]
     dump_regions: bool,
 
+    /// Print bounded accessibility geometry evidence used by the experimental spatial planner.
+    #[arg(long, requires = "app")]
+    dump_spatial_evidence: bool,
+
+    /// Print explainable presentation-side SpatialRegion classifications.
+    #[arg(long, requires = "app")]
+    dump_spatial_regions: bool,
+
+    /// Print the terminal-independent TuiLayoutPlan (experimental v0.2).
+    #[arg(long, requires = "app")]
+    dump_layout_plan: bool,
+
+    /// Audit required semantic surfaces across responsive terminal widths.
+    #[arg(long, requires = "app")]
+    dump_presentation_coverage: bool,
+
     /// Print the planned terminal TuiScene instead of the raw tree.
     #[arg(long, requires = "app")]
     dump_scene: bool,
@@ -438,6 +454,10 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             .unwrap_or_default(),
     );
     if cli.dump_regions
+        || cli.dump_spatial_evidence
+        || cli.dump_spatial_regions
+        || cli.dump_layout_plan
+        || cli.dump_presentation_coverage
         || cli.dump_scene
         || cli.dump_choices
         || cli.dump_relations
@@ -736,6 +756,10 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             }
         }
         let only_content = !cli.dump_regions
+            && !cli.dump_spatial_evidence
+            && !cli.dump_spatial_regions
+            && !cli.dump_layout_plan
+            && !cli.dump_presentation_coverage
             && !cli.dump_scene
             && !cli.dump_choices
             && !cli.dump_relations
@@ -835,6 +859,32 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         let content_compression =
             gui2tui::transcompile::compress_content_scene(&mut scene, &cache, &content);
         let scene_elapsed = scene_started.elapsed();
+        let spatial_requested = cli.dump_spatial_evidence
+            || cli.dump_spatial_regions
+            || cli.dump_layout_plan
+            || cli.dump_presentation_coverage;
+        let spatial = if spatial_requested {
+            let evidence = gui2tui::transcompile::SpatialEvidenceIndex::from_backend(
+                &tree,
+                gui2tui::runtime::ApplicationGenerationId(1),
+                gui2tui::transcompile::SpatialProbeBudget::default(),
+                &backend,
+            )
+            .await;
+            let spatial_started = Instant::now();
+            let presentation =
+                gui2tui::transcompile::RegionPresentationContext::from_content_catalog(&content);
+            let mut analysis = gui2tui::transcompile::infer_layout_with_presentations(
+                &analysis,
+                &tree,
+                &evidence,
+                Some(&presentation),
+            );
+            gui2tui::transcompile::refine_layout_demands_from_scene(&mut analysis, &scene);
+            Some((evidence, analysis, spatial_started.elapsed()))
+        } else {
+            None
+        };
         let commands = gui2tui::transcompile::CommandHierarchy::build(&cache, &scopes);
         if cli.dump_choices {
             let choices = gui2tui::transcompile::ChoiceCatalog::discover(&cache);
@@ -845,6 +895,59 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         }
         if cli.dump_regions {
             print!("{}", gui2tui::transcompile::format_regions(&analysis));
+        }
+        if let Some((spatial_evidence, spatial, spatial_elapsed)) = spatial.as_ref() {
+            if cli.dump_spatial_evidence {
+                print!(
+                    "{}",
+                    gui2tui::transcompile::format_spatial_evidence(spatial_evidence)
+                );
+            }
+            if cli.dump_spatial_regions || cli.dump_layout_plan {
+                print!("{}", gui2tui::transcompile::format_layout_plan(spatial));
+                let audit =
+                    gui2tui::transcompile::audit_layout_reachability(&spatial.plan, &analysis);
+                eprintln!(
+                    "Spatial: candidates={} requests={} successes={} failures={} rejected={} regions={} leaves={} actionable={} unplaced={} analysis_ms={:.3}",
+                    spatial_evidence.metrics.candidate_nodes,
+                    spatial_evidence.metrics.geometry_requests,
+                    spatial_evidence.metrics.geometry_successes,
+                    spatial_evidence.metrics.geometry_failures,
+                    spatial_evidence.metrics.geometry_rejected,
+                    spatial.metrics.regions,
+                    spatial.metrics.leaves,
+                    audit.actionable_regions,
+                    audit.unplaced.len(),
+                    spatial_elapsed.as_secs_f64() * 1000.0,
+                );
+            }
+            if cli.dump_presentation_coverage {
+                for (width, height) in [(140, 40), (100, 36), (80, 30), (60, 24)] {
+                    let responsive = gui2tui::transcompile::realize_responsive_layout(
+                        &spatial.plan,
+                        width,
+                        height,
+                        None,
+                    );
+                    let audit = gui2tui::transcompile::audit_presentation_coverage(
+                        &spatial.plan,
+                        &responsive,
+                    );
+                    println!(
+                        "Terminal {width}x{height} class={:?} direct={} collapsed={}",
+                        responsive.class,
+                        responsive
+                            .represented
+                            .len()
+                            .saturating_sub(responsive.collapsed.len()),
+                        responsive.collapsed.len(),
+                    );
+                    print!(
+                        "{}",
+                        gui2tui::transcompile::format_presentation_coverage(&audit)
+                    );
+                }
+            }
         }
         if cli.dump_scene {
             print!("{}", gui2tui::transcompile::format_scene(&scene));

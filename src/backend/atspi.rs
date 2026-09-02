@@ -451,6 +451,22 @@ impl AtspiBackend {
         Ok(applications)
     }
 
+    /// Read screen-space component bounds for a presentation-side spatial
+    /// probe. Callers are responsible for applying a bounded candidate budget;
+    /// this method does not mutate semantic identity or capabilities.
+    pub async fn probe_geometry(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<Option<Geometry>, BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        Ok(read_geometry(self.operation_timeout, &encoded_id, &proxy).await)
+    }
+
     pub async fn probe_cache(
         &self,
         application: &ApplicationRef,

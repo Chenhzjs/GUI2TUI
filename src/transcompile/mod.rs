@@ -6,6 +6,7 @@ pub mod presentation;
 pub mod region;
 pub mod scene;
 pub mod scope;
+pub mod spatial;
 
 pub use analyze::{
     RegionAnalysis, RegionMetrics, analyze_regions, analyze_regions_with_graph, format_regions,
@@ -35,4 +36,17 @@ pub use scene::{
 };
 pub use scope::{
     InteractionScope, InteractionScopeId, InteractionScopeKind, InteractionScopes, format_scopes,
+};
+pub use spatial::{
+    CompositionKind, CoordinateSpace, GeometryTrust, InteractionPurpose, LayoutAnalysis,
+    LayoutDemand, LayoutImportance, LayoutMetrics, LayoutNode, LayoutReachabilityAudit,
+    NormalizedBounds, PresentationCoverageAudit, PresentationObligation, PresentationPriority,
+    RegionPresentation, RegionPresentationContext, RegionPresentationKind, ResponsiveComposition,
+    SpatialBounds, SpatialEvidence, SpatialEvidenceIndex, SpatialProbeBudget, SpatialProbeMetrics,
+    SpatialRegion, SpatialRegionId, SpatialRegionKind, SpatialRelation, SpatialTopology,
+    TerminalWidthClass, TopologyRelationKind, TuiLayoutPlan, VisibilityGuarantee,
+    audit_layout_reachability, audit_presentation_coverage, format_layout_plan,
+    format_presentation_coverage, format_spatial_evidence, infer_layout,
+    infer_layout_with_presentations, realize_responsive_layout, refine_layout_demands_from_scene,
+    region_focus_order,
 };
