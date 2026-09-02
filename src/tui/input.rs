@@ -15,6 +15,18 @@ pub fn key_to_intent(event: KeyEvent) -> Option<UiIntent> {
         return None;
     }
     match (event.code, event.modifiers) {
+        (KeyCode::BackTab, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(UiIntent::SubregionPrevious)
+        }
+        (KeyCode::Tab, modifiers)
+            if modifiers.contains(KeyModifiers::CONTROL)
+                && modifiers.contains(KeyModifiers::SHIFT) =>
+        {
+            Some(UiIntent::SubregionPrevious)
+        }
+        (KeyCode::Tab, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(UiIntent::SubregionNext)
+        }
         (KeyCode::F(6), modifiers) if modifiers.contains(KeyModifiers::SHIFT) => {
             Some(UiIntent::RegionPrevious)
         }
@@ -65,6 +77,17 @@ mod tests {
         assert_eq!(
             key_to_intent(KeyEvent::new(KeyCode::F(6), KeyModifiers::SHIFT)),
             Some(UiIntent::RegionPrevious)
+        );
+        assert_eq!(
+            key_to_intent(KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL)),
+            Some(UiIntent::SubregionNext)
+        );
+        assert_eq!(
+            key_to_intent(KeyEvent::new(
+                KeyCode::Tab,
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            )),
+            Some(UiIntent::SubregionPrevious)
         );
         assert_eq!(
             key_to_intent(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)),

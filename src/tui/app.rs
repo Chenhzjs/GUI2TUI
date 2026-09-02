@@ -44,6 +44,7 @@ use super::{
         resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
+    region_navigation::RegionNavigator,
     renderer::{
         ChoiceRender, ContentRender, InlineContentRender, PaletteRender, RenderContext, render,
     },
@@ -793,6 +794,12 @@ impl TuiApplication {
         region_focus_order(&layout.plan, &self.scene)
     }
 
+    fn region_navigator(&self) -> Option<RegionNavigator> {
+        self.layout_analysis
+            .as_ref()
+            .map(|layout| RegionNavigator::derive(&layout.plan, &self.scene))
+    }
+
     fn reconcile_active_region(&mut self) {
         let candidates = self.region_focus_candidates();
         if !self
@@ -809,25 +816,27 @@ impl TuiApplication {
     }
 
     fn cycle_region(&mut self, reverse: bool) {
-        let candidates = self.region_focus_candidates();
-        if candidates.is_empty() {
+        let Some(navigator) = self.region_navigator() else {
             return;
-        }
-        let current = self
-            .active_region
-            .and_then(|active| candidates.iter().position(|id| *id == active));
-        let next = if reverse {
-            current.map_or(candidates.len() - 1, |index| {
-                if index == 0 {
-                    candidates.len() - 1
-                } else {
-                    index - 1
-                }
-            })
-        } else {
-            current.map_or(0, |index| (index + 1) % candidates.len())
         };
-        self.active_region = Some(candidates[next]);
+        let Some(next) = navigator.cycle_major(self.active_region, reverse) else {
+            return;
+        };
+        self.activate_region(next);
+    }
+
+    fn cycle_subregion(&mut self, reverse: bool) {
+        let Some(navigator) = self.region_navigator() else {
+            return;
+        };
+        let Some(next) = navigator.cycle_subregion(self.active_region, reverse) else {
+            return;
+        };
+        self.activate_region(next);
+    }
+
+    fn activate_region(&mut self, region_id: SpatialRegionId) {
+        self.active_region = Some(region_id);
         self.viewport.offset = 0;
         let _ = self.focus_within_active_region(false);
         if let Some(region) = self.layout_analysis.as_ref().and_then(|layout| {
@@ -1236,6 +1245,8 @@ impl TuiApplication {
                 UiIntent::Quit
                     | UiIntent::RegionNext
                     | UiIntent::RegionPrevious
+                    | UiIntent::SubregionNext
+                    | UiIntent::SubregionPrevious
                     | UiIntent::FocusNext
                     | UiIntent::FocusPrevious
                     | UiIntent::ScrollLines(_)
@@ -1249,6 +1260,8 @@ impl TuiApplication {
             UiIntent::Quit => return true,
             UiIntent::RegionNext => self.cycle_region(false),
             UiIntent::RegionPrevious => self.cycle_region(true),
+            UiIntent::SubregionNext => self.cycle_subregion(false),
+            UiIntent::SubregionPrevious => self.cycle_subregion(true),
             UiIntent::FocusNext => {
                 if !self.focus_within_active_region(false) {
                     self.focus.next(&self.scene);
@@ -3149,7 +3162,7 @@ fn compress_degradation_lines(lines: Vec<String>) -> Vec<String> {
     let mut unavailable = 0_usize;
     let flush = |output: &mut Vec<String>, count: &mut usize| {
         if *count == 1 {
-            output.push("[content unavailable]".to_owned());
+            output.push("[… unavailable …]".to_owned());
         } else if *count > 1 {
             output.push(format!("[… {} inaccessible semantic blocks …]", *count));
         }
@@ -3940,7 +3953,7 @@ mod tests {
                 "Heading",
                 "[… 2 inaccessible semantic blocks …]",
                 "Available paragraph",
-                "[content unavailable]",
+                "[… unavailable …]",
             ]
         );
     }

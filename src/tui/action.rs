@@ -6,6 +6,8 @@ use crate::semantic::{SemanticAction, SemanticCapability, SemanticRole};
 pub enum UiIntent {
     RegionNext,
     RegionPrevious,
+    SubregionNext,
+    SubregionPrevious,
     FocusNext,
     FocusPrevious,
     Activate,

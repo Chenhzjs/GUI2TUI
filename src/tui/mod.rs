@@ -10,6 +10,7 @@ pub mod input;
 pub mod modality_view;
 pub mod operation;
 pub mod palette;
+pub mod region_navigation;
 pub mod renderer;
 pub mod selector;
 pub mod view_model;

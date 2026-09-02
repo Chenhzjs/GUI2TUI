@@ -9,7 +9,10 @@ use std::{
 use clap::{Parser, Subcommand, ValueEnum};
 use crossterm::{
     cursor::{Hide, Show},
-    event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream},
+    event::{
+        DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -1001,7 +1004,15 @@ impl TerminalGuard {
     fn attach(mouse: bool) -> io::Result<Self> {
         enable_raw_mode()?;
         let guard = Self { attached: true };
-        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+        execute!(
+            io::stdout(),
+            EnterAlternateScreen,
+            Hide,
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+            )
+        )?;
         if mouse {
             execute!(io::stdout(), EnableMouseCapture)?;
         }
@@ -1019,6 +1030,7 @@ fn restore_terminal() {
     let _ = disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        PopKeyboardEnhancementFlags,
         Show,
         DisableMouseCapture,
         LeaveAlternateScreen
