@@ -76,6 +76,10 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled, hide = true)]
     presentation: PresentationMode,
 
+    /// Experimental terminal-native spatial reconstruction and responsive composition (v0.2).
+    #[arg(long, value_enum, default_value_t = LayoutMode::Flat)]
+    layout: LayoutMode,
+
     /// Private local modality broker socket; absent means safe read-only fallback.
     #[arg(long, global = true)]
     modality_socket: Option<std::path::PathBuf>,
@@ -87,6 +91,14 @@ struct Cli {
     /// Write contents-free product lifecycle diagnostics to a private runtime log.
     #[arg(long, value_enum, default_value_t = LogLevel::Off, global = true)]
     log_level: LogLevel,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum LayoutMode {
+    /// Keep the stable v0.1 linear scene renderer.
+    Flat,
+    /// Render the experimental SpatialEvidence/TuiLayoutPlan composition.
+    Spatial,
 }
 
 #[derive(Debug, Subcommand)]
@@ -616,6 +628,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
     let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Desktop accessibility service unavailable. Run gui2tui doctor; use the same desktop session/user.")?;
 
     terminal.draw(|frame| frame.render_widget(ratatui::widgets::Paragraph::new("Loading the application's accessible interface... Large applications may take a few seconds."), frame.area()))?;
+    let initial_terminal = terminal.size()?;
     let mut app = TuiApplication::new(
         backend,
         app_selector,
@@ -628,6 +641,8 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
         cli.bootstrap,
         config.runtime.event_queue_capacity,
         cli.presentation,
+        matches!(cli.layout, LayoutMode::Spatial),
+        (initial_terminal.width, initial_terminal.height),
     )
     .await?;
 

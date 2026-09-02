@@ -23,9 +23,11 @@ use crate::{
     },
     transcompile::{
         ChoiceCatalog, ChoiceOptions, CommandHierarchy, InteractionScopeId, InteractionScopes,
-        PresentationMode, SceneBinding, SceneElement, SceneElementId, SceneElementKind, TuiScene,
-        analyze_regions, analyze_regions_with_graph, compile_legacy_scene, compile_scene,
-        compress_content_scene,
+        LayoutAnalysis, PresentationMode, RegionPresentationContext, RegionPresentationKind,
+        SceneBinding, SceneElement, SceneElementId, SceneElementKind, SpatialEvidenceIndex,
+        SpatialProbeBudget, SpatialRegion, SpatialRegionId, TuiScene, analyze_regions,
+        analyze_regions_with_graph, compile_legacy_scene, compile_scene, compress_content_scene,
+        infer_layout_with_presentations, refine_layout_demands_from_scene, region_focus_order,
     },
 };
 
@@ -42,7 +44,9 @@ use super::{
         resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
-    renderer::{ChoiceRender, ContentRender, PaletteRender, RenderContext, render},
+    renderer::{
+        ChoiceRender, ContentRender, InlineContentRender, PaletteRender, RenderContext, render,
+    },
 };
 
 pub struct TuiApplication {
@@ -69,6 +73,11 @@ pub struct TuiApplication {
     event_subscription: EventSubscription,
     event_stream_available: bool,
     presentation_mode: PresentationMode,
+    spatial_layout: bool,
+    layout_analysis: Option<LayoutAnalysis>,
+    spatial_evidence: Option<SpatialEvidenceIndex>,
+    active_region: Option<SpatialRegionId>,
+    inline_materialized_extent: usize,
     scene: TuiScene,
     scopes: InteractionScopes,
     commands: CommandHierarchy,
@@ -109,9 +118,49 @@ impl TuiApplication {
     pub fn is_available(&self) -> bool {
         self.application_available && self.backend_available
     }
+    fn desired_inline_materialization_extent(&self) -> usize {
+        inline_materialization_budget(self.viewport_height, self.viewport.offset).visible_blocks
+    }
+
+    async fn refresh_inline_materialization(&mut self) {
+        if !self.spatial_layout {
+            return;
+        }
+        let budget = inline_materialization_budget(self.viewport_height, self.viewport.offset);
+        if budget.visible_blocks <= self.inline_materialized_extent {
+            return;
+        }
+        let roots = self
+            .content
+            .catalog()
+            .models()
+            .filter(|model| model.scope_class == crate::content::ContentScopeClass::Primary)
+            .filter_map(|model| {
+                model
+                    .reading_order()
+                    .first()
+                    .copied()
+                    .map(|position| (model.root, position))
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (root, position) in roots {
+            changed |= self
+                .content
+                .materialize_viewport(&self.backend, &self.cache, root, position, budget)
+                .await
+                .is_ok();
+        }
+        self.inline_materialized_extent = budget.visible_blocks;
+        if changed {
+            self.replan_spatial_layout();
+        }
+    }
     pub fn has_pending_work(&self) -> bool {
         self.capture_task.is_some()
             || self.modality_task.is_some()
+            || (self.spatial_layout
+                && self.desired_inline_materialization_extent() > self.inline_materialized_extent)
             || self
                 .content_view
                 .as_ref()
@@ -215,6 +264,11 @@ impl TuiApplication {
             self.bootstrap_strategy,
             self.event_subscription.capacity(),
             self.presentation_mode,
+            self.spatial_layout,
+            (
+                self.viewport_width.saturating_add(2),
+                self.viewport_height.saturating_add(3),
+            ),
         )
         .await
         {
@@ -556,6 +610,7 @@ impl TuiApplication {
         self.status = "Awaiting same-host viewer authorization (local path only)".into();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         backend: AtspiBackend,
         app_selector: String,
@@ -564,6 +619,8 @@ impl TuiApplication {
         bootstrap_strategy: BootstrapStrategy,
         event_buffer_capacity: usize,
         presentation_mode: PresentationMode,
+        spatial_layout: bool,
+        initial_terminal_size: (u16, u16),
     ) -> Result<Self, BackendError> {
         let started = Instant::now();
         let applications = backend.applications().await?;
@@ -591,7 +648,31 @@ impl TuiApplication {
         let arena_elapsed = started.elapsed();
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
         let relations_elapsed = started.elapsed();
-        let content = ContentRuntime::new(&cache, ContentCacheBudget::default());
+        let mut content = ContentRuntime::new(&cache, ContentCacheBudget::default());
+        if spatial_layout {
+            // The spatial main scene gets a small inline semantic viewport.
+            // Reuse ContentRuntime's bounded reader substrate; this is not a
+            // second extraction path and never reads unbounded document text.
+            let roots: Vec<_> = content
+                .catalog()
+                .models()
+                .filter(|model| model.scope_class == crate::content::ContentScopeClass::Primary)
+                .filter_map(|model| {
+                    model
+                        .reading_order()
+                        .first()
+                        .copied()
+                        .map(|id| (model.root, id))
+                })
+                .collect();
+            let budget =
+                inline_materialization_budget(initial_terminal_size.1.saturating_sub(3).max(1), 0);
+            for (root, position) in roots {
+                let _ = content
+                    .materialize_viewport(&backend, &cache, root, position, budget)
+                    .await;
+            }
+        }
         let content_elapsed = started.elapsed();
         let (scene, scopes, commands, choices) =
             build_contextual_view(&cache, presentation_mode, content.catalog())?;
@@ -615,6 +696,24 @@ impl TuiApplication {
         focus.reconcile(&scene, None);
         let mut runtime = crate::runtime::RuntimeSession::default();
         runtime.open_application(application_locator.clone());
+        let spatial = if spatial_layout {
+            build_spatial_layout(&backend, &cache, &content, runtime.generation()).await
+        } else {
+            None
+        };
+        let (mut layout_analysis, spatial_evidence) = spatial
+            .map(|(analysis, evidence)| (Some(analysis), Some(evidence)))
+            .unwrap_or((None, None));
+        if let Some(layout) = layout_analysis.as_mut() {
+            refine_layout_demands_from_scene(layout, &scene);
+        }
+        let active_region = layout_analysis.as_ref().and_then(default_active_region);
+        let inline_materialized_extent = if spatial_layout {
+            inline_materialization_budget(initial_terminal_size.1.saturating_sub(3).max(1), 0)
+                .visible_blocks
+        } else {
+            0
+        };
         let mut application = Self {
             capture_task: None,
             capture_ticket: None,
@@ -638,6 +737,11 @@ impl TuiApplication {
             event_subscription,
             event_stream_available: true,
             presentation_mode,
+            spatial_layout,
+            layout_analysis,
+            spatial_evidence,
+            active_region,
+            inline_materialized_extent,
             scene,
             scopes,
             commands,
@@ -646,8 +750,8 @@ impl TuiApplication {
             scope_focus_history: HashMap::new(),
             focus,
             viewport: Viewport::default(),
-            viewport_height: 1,
-            viewport_width: 80,
+            viewport_height: initial_terminal_size.1.saturating_sub(3).max(1),
+            viewport_width: initial_terminal_size.0.saturating_sub(2).max(1),
             hit_map: HitMap::default(),
             status: format!(
                 "Loaded {} semantic nodes via {} in {snapshot_ms} ms",
@@ -663,6 +767,7 @@ impl TuiApplication {
             content_return: None,
             reader_stale_fallbacks: 0,
         };
+        application.reconcile_active_region();
         if let Some(EventDelivery::ResyncRequired { dropped }) =
             application.event_subscription.take_resync()
         {
@@ -679,6 +784,257 @@ impl TuiApplication {
             }
         }
         Ok(application)
+    }
+
+    fn region_focus_candidates(&self) -> Vec<SpatialRegionId> {
+        let Some(layout) = self.layout_analysis.as_ref() else {
+            return Vec::new();
+        };
+        region_focus_order(&layout.plan, &self.scene)
+    }
+
+    fn reconcile_active_region(&mut self) {
+        let candidates = self.region_focus_candidates();
+        if !self
+            .active_region
+            .is_some_and(|active| candidates.contains(&active))
+        {
+            self.active_region = self
+                .layout_analysis
+                .as_ref()
+                .and_then(default_active_region)
+                .filter(|active| candidates.contains(active))
+                .or_else(|| candidates.first().copied());
+        }
+    }
+
+    fn cycle_region(&mut self, reverse: bool) {
+        let candidates = self.region_focus_candidates();
+        if candidates.is_empty() {
+            return;
+        }
+        let current = self
+            .active_region
+            .and_then(|active| candidates.iter().position(|id| *id == active));
+        let next = if reverse {
+            current.map_or(candidates.len() - 1, |index| {
+                if index == 0 {
+                    candidates.len() - 1
+                } else {
+                    index - 1
+                }
+            })
+        } else {
+            current.map_or(0, |index| (index + 1) % candidates.len())
+        };
+        self.active_region = Some(candidates[next]);
+        self.viewport.offset = 0;
+        let _ = self.focus_within_active_region(false);
+        if let Some(region) = self.layout_analysis.as_ref().and_then(|layout| {
+            layout
+                .plan
+                .regions
+                .iter()
+                .find(|region| Some(region.id) == self.active_region)
+        }) {
+            self.status = format!("Region: {}", region.presentation.title);
+        }
+    }
+
+    fn focus_within_active_region(&mut self, reverse: bool) -> bool {
+        let Some(active) = self.active_region else {
+            return false;
+        };
+        let Some(region) = self.layout_analysis.as_ref().and_then(|layout| {
+            layout
+                .plan
+                .regions
+                .iter()
+                .find(|region| region.id == active)
+        }) else {
+            return false;
+        };
+        let ids = self
+            .scene
+            .elements
+            .iter()
+            .filter(|element| {
+                element.is_focusable()
+                    && element
+                        .sources
+                        .iter()
+                        .any(|source| region.presentation.source_nodes.contains(source))
+            })
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+        if ids.is_empty() {
+            return false;
+        }
+        let current = self
+            .focus
+            .current()
+            .and_then(|id| ids.iter().position(|candidate| *candidate == id));
+        let next = if reverse {
+            current.map_or(ids.len() - 1, |index| {
+                if index == 0 { ids.len() - 1 } else { index - 1 }
+            })
+        } else {
+            current.map_or(0, |index| (index + 1) % ids.len())
+        };
+        self.focus.set(&self.scene, ids[next])
+    }
+
+    fn inline_content(&self, layout: &LayoutAnalysis) -> Option<InlineContentRender> {
+        let primary =
+            layout.plan.regions.iter().find(|region| {
+                region.kind == crate::transcompile::SpatialRegionKind::PrimaryContent
+            })?;
+        if primary.presentation.kind
+            == crate::transcompile::RegionPresentationKind::GraphicalPlaceholder
+        {
+            return Some(InlineContentRender {
+                title: primary.presentation.title.clone(),
+                lines: vec![
+                    "[fidelity-required content]".into(),
+                    "[View / Materialize]".into(),
+                ],
+                total_lines: 2,
+                partial: false,
+            });
+        }
+        if primary.presentation.kind != crate::transcompile::RegionPresentationKind::InlineContent {
+            return None;
+        }
+        let root = primary
+            .presentation
+            .source_nodes
+            .iter()
+            .find_map(|id| self.content.model(*id).map(|_| *id));
+        if let Some(root) = root {
+            let model = self.content.model(root)?;
+            let mut lines = vec![format!(
+                "Document: {}",
+                model
+                    .metadata
+                    .title
+                    .as_deref()
+                    .unwrap_or("semantic content")
+            )];
+            let row_budget = usize::from(self.viewport_height)
+                .saturating_mul(3)
+                .saturating_add(usize::from(self.viewport.offset))
+                .max(24);
+            let mut total_lines = 1_usize;
+            for id in model.reading_order().into_iter().take(row_budget) {
+                let Some(block) = model.block(id) else {
+                    continue;
+                };
+                let text = self
+                    .content
+                    .displayed_block_text(root, block.id)
+                    .filter(|text| {
+                        text != "[text unavailable through the application's accessibility interface]"
+                    })
+                    .or_else(|| {
+                        self.cache
+                            .node(block.source)
+                            .filter(|node| {
+                                node.text_input_kind
+                                    != Some(crate::semantic::TextInputKind::Password)
+                            })
+                            .and_then(|node| node.value.clone())
+                    })
+                    .unwrap_or_else(|| {
+                        "[text unavailable through the application's accessibility interface]"
+                            .to_owned()
+                    });
+                let prefix = match block.kind {
+                    crate::content::ContentBlockKind::Heading { .. } => "# ",
+                    crate::content::ContentBlockKind::Link => "[Link] ",
+                    crate::content::ContentBlockKind::ListItem => "• ",
+                    crate::content::ContentBlockKind::OpaqueContent(_) => "[Media] ",
+                    _ => "",
+                };
+                let mut first = true;
+                for logical_line in text.lines() {
+                    total_lines = total_lines.saturating_add(1);
+                    if lines.len() >= row_budget {
+                        continue;
+                    }
+                    lines.push(if first {
+                        format!("{prefix}{logical_line}")
+                    } else {
+                        logical_line.to_owned()
+                    });
+                    first = false;
+                }
+            }
+            if lines.is_empty() {
+                lines.push("[semantic content exposed; no realized blocks]".into());
+            }
+            let lines = compress_degradation_lines(lines);
+            return Some(InlineContentRender {
+                title: model
+                    .metadata
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| "Document".into()),
+                lines,
+                total_lines: total_lines.max(model.blocks.len()),
+                partial: model.completeness != ContentCompleteness::Complete,
+            });
+        }
+        None
+    }
+
+    fn replan_spatial_layout(&mut self) {
+        if !self.spatial_layout {
+            return;
+        }
+        let (Some(generation), Some(evidence)) =
+            (self.runtime.generation(), self.spatial_evidence.as_ref())
+        else {
+            self.layout_analysis = None;
+            return;
+        };
+        if evidence.generation != generation {
+            self.layout_analysis = None;
+            return;
+        }
+        let Ok(tree) = self.cache.materialize_tree() else {
+            self.layout_analysis = None;
+            return;
+        };
+        let graph = crate::semantic::RelationalSemanticGraph::new(&self.cache);
+        let analysis = analyze_regions_with_graph(&tree, &graph);
+        let presentation = RegionPresentationContext::from_content_runtime(&self.content);
+        let mut layout =
+            infer_layout_with_presentations(&analysis, &tree, evidence, Some(&presentation));
+        refine_layout_demands_from_scene(&mut layout, &self.scene);
+        self.layout_analysis = Some(layout);
+        self.reconcile_active_region();
+    }
+
+    async fn recollect_spatial_layout(&mut self) {
+        if !self.spatial_layout {
+            return;
+        }
+        let result = build_spatial_layout(
+            &self.backend,
+            &self.cache,
+            &self.content,
+            self.runtime.generation(),
+        )
+        .await;
+        if let Some((mut analysis, evidence)) = result {
+            refine_layout_demands_from_scene(&mut analysis, &self.scene);
+            self.layout_analysis = Some(analysis);
+            self.spatial_evidence = Some(evidence);
+            self.reconcile_active_region();
+        } else {
+            self.layout_analysis = None;
+            self.spatial_evidence = None;
+        }
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
@@ -846,6 +1202,10 @@ impl TuiApplication {
                 structure_lines,
             })
         });
+        let inline_content = self
+            .layout_analysis
+            .as_ref()
+            .and_then(|layout| self.inline_content(layout));
         let regions = render(
             frame,
             RenderContext {
@@ -858,6 +1218,9 @@ impl TuiApplication {
                 palette,
                 choice,
                 content,
+                spatial: self.layout_analysis.as_ref().map(|analysis| &analysis.plan),
+                active_region: self.active_region,
+                inline_content,
             },
         );
         self.hit_map.replace(regions);
@@ -871,6 +1234,8 @@ impl TuiApplication {
             && !matches!(
                 intent,
                 UiIntent::Quit
+                    | UiIntent::RegionNext
+                    | UiIntent::RegionPrevious
                     | UiIntent::FocusNext
                     | UiIntent::FocusPrevious
                     | UiIntent::ScrollLines(_)
@@ -882,13 +1247,19 @@ impl TuiApplication {
         }
         match intent {
             UiIntent::Quit => return true,
+            UiIntent::RegionNext => self.cycle_region(false),
+            UiIntent::RegionPrevious => self.cycle_region(true),
             UiIntent::FocusNext => {
-                self.focus.next(&self.scene);
+                if !self.focus_within_active_region(false) {
+                    self.focus.next(&self.scene);
+                }
                 self.ensure_focus_visible();
                 self.ensure_focused_relations().await;
             }
             UiIntent::FocusPrevious => {
-                self.focus.previous(&self.scene);
+                if !self.focus_within_active_region(true) {
+                    self.focus.previous(&self.scene);
+                }
                 self.ensure_focus_visible();
                 self.ensure_focused_relations().await;
             }
@@ -919,16 +1290,26 @@ impl TuiApplication {
                 self.full_reload(Some("Forced full semantic snapshot".to_owned()))
                     .await;
             }
-            UiIntent::ScrollLines(delta) => self.viewport.scroll_lines(
-                delta,
-                self.scene.content_height(self.viewport_width),
-                self.viewport_height,
-            ),
-            UiIntent::ScrollPages(pages) => self.viewport.scroll_pages(
-                pages,
-                self.scene.content_height(self.viewport_width),
-                self.viewport_height,
-            ),
+            UiIntent::ScrollLines(delta) => {
+                let content_height = self
+                    .layout_analysis
+                    .as_ref()
+                    .and_then(|layout| self.inline_content(layout))
+                    .map(|content| content.total_lines.min(usize::from(u16::MAX)) as u16)
+                    .unwrap_or_else(|| self.scene.content_height(self.viewport_width));
+                self.viewport
+                    .scroll_lines(delta, content_height, self.viewport_height);
+            }
+            UiIntent::ScrollPages(pages) => {
+                let content_height = self
+                    .layout_analysis
+                    .as_ref()
+                    .and_then(|layout| self.inline_content(layout))
+                    .map(|content| content.total_lines.min(usize::from(u16::MAX)) as u16)
+                    .unwrap_or_else(|| self.scene.content_height(self.viewport_width));
+                self.viewport
+                    .scroll_pages(pages, content_height, self.viewport_height);
+            }
         }
         false
     }
@@ -1483,6 +1864,7 @@ impl TuiApplication {
             return;
         }
         self.materialized_artifacts.retain(|a| !a.expired());
+        self.refresh_inline_materialization().await;
         if self
             .capture_task
             .as_ref()
@@ -2196,6 +2578,7 @@ impl TuiApplication {
                 self.scopes = scopes;
                 self.commands = commands;
                 self.choices = choices;
+                self.recollect_spatial_layout().await;
                 let restore_anchor = (self.scopes.active() != previous_scope)
                     .then(|| self.scope_focus_history.get(&self.scopes.active()))
                     .flatten();
@@ -2311,6 +2694,11 @@ impl TuiApplication {
                 self.bootstrap_strategy,
                 self.event_subscription.capacity(),
                 self.presentation_mode,
+                self.spatial_layout,
+                (
+                    self.viewport_width.saturating_add(2),
+                    self.viewport_height.saturating_add(3),
+                ),
             )
             .await
             else {
@@ -2612,6 +3000,7 @@ impl TuiApplication {
         self.scopes = scopes;
         self.commands = commands;
         self.choices = choices;
+        self.replan_spatial_layout();
         if self.edit_session.as_ref().is_some_and(|session| {
             self.cache
                 .node(session.target)
@@ -2737,6 +3126,7 @@ impl TuiApplication {
         self.scopes = scopes;
         self.commands = commands;
         self.choices = choices;
+        self.replan_spatial_layout();
         self.focus
             .reconcile_identity(&self.scene, previous_runtime, previous_locator.as_ref());
         self.ensure_focus_visible();
@@ -2749,6 +3139,46 @@ impl TuiApplication {
                 element_label(element)
             );
         }
+    }
+}
+
+fn compress_degradation_lines(lines: Vec<String>) -> Vec<String> {
+    const UNAVAILABLE: &str =
+        "[text unavailable through the application's accessibility interface]";
+    let mut compressed = Vec::with_capacity(lines.len());
+    let mut unavailable = 0_usize;
+    let flush = |output: &mut Vec<String>, count: &mut usize| {
+        if *count == 1 {
+            output.push("[content unavailable]".to_owned());
+        } else if *count > 1 {
+            output.push(format!("[… {} inaccessible semantic blocks …]", *count));
+        }
+        *count = 0;
+    };
+    for line in lines {
+        if line.contains(UNAVAILABLE) {
+            unavailable = unavailable.saturating_add(1);
+        } else {
+            flush(&mut compressed, &mut unavailable);
+            compressed.push(line);
+        }
+    }
+    flush(&mut compressed, &mut unavailable);
+    compressed
+}
+
+fn inline_materialization_budget(
+    viewport_height: u16,
+    viewport_offset: u16,
+) -> MaterializationBudget {
+    let visible_rows = usize::from(viewport_height.max(1));
+    let offset = usize::from(viewport_offset);
+    let visible_blocks = visible_rows.saturating_add(offset).clamp(1, 128);
+    let lookahead_blocks = visible_rows.div_ceil(3).clamp(1, 16);
+    MaterializationBudget {
+        visible_blocks,
+        lookahead_blocks,
+        paragraph_ranges_per_source: visible_blocks.saturating_add(lookahead_blocks).min(128),
     }
 }
 
@@ -2914,6 +3344,96 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
             compile_scene(root, &analysis)
         }
     }
+}
+
+fn default_active_region(layout: &LayoutAnalysis) -> Option<SpatialRegionId> {
+    layout
+        .plan
+        .regions
+        .iter()
+        .find(|region| region.kind == crate::transcompile::SpatialRegionKind::PrimaryContent)
+        .or_else(|| {
+            layout
+                .plan
+                .regions
+                .iter()
+                .filter(|region| {
+                    region.obligation == crate::transcompile::PresentationObligation::Persistent
+                        && region.demand != crate::transcompile::LayoutDemand::Hidden
+                })
+                .max_by_key(|region| default_surface_rank(region))
+        })
+        .or_else(|| {
+            layout
+                .plan
+                .regions
+                .iter()
+                .filter(|region| {
+                    region.demand != crate::transcompile::LayoutDemand::Hidden
+                        && region.presentation.meaningful_items > 0
+                })
+                .max_by_key(|region| default_surface_rank(region))
+        })
+        .map(|region| region.id)
+}
+
+fn default_surface_rank(region: &SpatialRegion) -> (u8, u8, bool, usize) {
+    let task = default_surface_task_rank(region.presentation.kind);
+    let demand = match region.demand {
+        crate::transcompile::LayoutDemand::Expand => 5,
+        crate::transcompile::LayoutDemand::Supporting => 4,
+        crate::transcompile::LayoutDemand::Compact => 3,
+        crate::transcompile::LayoutDemand::Minimal => 2,
+        crate::transcompile::LayoutDemand::Hidden => 0,
+    };
+    (
+        task,
+        demand,
+        region.bounds.is_some(),
+        region.presentation.meaningful_items.min(8),
+    )
+}
+
+fn default_surface_task_rank(kind: RegionPresentationKind) -> u8 {
+    match kind {
+        RegionPresentationKind::InlineContent => 6,
+        RegionPresentationKind::GraphicalPlaceholder => 5,
+        RegionPresentationKind::Form
+        | RegionPresentationKind::Table
+        | RegionPresentationKind::WorkspacePane => 4,
+        RegionPresentationKind::InputSurface
+        | RegionPresentationKind::Navigation
+        | RegionPresentationKind::ChoiceList => 3,
+        RegionPresentationKind::ControlGroup => 2,
+        RegionPresentationKind::CommandBar
+        | RegionPresentationKind::Status
+        | RegionPresentationKind::CollapsedSummary => 1,
+        RegionPresentationKind::Structural
+        | RegionPresentationKind::DiagnosticOnly
+        | RegionPresentationKind::Empty => 0,
+    }
+}
+
+async fn build_spatial_layout(
+    backend: &AtspiBackend,
+    cache: &crate::semantic::SemanticCache,
+    content: &ContentRuntime,
+    generation: Option<crate::runtime::ApplicationGenerationId>,
+) -> Option<(LayoutAnalysis, SpatialEvidenceIndex)> {
+    let generation = generation?;
+    let tree = cache.materialize_tree().ok()?;
+    let graph = crate::semantic::RelationalSemanticGraph::new(cache);
+    let analysis = analyze_regions_with_graph(&tree, &graph);
+    let evidence = SpatialEvidenceIndex::from_backend(
+        &tree,
+        generation,
+        SpatialProbeBudget::default(),
+        backend,
+    )
+    .await;
+    let presentation = RegionPresentationContext::from_content_runtime(content);
+    let layout = infer_layout_with_presentations(&analysis, &tree, &evidence, Some(&presentation));
+    Some((layout, evidence))
 }
 
 async fn enrich_relational_cache(
@@ -3204,6 +3724,18 @@ mod tests {
     }
 
     #[test]
+    fn default_region_selection_prioritizes_task_surface_over_control_density() {
+        assert!(
+            default_surface_task_rank(RegionPresentationKind::GraphicalPlaceholder)
+                > default_surface_task_rank(RegionPresentationKind::ControlGroup)
+        );
+        assert!(
+            default_surface_task_rank(RegionPresentationKind::Form)
+                > default_surface_task_rank(RegionPresentationKind::CommandBar)
+        );
+    }
+
+    #[test]
     fn mouse_activation_uses_toggle_intent_for_toggle_controls() {
         assert_eq!(
             intent_for_element(&element(
@@ -3390,5 +3922,37 @@ mod tests {
         assert!(partial.starts_with("Exposed semantic content exhausted"));
         assert!(partial.contains("coverage partial or unknown"));
         assert!(!partial.contains("Full search complete"));
+    }
+
+    #[test]
+    fn adjacent_content_gaps_are_compacted_without_claiming_complete_coverage() {
+        let unavailable = "[text unavailable through the application's accessibility interface]";
+        let compressed = compress_degradation_lines(vec![
+            "Heading".into(),
+            unavailable.into(),
+            format!("• {unavailable}"),
+            "Available paragraph".into(),
+            unavailable.into(),
+        ]);
+        assert_eq!(
+            compressed,
+            vec![
+                "Heading",
+                "[… 2 inaccessible semantic blocks …]",
+                "Available paragraph",
+                "[content unavailable]",
+            ]
+        );
+    }
+
+    #[test]
+    fn inline_materialization_tracks_viewport_and_remains_bounded() {
+        let small = inline_materialization_budget(8, 0);
+        let large = inline_materialization_budget(30, 12);
+        let capped = inline_materialization_budget(u16::MAX, u16::MAX);
+        assert_eq!(small.visible_blocks, 8);
+        assert!(large.visible_blocks > small.visible_blocks);
+        assert_eq!(capped.visible_blocks, 128);
+        assert!(capped.paragraph_ranges_per_source <= 128);
     }
 }

@@ -4,6 +4,8 @@ use crate::semantic::{SemanticAction, SemanticCapability, SemanticRole};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiIntent {
+    RegionNext,
+    RegionPrevious,
     FocusNext,
     FocusPrevious,
     Activate,

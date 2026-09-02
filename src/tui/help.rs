@@ -17,7 +17,7 @@ impl HelpContext {
     pub fn text(self) -> &'static str {
         match self {
             Self::Scene => {
-                "Scene\nTab / Shift-Tab: focus controls\nEnter: use the focused control, edit a plain field, choose a value, or read a document\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll\n: open commands in the current scope\nr: force refresh\nF4: resources and visual tasks\nq / Esc: quit\n\nRead-only means no safe operation is available. Password editing is disabled."
+                "Scene\nF6 / Shift-F6: next/previous semantic region\nTab / Shift-Tab: focus controls in the active region\nEnter: use the focused control, edit a plain field, choose a value, or read a document\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll the active region\n: open commands in the current scope\nr: force refresh\nF4: resources and visual tasks\nq / Esc: quit\n\nRead-only means no safe operation is available. Password editing is disabled."
             }
             Self::Reader => {
                 "Reader\nj/k or Down/Up: move semantic blocks\nPageDown/PageUp: move ten blocks\no: outline\n/: search loaded content; Ctrl-F there searches progressively\nEnter: open a table or collection at this block\nF4: resources\nEsc: return to Scene"
@@ -67,6 +67,7 @@ mod tests {
     fn documented_scene_shortcuts_match_dispatch() {
         for (code, intent) in [
             (KeyCode::Tab, UiIntent::FocusNext),
+            (KeyCode::F(6), UiIntent::RegionNext),
             (KeyCode::Enter, UiIntent::Activate),
             (KeyCode::Char(':'), UiIntent::OpenCommandPalette),
             (KeyCode::Char('r'), UiIntent::Refresh),
