@@ -1,0 +1,80 @@
+{
+  "phase": "0.2A",
+  "phase_name": "SPATIAL RECONSTRUCTION PROTOTYPE",
+  "status": "NOT YET VALIDATED",
+  "source": "OrbStack gui2tui-live, Ubuntu 24.04 arm64, Xvfb/X11, AT-SPI",
+  "applications": {
+    "Mousepad": {
+      "status": "WORKFLOW PASS",
+      "nodes": 319,
+      "composition": "ContentDominant",
+      "primary": 1,
+      "first_frame_ms": 122.75,
+      "layout_reachability_unplaced": 0,
+      "normal_scene_frame": "mousepad-spatial-tui.png"
+    },
+    "Chromium": {
+      "status": "WORKFLOW PASS",
+      "nodes": 391,
+      "composition": "ContentDominant",
+      "primary": 1,
+      "first_frame_ms": 316.66,
+      "layout_reachability_unplaced": 0,
+      "normal_scene_frame": "chromium-spatial-tui.png"
+    },
+    "EOG": {
+      "status": "WORKFLOW PASS",
+      "nodes": 117,
+      "composition": "ContentDominant",
+      "primary": 1,
+      "first_frame_ms": 117.52,
+      "layout_reachability_unplaced": 0,
+      "normal_scene_frame": "eog-spatial-tui.png"
+    },
+    "GTK Demo": {
+      "status": "WORKFLOW PASS",
+      "nodes": 95,
+      "composition": "ContentDominant",
+      "primary": 1,
+      "first_frame_ms": 117.87,
+      "layout_reachability_unplaced": 0,
+      "normal_scene_frame": "gtk-demo-spatial-tui.png"
+    },
+    "Qt Designer": {
+      "status": "WORKFLOW PASS",
+      "nodes": 311,
+      "composition": "DialogForm",
+      "primary": 0,
+      "first_frame_ms": 347.62,
+      "layout_reachability_unplaced": 0,
+      "normal_scene_frame": "qt-designer-spatial-tui.png"
+    }
+  },
+  "chrome_5k": {
+    "nodes": 5158,
+    "fresh_incomplete_first_frame_ms": [3721.22, 3768.71, 3721.11, 3646.54],
+    "fresh_incomplete_median_ms": 3721.11,
+    "semantic_bootstrap_ms": 3525,
+    "geometry_candidates": 128,
+    "geometry_requests": 128,
+    "geometry_elapsed_ms": 2.587,
+    "presentation_composition_layout_ms": 3.063,
+    "cache_ready": "UNAVAILABLE IN FOUR CURRENT INDEPENDENT ATTEMPTS",
+    "observed_cache_records": [228, 236, 228, 228]
+  },
+  "quality": {
+    "linux_tests": 256,
+    "linux_clippy": "PASS",
+    "macos_tests": 255,
+    "macos_clippy": "PASS"
+  },
+  "reason": "All five real workflows and normal-scene visual gates pass. Formal validation is withheld because a current complete-Cache Chrome 5K sample has not been reproduced.",
+  "planner": {
+    "default_geometry_candidate_budget": 128,
+    "geometry_is_generation_scoped_sidecar": true,
+    "terminal_coordinate_scaling": false,
+    "experimental_renderer": "--layout spatial",
+    "reader_frames_are_spatial_acceptance": false,
+    "application_specific_production_rules": false
+  }
+}

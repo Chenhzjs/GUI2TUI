@@ -1,0 +1,76 @@
+Terminal 140x40 class=Wide direct=4 collapsed=0
+Semantic surface coverage:
+Persistent surfaces: 3
+represented directly or collapsed: 3
+collapsed but reachable: 0
+discoverable: 0
+primary task represented: true
+persistent inputs: 0/0
+control surfaces: 1/1
+tab/current contexts: 0/0
+meaningful statuses: 0/0
+command surfaces discoverable: 1
+structural suppressed: 241
+missing: []
+Direct surface coverage:
+Pinned surfaces: 0
+directly represented: 0
+forced to collapse: 0
+improperly collapsed: []
+Terminal 100x36 class=Medium direct=3 collapsed=1
+Semantic surface coverage:
+Persistent surfaces: 3
+represented directly or collapsed: 3
+collapsed but reachable: 0
+discoverable: 0
+primary task represented: true
+persistent inputs: 0/0
+control surfaces: 1/1
+tab/current contexts: 0/0
+meaningful statuses: 0/0
+command surfaces discoverable: 1
+structural suppressed: 241
+missing: []
+Direct surface coverage:
+Pinned surfaces: 0
+directly represented: 0
+forced to collapse: 0
+improperly collapsed: []
+Terminal 80x30 class=Medium direct=3 collapsed=1
+Semantic surface coverage:
+Persistent surfaces: 3
+represented directly or collapsed: 3
+collapsed but reachable: 0
+discoverable: 0
+primary task represented: true
+persistent inputs: 0/0
+control surfaces: 1/1
+tab/current contexts: 0/0
+meaningful statuses: 0/0
+command surfaces discoverable: 1
+structural suppressed: 241
+missing: []
+Direct surface coverage:
+Pinned surfaces: 0
+directly represented: 0
+forced to collapse: 0
+improperly collapsed: []
+Terminal 60x24 class=Narrow direct=2 collapsed=2
+Semantic surface coverage:
+Persistent surfaces: 3
+represented directly or collapsed: 3
+collapsed but reachable: 1
+discoverable: 0
+primary task represented: true
+persistent inputs: 0/0
+control surfaces: 1/1
+tab/current contexts: 0/0
+meaningful statuses: 0/0
+command surfaces discoverable: 1
+structural suppressed: 241
+missing: []
+Direct surface coverage:
+Pinned surfaces: 0
+directly represented: 0
+forced to collapse: 0
+improperly collapsed: []

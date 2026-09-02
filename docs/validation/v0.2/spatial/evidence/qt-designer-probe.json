@@ -1,0 +1,53 @@
+{
+  "application": "designer",
+  "mode": "probe",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS"
+  },
+  "result": "PROBE PASS",
+  "selector": "designer",
+  "snapshot_wall_ms": 227.27,
+  "nodes": 311,
+  "advertised_action_nodes": 165,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "DialogForm",
+    "regions": 221,
+    "leaves": 12,
+    "primary": 0,
+    "structural": 5
+  },
+  "layout_reachability": {
+    "actionable": 116,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 23,
+    "supporting": 13,
+    "structural_only": 5,
+    "diagnostic_only": 45,
+    "duplicate_command_summary": 8,
+    "flat_rows": 94
+  },
+  "spatial_evidence": {
+    "nodes": 311,
+    "candidates": 87,
+    "requests": 87,
+    "successes": 69,
+    "failures": 0,
+    "rejected": 18,
+    "elapsed_ms": 2.079
+  },
+  "first_frame_ms": 344.1,
+  "tui_bootstrap": {
+    "nodes": 311,
+    "strategy": "recursive walk",
+    "ms": 220
+  },
+  "resources_bootstrap": {
+    "rss_kib": 12876,
+    "fd": 18
+  }
+}

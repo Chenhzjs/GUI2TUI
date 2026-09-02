@@ -1,0 +1,52 @@
+{
+  "application": "gtk-demo",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "semantic_detail_reader": "PASS",
+    "search_text_input": "PASS",
+    "normal_scene_grouping": "PASS"
+  },
+  "result": "PASS",
+  "selector": "gtk4-demo",
+  "snapshot_wall_ms": 94.38,
+  "nodes": 91,
+  "advertised_action_nodes": 46,
+  "cache_forced_exit": 0,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 52,
+    "leaves": 2,
+    "primary": 1,
+    "structural": 0
+  },
+  "layout_reachability": {
+    "actionable": 22,
+    "unplaced": 0
+  },
+  "spatial_evidence": {
+    "nodes": 95,
+    "candidates": 66,
+    "requests": 66,
+    "successes": 57,
+    "failures": 1,
+    "rejected": 8,
+    "elapsed_ms": 2.108
+  },
+  "first_frame_ms": 117.87,
+  "tui_bootstrap": {
+    "nodes": 95,
+    "strategy": "AT-SPI Cache",
+    "ms": 8
+  },
+  "resources_bootstrap": {
+    "rss_kib": 11748,
+    "fd": 18
+  },
+  "resources_after_workflow": {
+    "rss_kib": 12312,
+    "fd": 18
+  }
+}

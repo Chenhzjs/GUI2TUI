@@ -1,0 +1,66 @@
+{
+  "application": "eog",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "presentation_coverage": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "command_dialog_close": "PASS",
+    "graphical_primary_normal_scene": "PASS",
+    "structural_noise_suppressed": "PASS"
+  },
+  "result": "PASS",
+  "selector": "eog",
+  "snapshot_wall_ms": 76.88,
+  "nodes": 117,
+  "advertised_action_nodes": 30,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "NavigationDetail",
+    "regions": 77,
+    "leaves": 6,
+    "primary": 0,
+    "structural": 8
+  },
+  "layout_timings_ms": {
+    "surface_inference": 0.122,
+    "topology_inference": 0.013,
+    "composition_planning": 0.0,
+    "layout_compilation": 0.001
+  },
+  "layout_reachability": {
+    "actionable": 28,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 26,
+    "supporting": 3,
+    "structural_only": 8,
+    "diagnostic_only": 8,
+    "duplicate_command_summary": 1,
+    "flat_rows": 46
+  },
+  "spatial_evidence": {
+    "nodes": 117,
+    "candidates": 54,
+    "requests": 54,
+    "successes": 25,
+    "failures": 2,
+    "rejected": 27,
+    "elapsed_ms": 2.048
+  },
+  "presentation_coverage": {
+    "terminal_classes": 4,
+    "missing": 0
+  },
+  "first_frame_ms": 121.35,
+  "resources_bootstrap": {
+    "rss_kib": 12156,
+    "fd": 18
+  },
+  "resources_after_workflow": {
+    "rss_kib": 13668,
+    "fd": 18
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "application": "chrome-large",
+  "mode": "cache-baseline",
+  "checks": {
+    "fresh_semantics_honest": "PASS",
+    "cache_ready_condition": "UNAVAILABLE"
+  },
+  "result": "PASS",
+  "selector": "Google Chrome",
+  "fresh": {
+    "first_frame_ms": 3441.77,
+    "initial_frame_ms": 3441.74,
+    "nodes": 5158,
+    "strategy": "recursive walk",
+    "bootstrap_ms": 3391,
+    "post_bootstrap_fallbacks": [],
+    "rss_kib": 41796,
+    "fd": 19,
+    "cache_items_before": 228
+  },
+  "cache_ready_attempts": 54,
+  "cache_ready": null
+}

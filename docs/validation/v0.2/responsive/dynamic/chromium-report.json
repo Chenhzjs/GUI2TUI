@@ -1,0 +1,75 @@
+{
+  "application": "chrome",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "presentation_coverage": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "progressive_cancellation": "PASS",
+    "reader_outline_search_frames": "PASS",
+    "external_content_mutation": "PASS",
+    "table_navigation": "PASS",
+    "headless_modality_no_fake_open": "PASS",
+    "headless_reference_payload_zero": "PASS",
+    "reader_death_restart_stale_generation": "PASS"
+  },
+  "result": "PASS",
+  "selector": "Google Chrome",
+  "snapshot_wall_ms": 300.29,
+  "nodes": 391,
+  "advertised_action_nodes": 391,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 243,
+    "leaves": 30,
+    "primary": 1,
+    "structural": 1
+  },
+  "layout_timings_ms": {
+    "surface_inference": 0.294,
+    "topology_inference": 1.126,
+    "composition_planning": 0.0,
+    "layout_compilation": 0.006
+  },
+  "layout_reachability": {
+    "actionable": 3,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 51,
+    "supporting": 4,
+    "structural_only": 1,
+    "diagnostic_only": 3,
+    "duplicate_command_summary": 0,
+    "flat_rows": 59
+  },
+  "spatial_evidence": {
+    "nodes": 391,
+    "candidates": 128,
+    "requests": 128,
+    "successes": 82,
+    "failures": 0,
+    "rejected": 46,
+    "elapsed_ms": 2.661
+  },
+  "presentation_coverage": {
+    "terminal_classes": 4,
+    "missing": 0
+  },
+  "first_frame_ms": 450.04,
+  "tui_bootstrap": {
+    "nodes": 391,
+    "strategy": "recursive walk",
+    "ms": 315
+  },
+  "resources_bootstrap": {
+    "rss_kib": 14152,
+    "fd": 18
+  },
+  "resources_after_workflow": {
+    "rss_kib": 14528,
+    "fd": 18
+  }
+}

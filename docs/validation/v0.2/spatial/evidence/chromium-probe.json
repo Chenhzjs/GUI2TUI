@@ -1,0 +1,53 @@
+{
+  "application": "chrome",
+  "mode": "probe",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS"
+  },
+  "result": "PROBE PASS",
+  "selector": "Google Chrome",
+  "snapshot_wall_ms": 258.64,
+  "nodes": 391,
+  "advertised_action_nodes": 391,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 243,
+    "leaves": 23,
+    "primary": 1,
+    "structural": 1
+  },
+  "layout_reachability": {
+    "actionable": 3,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 51,
+    "supporting": 4,
+    "structural_only": 1,
+    "diagnostic_only": 3,
+    "duplicate_command_summary": 0,
+    "flat_rows": 59
+  },
+  "spatial_evidence": {
+    "nodes": 391,
+    "candidates": 128,
+    "requests": 128,
+    "successes": 80,
+    "failures": 0,
+    "rejected": 48,
+    "elapsed_ms": 2.434
+  },
+  "first_frame_ms": 331.37,
+  "tui_bootstrap": {
+    "nodes": 391,
+    "strategy": "recursive walk",
+    "ms": 295
+  },
+  "resources_bootstrap": {
+    "rss_kib": 13700,
+    "fd": 19
+  }
+}

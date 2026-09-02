@@ -1,0 +1,52 @@
+{
+  "application": "mousepad",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "multiline_reader": "PASS",
+    "command_dialog_close": "PASS",
+    "reader_death_restart_stale_generation": "PASS"
+  },
+  "result": "PASS",
+  "selector": "Mousepad",
+  "snapshot_wall_ms": 32.72,
+  "nodes": 319,
+  "advertised_action_nodes": 233,
+  "cache_forced_exit": 0,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 245,
+    "leaves": 3,
+    "primary": 1,
+    "structural": 0
+  },
+  "layout_reachability": {
+    "actionable": 233,
+    "unplaced": 0
+  },
+  "spatial_evidence": {
+    "nodes": 319,
+    "candidates": 49,
+    "requests": 49,
+    "successes": 14,
+    "failures": 1,
+    "rejected": 34,
+    "elapsed_ms": 1.392
+  },
+  "first_frame_ms": 122.75,
+  "tui_bootstrap": {
+    "nodes": 319,
+    "strategy": "AT-SPI Cache",
+    "ms": 13
+  },
+  "resources_bootstrap": {
+    "rss_kib": 13208,
+    "fd": 19
+  },
+  "resources_after_workflow": {
+    "rss_kib": 17124,
+    "fd": 19
+  }
+}

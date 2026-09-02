@@ -1,0 +1,394 @@
+warning: Managed headless supervisor is not running; run `gui2tui setup persistent`
+Bootstrap: 137 nodes via recursive walk in 87.239 ms (cache_rpc=0.000 ms enrichment=0.000 ms reconstruction=0.000 ms enrichment_rpcs=0 orphans=0) fallback="AT-SPI cache bootstrap failed: bulk cache is incomplete: bulk_items=137 reachable_nodes=137 missing_child_refs=1 invalid_parent_links=0; first mismatch at atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMTA: record advertises 3 children but only 2 are cached"
+Relations: budget=137 deferred=0 visible=89 relation-sensitive=1 background=47 candidates=137 rpcs=137 found=25 unresolved=0 unavailable=0 latency=1.302 ms
+LayoutPlan generation=1 trust=Consistent composition=NavigationDetail regions=97 leaves=6 primary=0 structural=8 topology_anchors=16 topology_pairs=120 topology_relations=1091 surface_ms=0.152 topology_ms=0.027 composition_ms=0.000 layout_ms=0.001
+  region=0 semantic=122 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="eog" items=0 dominant_eligible=false sources=[RegionId(122)] nodes=[RuntimeNodeId(1)]
+    presentation_reasons: application/window container organizes descendants but is not a pane itself
+    reasons: semantic region = Navigation; geometry unavailable; semantic hierarchy fallback; role = Application
+  region=1 semantic=121 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 564, y: 370, width: 472, height: 360 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 1000 })
+    presentation=DiagnosticOnly title="debian-logo.png" items=0 dominant_eligible=false sources=[RegionId(121)] nodes=[RuntimeNodeId(2)]
+    presentation_reasons: application/window container organizes descendants but is not a pane itself; window remains structural because a descendant content surface owns presentation
+    reasons: semantic region = Navigation; role = Window
+  region=2 semantic=0 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(0)] nodes=[RuntimeNodeId(3)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Unknown(unknown)
+  region=3 semantic=79 kind=Unknown priority=Auxiliary obligation=Persistent demand=Compact visibility=Pinned purpose=Input bounds=Some(SpatialBounds { x: 569, y: 375, width: 462, height: 350 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 13, width: 978, height: 972 })
+    presentation=InputSurface title="Input" items=75 dominant_eligible=false sources=[RegionId(79), RegionId(117), RegionId(7), RegionId(76), RegionId(4), RegionId(5), RegionId(6), RegionId(1), RegionId(2), RegionId(3), RegionId(20), RegionId(46), RegionId(17), RegionId(9), RegionId(11), RegionId(15), RegionId(13), RegionId(14), RegionId(24), RegionId(22), RegionId(23), RegionId(75), RegionId(48), RegionId(74)] nodes=[RuntimeNodeId(5), RuntimeNodeId(101), RuntimeNodeId(6), RuntimeNodeId(15), RuntimeNodeId(7), RuntimeNodeId(12), RuntimeNodeId(13), RuntimeNodeId(8), RuntimeNodeId(9), RuntimeNodeId(11), RuntimeNodeId(18), RuntimeNodeId(31), RuntimeNodeId(19), RuntimeNodeId(22), RuntimeNodeId(24), RuntimeNodeId(26), RuntimeNodeId(27), RuntimeNodeId(28), RuntimeNodeId(32), RuntimeNodeId(33), RuntimeNodeId(34), RuntimeNodeId(69), RuntimeNodeId(70), RuntimeNodeId(96)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced compatible sibling region 117 under semantic parent 121; absorbed compatible descendant presentation from region 7; absorbed compatible descendant presentation from region 4; absorbed compatible descendant presentation from region 1; absorbed compatible descendant presentation from region 20; absorbed compatible descendant presentation from region 17; absorbed compatible descendant presentation from region 9; absorbed compatible descendant presentation from region 13; absorbed compatible descendant presentation from region 24; absorbed compatible descendant presentation from region 22; absorbed compatible descendant presentation from region 75; absorbed compatible descendant presentation from region 48
+    reasons: semantic region = Group; role = Container; persistent input: editable single-line control outside dominant content subtree
+  region=4 semantic=7 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 375, width: 462, height: 46 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 13, width: 978, height: 127 })
+    presentation=DiagnosticOnly title="Controls" items=14 dominant_eligible=false sources=[RegionId(7), RegionId(76)] nodes=[RuntimeNodeId(6), RuntimeNodeId(15)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced compatible sibling region 76 under semantic parent 79; presented by ancestor spatial region 3
+    reasons: semantic region = Group; role = Container
+  region=5 semantic=4 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 574, y: 374, width: 160, height: 46 }) space=Screen normalized=Some(NormalizedBounds { x: 21, y: 11, width: 338, height: 127 })
+    presentation=DiagnosticOnly title="Controls" items=5 dominant_eligible=false sources=[RegionId(4), RegionId(5), RegionId(6)] nodes=[RuntimeNodeId(7), RuntimeNodeId(12), RuntimeNodeId(13)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced compatible sibling region 5 under semantic parent 7; coalesced compatible sibling region 6 under semantic parent 7; presented by ancestor spatial region 3
+    reasons: semantic region = Group; role = Container
+  region=6 semantic=1 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=3 dominant_eligible=false sources=[RegionId(1), RegionId(2), RegionId(3)] nodes=[RuntimeNodeId(8), RuntimeNodeId(9), RuntimeNodeId(11)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 2 under semantic parent 4; coalesced compatible sibling region 3 under semantic parent 4; presented by ancestor spatial region 3
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=7 semantic=2 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Input bounds=Some(SpatialBounds { x: 609, y: 374, width: 89, height: 46 }) space=Screen normalized=Some(NormalizedBounds { x: 95, y: 11, width: 188, height: 127 })
+    presentation=DiagnosticOnly title="100%" items=1 dominant_eligible=false sources=[RegionId(2)] nodes=[RuntimeNodeId(9)]
+    presentation_reasons: safe single-line editable input has a direct presentation payload; coalesced into spatial region 6
+    reasons: semantic region = Control; role = TextInput
+  region=8 semantic=3 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Zoom In" items=1 dominant_eligible=false sources=[RegionId(3)] nodes=[RuntimeNodeId(11)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 6
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=9 semantic=5 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Menu" items=1 dominant_eligible=false sources=[RegionId(5)] nodes=[RuntimeNodeId(12)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 5
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = ToggleButton
+  region=10 semantic=6 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Fullscreen" items=1 dominant_eligible=false sources=[RegionId(6)] nodes=[RuntimeNodeId(13)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 5
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=11 semantic=76 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 421, width: 462, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 141, width: 978, height: 844 })
+    presentation=DiagnosticOnly title="Details" items=9 dominant_eligible=false sources=[RegionId(76)] nodes=[RuntimeNodeId(15)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 4
+    reasons: semantic region = Group; role = Container
+  region=12 semantic=47 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 421, width: 462, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 141, width: 978, height: 844 })
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(47)] nodes=[RuntimeNodeId(16)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; role = Unknown(split pane)
+  region=13 semantic=20 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 421, width: 251, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 141, width: 531, height: 844 })
+    presentation=DiagnosticOnly title="Controls" items=7 dominant_eligible=false sources=[RegionId(20), RegionId(46)] nodes=[RuntimeNodeId(18), RuntimeNodeId(31)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced compatible sibling region 46 under semantic parent 47; presented by ancestor spatial region 3
+    reasons: semantic region = Group; role = Container
+  region=14 semantic=17 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 421, width: 251, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 141, width: 531, height: 844 })
+    presentation=DiagnosticOnly title="Details" items=4 dominant_eligible=false sources=[RegionId(17)] nodes=[RuntimeNodeId(19)]
+    presentation_reasons: container owns reachable semantic interactions; presented by ancestor spatial region 3
+    reasons: semantic region = Group; role = Container
+  region=15 semantic=8 kind=Unknown priority=Auxiliary obligation=Persistent demand=Supporting visibility=Collapsible purpose=Unknown bounds=Some(SpatialBounds { x: 569, y: 421, width: 251, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 10, y: 141, width: 531, height: 844 })
+    presentation=GraphicalPlaceholder title="Graphical content" items=1 dominant_eligible=true sources=[RegionId(8)] nodes=[RuntimeNodeId(20)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = OpaqueContent; role = Unknown(drawing area)
+  region=16 semantic=9 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=4 dominant_eligible=false sources=[RegionId(9), RegionId(11), RegionId(15)] nodes=[RuntimeNodeId(22), RuntimeNodeId(24), RuntimeNodeId(26)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 11 under semantic parent 17; coalesced compatible sibling region 15 under semantic parent 17; presented by ancestor spatial region 3
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=17 semantic=11 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Forward" items=1 dominant_eligible=false sources=[RegionId(11)] nodes=[RuntimeNodeId(24)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 16
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=18 semantic=15 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(15)] nodes=[RuntimeNodeId(26)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 16
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=19 semantic=13 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(13), RegionId(14)] nodes=[RuntimeNodeId(27), RuntimeNodeId(28)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 14 under semantic parent 15; presented by ancestor spatial region 3
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=20 semantic=14 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=1 dominant_eligible=false sources=[RegionId(14)] nodes=[RuntimeNodeId(28)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 19
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=21 semantic=18 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(18)] nodes=[RuntimeNodeId(29)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=22 semantic=19 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(19)] nodes=[RuntimeNodeId(30)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=23 semantic=46 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 821, y: 421, width: 210, height: 304 }) space=Screen normalized=Some(NormalizedBounds { x: 544, y: 141, width: 444, height: 844 })
+    presentation=DiagnosticOnly title="Details" items=3 dominant_eligible=false sources=[RegionId(46)] nodes=[RuntimeNodeId(31)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 13
+    reasons: semantic region = Group; role = Container
+  region=24 semantic=24 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 827, y: 427, width: 198, height: 34 }) space=Screen normalized=Some(NormalizedBounds { x: 557, y: 158, width: 419, height: 94 })
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(24)] nodes=[RuntimeNodeId(32)]
+    presentation_reasons: container owns reachable semantic interactions; presented by ancestor spatial region 3
+    reasons: semantic region = Group; role = Container
+  region=25 semantic=22 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(22), RegionId(23)] nodes=[RuntimeNodeId(33), RuntimeNodeId(34)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 23 under semantic parent 24; presented by ancestor spatial region 3
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = ToggleButton
+  region=26 semantic=23 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=1 dominant_eligible=false sources=[RegionId(23)] nodes=[RuntimeNodeId(34)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 25
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=27 semantic=45 kind=TabStrip priority=Auxiliary obligation=Persistent demand=Supporting visibility=PreferDirect purpose=Navigate bounds=Some(SpatialBounds { x: 821, y: 467, width: 210, height: 258 }) space=Screen normalized=Some(NormalizedBounds { x: 544, y: 269, width: 444, height: 716 })
+    presentation=Navigation title="Tabs" items=8 dominant_eligible=false sources=[RegionId(45), RegionId(44), RegionId(43), RegionId(39), RegionId(25), RegionId(38)] nodes=[RuntimeNodeId(35), RuntimeNodeId(36), RuntimeNodeId(37), RuntimeNodeId(39), RuntimeNodeId(41), RuntimeNodeId(43), RuntimeNodeId(45), RuntimeNodeId(46), RuntimeNodeId(47), RuntimeNodeId(48), RuntimeNodeId(49), RuntimeNodeId(50), RuntimeNodeId(51), RuntimeNodeId(52), RuntimeNodeId(53), RuntimeNodeId(54), RuntimeNodeId(66)]
+    presentation_reasons: semantic container provides navigation structure; absorbed compatible descendant presentation from region 44; absorbed compatible descendant presentation from region 43; absorbed compatible descendant presentation from region 39; absorbed compatible descendant presentation from region 25; absorbed compatible descendant presentation from region 38
+    reasons: semantic region = Unknown; role = TabList; focused/current semantic state raises presentation obligation
+  region=28 semantic=44 kind=TabStrip priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Navigate bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Tabs" items=2 dominant_eligible=false sources=[RegionId(44)] nodes=[RuntimeNodeId(36)]
+    presentation_reasons: semantic container provides navigation structure; presented by ancestor spatial region 27
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Tab
+  region=29 semantic=43 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 821, y: 467, width: 210, height: 258 }) space=Screen normalized=Some(NormalizedBounds { x: 544, y: 269, width: 444, height: 716 })
+    presentation=DiagnosticOnly title="Details" items=1 dominant_eligible=false sources=[RegionId(43)] nodes=[RuntimeNodeId(37)]
+    presentation_reasons: container owns reachable semantic interactions; presented by ancestor spatial region 27
+    reasons: semantic region = Group; role = Container
+  region=30 semantic=39 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 827, y: 467, width: 198, height: 261 }) space=Screen normalized=Some(NormalizedBounds { x: 557, y: 269, width: 419, height: 725 })
+    presentation=DiagnosticOnly title="Details" items=1 dominant_eligible=false sources=[RegionId(39)] nodes=[RuntimeNodeId(39)]
+    presentation_reasons: container owns reachable semantic interactions; presented by ancestor spatial region 27
+    reasons: semantic region = Group; role = Container
+  region=31 semantic=25 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 915, y: 527, width: 93, height: 17 }) space=Screen normalized=Some(NormalizedBounds { x: 743, y: 436, width: 197, height: 47 })
+    presentation=DiagnosticOnly title=" · pixmaps · 1.2\u{a0}kB · PNG image · 48 × 48 pixels" items=1 dominant_eligible=false sources=[RegionId(25)] nodes=[RuntimeNodeId(41), RuntimeNodeId(43), RuntimeNodeId(45), RuntimeNodeId(46), RuntimeNodeId(47), RuntimeNodeId(48), RuntimeNodeId(49), RuntimeNodeId(50), RuntimeNodeId(51), RuntimeNodeId(52), RuntimeNodeId(53), RuntimeNodeId(54)]
+    presentation_reasons: short semantic text is useful as supporting context; presented by ancestor spatial region 27
+    reasons: semantic region = Content; role = Label; primary candidate rejected: DiagnosticOnly presentation is not dominant-capable
+  region=32 semantic=38 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Show Details" items=1 dominant_eligible=false sources=[RegionId(38)] nodes=[RuntimeNodeId(66)]
+    presentation_reasons: safe semantic interaction is directly presentable; presented by ancestor spatial region 27
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=33 semantic=41 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(41)] nodes=[RuntimeNodeId(67)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=34 semantic=42 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(42)] nodes=[RuntimeNodeId(68)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=35 semantic=75 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(75)] nodes=[RuntimeNodeId(69)]
+    presentation_reasons: container owns reachable semantic interactions; presented by ancestor spatial region 3
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=36 semantic=48 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(48), RegionId(74)] nodes=[RuntimeNodeId(70), RuntimeNodeId(96)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 74 under semantic parent 75; presented by ancestor spatial region 3
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=37 semantic=73 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(73)] nodes=[RuntimeNodeId(71)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=38 semantic=70 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(70)] nodes=[RuntimeNodeId(72)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(layered pane)
+  region=39 semantic=49 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(49)] nodes=[RuntimeNodeId(73)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=40 semantic=50 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(50)] nodes=[RuntimeNodeId(74)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=41 semantic=51 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(51)] nodes=[RuntimeNodeId(75)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=42 semantic=52 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(52)] nodes=[RuntimeNodeId(76)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=43 semantic=53 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(53)] nodes=[RuntimeNodeId(77)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=44 semantic=54 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(54)] nodes=[RuntimeNodeId(78)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=45 semantic=55 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(55)] nodes=[RuntimeNodeId(79)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=46 semantic=56 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(56)] nodes=[RuntimeNodeId(80)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=47 semantic=57 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(57)] nodes=[RuntimeNodeId(81)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=48 semantic=58 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(58)] nodes=[RuntimeNodeId(82)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=49 semantic=59 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(59)] nodes=[RuntimeNodeId(83)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=50 semantic=60 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(60)] nodes=[RuntimeNodeId(84)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=51 semantic=61 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(61)] nodes=[RuntimeNodeId(85)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=52 semantic=62 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(62)] nodes=[RuntimeNodeId(86)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=53 semantic=63 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(63)] nodes=[RuntimeNodeId(87)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=54 semantic=64 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(64)] nodes=[RuntimeNodeId(88)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=55 semantic=65 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(65)] nodes=[RuntimeNodeId(89)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=56 semantic=66 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(66)] nodes=[RuntimeNodeId(90)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=57 semantic=67 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(67)] nodes=[RuntimeNodeId(91)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=58 semantic=68 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(68)] nodes=[RuntimeNodeId(92)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=59 semantic=69 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Graphical Content" items=1 dominant_eligible=false sources=[RegionId(69)] nodes=[RuntimeNodeId(93)]
+    presentation_reasons: fidelity-required semantic content has an honest terminal placeholder
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Image; unlabelled unbounded image is diagnostic beside a distinguishable graphical surface
+  region=60 semantic=71 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(71)] nodes=[RuntimeNodeId(94)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=61 semantic=72 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(72)] nodes=[RuntimeNodeId(95)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=62 semantic=74 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Forward" items=1 dominant_eligible=false sources=[RegionId(74)] nodes=[RuntimeNodeId(96)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 36
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=63 semantic=78 kind=Status priority=Secondary obligation=Contextual demand=Compact visibility=Collapsible purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=Status title="Status" items=1 dominant_eligible=false sources=[RegionId(78)] nodes=[RuntimeNodeId(97)]
+    presentation_reasons: status semantics map to a compact status presentation
+    reasons: semantic region = Status; geometry unavailable; semantic hierarchy fallback; role = StatusBar
+  region=64 semantic=117 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=14 dominant_eligible=false sources=[RegionId(117)] nodes=[RuntimeNodeId(101)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 3
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=65 semantic=83 kind=Unknown priority=Auxiliary obligation=Persistent demand=Supporting visibility=PreferDirect purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=ControlGroup title="Controls" items=34 dominant_eligible=false sources=[RegionId(83), RegionId(89), RegionId(94), RegionId(98), RegionId(103), RegionId(109), RegionId(116), RegionId(81), RegionId(82), RegionId(88), RegionId(86), RegionId(87), RegionId(93), RegionId(91), RegionId(92), RegionId(96), RegionId(102), RegionId(100), RegionId(101), RegionId(107), RegionId(112), RegionId(113), RegionId(114), RegionId(115)] nodes=[RuntimeNodeId(103), RuntimeNodeId(106), RuntimeNodeId(111), RuntimeNodeId(116), RuntimeNodeId(120), RuntimeNodeId(127), RuntimeNodeId(131), RuntimeNodeId(104), RuntimeNodeId(105), RuntimeNodeId(108), RuntimeNodeId(109), RuntimeNodeId(110), RuntimeNodeId(113), RuntimeNodeId(114), RuntimeNodeId(115), RuntimeNodeId(119), RuntimeNodeId(122), RuntimeNodeId(123), RuntimeNodeId(124), RuntimeNodeId(130), RuntimeNodeId(134), RuntimeNodeId(135), RuntimeNodeId(136), RuntimeNodeId(137)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced compatible sibling region 89 under semantic parent 117; coalesced compatible sibling region 94 under semantic parent 117; coalesced compatible sibling region 98 under semantic parent 117; coalesced compatible sibling region 103 under semantic parent 117; coalesced compatible sibling region 109 under semantic parent 117; coalesced compatible sibling region 116 under semantic parent 117; absorbed compatible descendant presentation from region 81; coalesced compact compatible application-scope region 88; coalesced compact compatible application-scope region 93; coalesced compact compatible application-scope region 96; coalesced compact compatible application-scope region 102; coalesced compact compatible application-scope region 107; coalesced compact compatible application-scope region 112
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container; coherent multi-control semantic surface is persistent; 10 realized user-facing items justify supporting demand
+  region=66 semantic=81 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(81), RegionId(82)] nodes=[RuntimeNodeId(104), RuntimeNodeId(105)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 82 under semantic parent 83; presented by ancestor spatial region 65
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=67 semantic=82 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Open With…" items=1 dominant_eligible=false sources=[RegionId(82)] nodes=[RuntimeNodeId(105)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 66
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=68 semantic=89 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(89)] nodes=[RuntimeNodeId(106)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=69 semantic=85 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(85)] nodes=[RuntimeNodeId(107)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=70 semantic=88 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=4 dominant_eligible=false sources=[RegionId(88), RegionId(86), RegionId(87)] nodes=[RuntimeNodeId(108), RuntimeNodeId(109), RuntimeNodeId(110)]
+    presentation_reasons: container owns reachable semantic interactions; absorbed compatible descendant presentation from region 86; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=71 semantic=86 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(86), RegionId(87)] nodes=[RuntimeNodeId(109), RuntimeNodeId(110)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 87 under semantic parent 88; presented by ancestor spatial region 70
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=72 semantic=87 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Save As…" items=1 dominant_eligible=false sources=[RegionId(87)] nodes=[RuntimeNodeId(110)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 71
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=73 semantic=94 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(94)] nodes=[RuntimeNodeId(111)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=74 semantic=90 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(90)] nodes=[RuntimeNodeId(112)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=75 semantic=93 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=4 dominant_eligible=false sources=[RegionId(93), RegionId(91), RegionId(92)] nodes=[RuntimeNodeId(113), RuntimeNodeId(114), RuntimeNodeId(115)]
+    presentation_reasons: container owns reachable semantic interactions; absorbed compatible descendant presentation from region 91; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=76 semantic=91 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(91), RegionId(92)] nodes=[RuntimeNodeId(114), RuntimeNodeId(115)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 92 under semantic parent 93; presented by ancestor spatial region 75
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=77 semantic=92 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Set as Wallpaper" items=1 dominant_eligible=false sources=[RegionId(92)] nodes=[RuntimeNodeId(115)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 76
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=78 semantic=98 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=1 dominant_eligible=false sources=[RegionId(98)] nodes=[RuntimeNodeId(116)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=79 semantic=95 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(95)] nodes=[RuntimeNodeId(117)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=80 semantic=96 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Image Properties" items=1 dominant_eligible=false sources=[RegionId(96)] nodes=[RuntimeNodeId(119)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 65
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=81 semantic=103 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=2 dominant_eligible=false sources=[RegionId(103)] nodes=[RuntimeNodeId(120)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=82 semantic=99 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(99)] nodes=[RuntimeNodeId(121)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=83 semantic=102 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=4 dominant_eligible=false sources=[RegionId(102), RegionId(100), RegionId(101)] nodes=[RuntimeNodeId(122), RuntimeNodeId(123), RuntimeNodeId(124)]
+    presentation_reasons: container owns reachable semantic interactions; absorbed compatible descendant presentation from region 100; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=84 semantic=100 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=2 dominant_eligible=false sources=[RegionId(100), RegionId(101)] nodes=[RuntimeNodeId(123), RuntimeNodeId(124)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 101 under semantic parent 102; presented by ancestor spatial region 83
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = CheckBox
+  region=85 semantic=101 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Show Presenter" items=1 dominant_eligible=false sources=[RegionId(101)] nodes=[RuntimeNodeId(124)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 84
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=86 semantic=104 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(104)] nodes=[RuntimeNodeId(126)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=87 semantic=109 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=1 dominant_eligible=false sources=[RegionId(109)] nodes=[RuntimeNodeId(127)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=88 semantic=106 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(106)] nodes=[RuntimeNodeId(128)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=89 semantic=107 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Show" items=1 dominant_eligible=false sources=[RegionId(107)] nodes=[RuntimeNodeId(130)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 65
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=90 semantic=116 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Details" items=4 dominant_eligible=false sources=[RegionId(116)] nodes=[RuntimeNodeId(131)]
+    presentation_reasons: container owns reachable semantic interactions; coalesced into spatial region 65
+    reasons: semantic region = Group; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=91 semantic=110 kind=Structural priority=Structural obligation=Structural demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=Structural title="Details" items=0 dominant_eligible=false sources=[RegionId(110)] nodes=[RuntimeNodeId(132)]
+    presentation_reasons: structural-only object retained for layout diagnostics
+    reasons: semantic region = Unknown; layout-useful structural evidence; no standalone semantic task; geometry unavailable; semantic hierarchy fallback; role = Unknown(separator)
+  region=92 semantic=111 kind=Toolbar priority=Secondary obligation=Discoverable demand=Compact visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=CommandBar title="Commands" items=4 dominant_eligible=false sources=[RegionId(111)] nodes=[RuntimeNodeId(133)]
+    presentation_reasons: command hierarchy is reachable through a compact command surface
+    reasons: semantic region = CommandSet; geometry unavailable; semantic hierarchy fallback; role = Container
+  region=93 semantic=112 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=4 dominant_eligible=false sources=[RegionId(112), RegionId(113), RegionId(114), RegionId(115)] nodes=[RuntimeNodeId(134), RuntimeNodeId(135), RuntimeNodeId(136), RuntimeNodeId(137)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 113 under semantic parent 111; coalesced compatible sibling region 114 under semantic parent 111; coalesced compatible sibling region 115 under semantic parent 111; coalesced into spatial region 65
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=94 semantic=113 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Keyboard Shortcuts" items=1 dominant_eligible=false sources=[RegionId(113)] nodes=[RuntimeNodeId(135)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 93
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=95 semantic=114 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Help" items=1 dominant_eligible=false sources=[RegionId(114)] nodes=[RuntimeNodeId(136)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 93
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=96 semantic=115 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="About Image Viewer" items=1 dominant_eligible=false sources=[RegionId(115)] nodes=[RuntimeNodeId(137)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 93
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  HorizontalSplit { children: [VerticalSplit { children: [Leaf(SpatialRegionId(27))], weights: [1] }, VerticalSplit { children: [Leaf(SpatialRegionId(3)), Leaf(SpatialRegionId(15)), Leaf(SpatialRegionId(63)), Leaf(SpatialRegionId(65)), Leaf(SpatialRegionId(92))], weights: [1, 1, 1, 1, 1] }], weights: [1, 2] }
+Spatial: candidates=74 requests=74 successes=25 failures=2 rejected=47 regions=97 leaves=6 actionable=28 unplaced=0 analysis_ms=0.185

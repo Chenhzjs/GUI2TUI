@@ -1,0 +1,69 @@
+{
+  "phase": "0.2B",
+  "status": "VALIDATED",
+  "starting_revision": "8f5bda736892372e395bac95a817644ea567c099",
+  "validated_code_head": "8f28082bd1863e18ea51f14b6449e2cd0ca295d9",
+  "phase_commits": [
+    "ba07e66222c43531ef93fea65b86f9d41e8c773c",
+    "40d2d4d11aae3ff883ca34272cd467ac7e939614",
+    "8f28082bd1863e18ea51f14b6449e2cd0ca295d9"
+  ],
+  "presentation_coverage": {
+    "reference_workflows": 5,
+    "terminal_classes_per_workflow": 4,
+    "missing_persistent_surfaces": 0,
+    "improperly_collapsed_pinned_surfaces": 0,
+    "layout_unplaced_actions": 0
+  },
+  "responsive_classes": {
+    "wide": "demand-weighted composition with pinned and preferred direct surfaces",
+    "medium": "primary task plus minimum-viable pinned compact surfaces",
+    "narrow": "task surface plus pinned compact rows and F6 selector",
+    "compact": "minimum-viable pinned rows collapse only under genuine space pressure"
+  },
+  "screenshots": [
+    "mousepad-wide.png",
+    "mousepad-medium.png",
+    "mousepad-narrow.png",
+    "chromium-wide.png",
+    "chromium-medium.png",
+    "chromium-80.png",
+    "chromium-narrow.png",
+    "eog-wide.png",
+    "eog-narrow.png",
+    "gtk-demo-wide.png",
+    "gtk-demo-narrow.png",
+    "qt-designer-wide.png",
+    "qt-designer-narrow.png"
+  ],
+  "benchmark": {
+    "file": "benchmark-fresh-incomplete.json",
+    "condition": "fresh/incomplete AT-SPI Cache, baseline and current five samples each",
+    "baseline_first_frame_median_ms": 3767.55,
+    "current_first_frame_median_ms": 3862.66,
+    "delta_percent": 2.52,
+    "geometry_rpcs": 128,
+    "nodes": 5158,
+    "current_spatial_presentation_median_ms": 25.354,
+    "fd_before": 18,
+    "fd_after": 18,
+    "severe_regression": false
+  },
+  "dynamic_surface_validation": {
+    "current_context": "PASS: Mousepad new tab then safe AT-SPI Selection back to review.txt",
+    "control_visibility": "PASS: GTK Demo Search toggle shown then hidden without restart",
+    "coverage_missing": 0,
+    "improperly_collapsed_pinned": 0,
+    "evidence_directory": "dynamic"
+  },
+  "quality": {
+    "macOS": "PASS: fmt/check/280 tests/clippy/diff",
+    "linux": "PASS: fmt/check/281 tests/clippy/diff",
+    "reference_workflows": "PASS: Mousepad, Chromium, EOG, GTK Demo, Qt Designer"
+  },
+  "issues": {
+    "P0": 0,
+    "P1": 0,
+    "P2": "visual polish, command ranking, status wording, mouse UX"
+  }
+}

@@ -1,0 +1,986 @@
+warning: Managed headless supervisor is not running; run `gui2tui setup persistent`
+Bootstrap: 319 nodes via AT-SPI Cache in 17.126 ms (cache_rpc=8.083 ms enrichment=8.393 ms reconstruction=0.638 ms enrichment_rpcs=249 orphans=0)
+Relations: budget=319 deferred=0 visible=8 relation-sensitive=250 background=61 candidates=319 rpcs=319 found=0 unresolved=0 unavailable=0 latency=7.576 ms
+LayoutPlan generation=1 trust=Consistent composition=ContentDominant regions=245 leaves=4 primary=1 structural=0 topology_anchors=6 topology_pairs=15 topology_relations=196 surface_ms=0.404 topology_ms=0.028 composition_ms=0.000 layout_ms=0.003
+  region=0 semantic=246 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="mousepad" items=0 dominant_eligible=false sources=[RegionId(246)] nodes=[RuntimeNodeId(1)]
+    presentation_reasons: application/window container organizes descendants but is not a pane itself
+    reasons: semantic region = Navigation; geometry unavailable; semantic hierarchy fallback; role = Application
+  region=1 semantic=245 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 0, width: 640, height: 480 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 1000 })
+    presentation=DiagnosticOnly title="/Users/chenhz/Documents/GUI2TUI/tests/fixtures/spatial_review.txt - Mousepad" items=0 dominant_eligible=false sources=[RegionId(245)] nodes=[RuntimeNodeId(2)]
+    presentation_reasons: application/window container organizes descendants but is not a pane itself; window remains structural because a descendant content surface owns presentation
+    reasons: semantic region = Navigation; role = Window
+  region=2 semantic=244 kind=Unknown priority=Auxiliary obligation=Persistent demand=Minimal visibility=PreferDirect purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 0, width: 640, height: 480 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 1000 })
+    presentation=ControlGroup title="Details" items=466 dominant_eligible=false sources=[RegionId(244), RegionId(1), RegionId(2), RegionId(3), RegionId(4), RegionId(5), RegionId(6), RegionId(7), RegionId(8), RegionId(9), RegionId(10), RegionId(11), RegionId(12), RegionId(13), RegionId(14), RegionId(15), RegionId(16), RegionId(17), RegionId(18), RegionId(19), RegionId(20), RegionId(21), RegionId(22), RegionId(23), RegionId(24), RegionId(25), RegionId(26), RegionId(27), RegionId(28), RegionId(29), RegionId(30), RegionId(31), RegionId(32), RegionId(33), RegionId(34), RegionId(35), RegionId(36), RegionId(37), RegionId(38), RegionId(39), RegionId(40), RegionId(41), RegionId(42), RegionId(43), RegionId(44), RegionId(45), RegionId(46), RegionId(47), RegionId(48), RegionId(49), RegionId(50), RegionId(51), RegionId(52), RegionId(53), RegionId(54), RegionId(55), RegionId(56), RegionId(57), RegionId(58), RegionId(59), RegionId(60), RegionId(61), RegionId(62), RegionId(63), RegionId(64), RegionId(65), RegionId(66), RegionId(67), RegionId(68), RegionId(69), RegionId(70), RegionId(71), RegionId(72), RegionId(73), RegionId(74), RegionId(75), RegionId(76), RegionId(77), RegionId(78), RegionId(79), RegionId(80), RegionId(81), RegionId(82), RegionId(83), RegionId(84), RegionId(85), RegionId(86), RegionId(87), RegionId(88), RegionId(89), RegionId(90), RegionId(91), RegionId(92), RegionId(93), RegionId(94), RegionId(95), RegionId(96), RegionId(97), RegionId(98), RegionId(99), RegionId(100), RegionId(101), RegionId(102), RegionId(103), RegionId(104), RegionId(105), RegionId(106), RegionId(107), RegionId(108), RegionId(109), RegionId(110), RegionId(111), RegionId(112), RegionId(113), RegionId(114), RegionId(115), RegionId(116), RegionId(117), RegionId(118), RegionId(119), RegionId(120), RegionId(121), RegionId(122), RegionId(123), RegionId(124), RegionId(125), RegionId(126), RegionId(127), RegionId(128), RegionId(129), RegionId(130), RegionId(131), RegionId(132), RegionId(133), RegionId(134), RegionId(135), RegionId(136), RegionId(137), RegionId(138), RegionId(139), RegionId(140), RegionId(141), RegionId(142), RegionId(143), RegionId(144), RegionId(145), RegionId(146), RegionId(147), RegionId(148), RegionId(149), RegionId(150), RegionId(151), RegionId(152), RegionId(153), RegionId(154), RegionId(155), RegionId(156), RegionId(157), RegionId(158), RegionId(159), RegionId(160), RegionId(161), RegionId(162), RegionId(163), RegionId(164), RegionId(165), RegionId(166), RegionId(167), RegionId(168), RegionId(169), RegionId(170), RegionId(171), RegionId(172), RegionId(173), RegionId(174), RegionId(175), RegionId(176), RegionId(177), RegionId(178), RegionId(179), RegionId(180), RegionId(181), RegionId(182), RegionId(183), RegionId(184), RegionId(185), RegionId(186), RegionId(187), RegionId(188), RegionId(189), RegionId(190), RegionId(191), RegionId(192), RegionId(193), RegionId(194), RegionId(195), RegionId(196), RegionId(197), RegionId(198), RegionId(199), RegionId(200), RegionId(201), RegionId(202), RegionId(203), RegionId(204), RegionId(205), RegionId(206), RegionId(207), RegionId(208), RegionId(209), RegionId(210), RegionId(211), RegionId(212), RegionId(213), RegionId(214), RegionId(215), RegionId(216), RegionId(217), RegionId(218), RegionId(221), RegionId(222), RegionId(223), RegionId(224), RegionId(225), RegionId(226), RegionId(227), RegionId(228), RegionId(229), RegionId(230), RegionId(231), RegionId(232), RegionId(233), RegionId(234), RegionId(235)] nodes=[RuntimeNodeId(3), RuntimeNodeId(10), RuntimeNodeId(15), RuntimeNodeId(16), RuntimeNodeId(17), RuntimeNodeId(19), RuntimeNodeId(20), RuntimeNodeId(21), RuntimeNodeId(22), RuntimeNodeId(24), RuntimeNodeId(25), RuntimeNodeId(26), RuntimeNodeId(30), RuntimeNodeId(31), RuntimeNodeId(38), RuntimeNodeId(39), RuntimeNodeId(40), RuntimeNodeId(41), RuntimeNodeId(42), RuntimeNodeId(43), RuntimeNodeId(44), RuntimeNodeId(45), RuntimeNodeId(47), RuntimeNodeId(48), RuntimeNodeId(49), RuntimeNodeId(50), RuntimeNodeId(58), RuntimeNodeId(60), RuntimeNodeId(61), RuntimeNodeId(62), RuntimeNodeId(63), RuntimeNodeId(67), RuntimeNodeId(68), RuntimeNodeId(69), RuntimeNodeId(70), RuntimeNodeId(71), RuntimeNodeId(72), RuntimeNodeId(73), RuntimeNodeId(78), RuntimeNodeId(79), RuntimeNodeId(80), RuntimeNodeId(81), RuntimeNodeId(82), RuntimeNodeId(83), RuntimeNodeId(84), RuntimeNodeId(85), RuntimeNodeId(88), RuntimeNodeId(89), RuntimeNodeId(90), RuntimeNodeId(91), RuntimeNodeId(92), RuntimeNodeId(93), RuntimeNodeId(97), RuntimeNodeId(98), RuntimeNodeId(99), RuntimeNodeId(100), RuntimeNodeId(101), RuntimeNodeId(102), RuntimeNodeId(107), RuntimeNodeId(108), RuntimeNodeId(109), RuntimeNodeId(110), RuntimeNodeId(111), RuntimeNodeId(112), RuntimeNodeId(113), RuntimeNodeId(114), RuntimeNodeId(115), RuntimeNodeId(116), RuntimeNodeId(117), RuntimeNodeId(118), RuntimeNodeId(119), RuntimeNodeId(120), RuntimeNodeId(121), RuntimeNodeId(122), RuntimeNodeId(123), RuntimeNodeId(124), RuntimeNodeId(125), RuntimeNodeId(126), RuntimeNodeId(127), RuntimeNodeId(128), RuntimeNodeId(130), RuntimeNodeId(131), RuntimeNodeId(132), RuntimeNodeId(133), RuntimeNodeId(134), RuntimeNodeId(135), RuntimeNodeId(136), RuntimeNodeId(137), RuntimeNodeId(138), RuntimeNodeId(139), RuntimeNodeId(140), RuntimeNodeId(141), RuntimeNodeId(142), RuntimeNodeId(143), RuntimeNodeId(144), RuntimeNodeId(145), RuntimeNodeId(146), RuntimeNodeId(147), RuntimeNodeId(148), RuntimeNodeId(149), RuntimeNodeId(150), RuntimeNodeId(151), RuntimeNodeId(152), RuntimeNodeId(153), RuntimeNodeId(154), RuntimeNodeId(155), RuntimeNodeId(156), RuntimeNodeId(157), RuntimeNodeId(158), RuntimeNodeId(160), RuntimeNodeId(161), RuntimeNodeId(162), RuntimeNodeId(163), RuntimeNodeId(164), RuntimeNodeId(165), RuntimeNodeId(166), RuntimeNodeId(167), RuntimeNodeId(168), RuntimeNodeId(169), RuntimeNodeId(170), RuntimeNodeId(171), RuntimeNodeId(172), RuntimeNodeId(174), RuntimeNodeId(175), RuntimeNodeId(176), RuntimeNodeId(177), RuntimeNodeId(178), RuntimeNodeId(179), RuntimeNodeId(180), RuntimeNodeId(181), RuntimeNodeId(182), RuntimeNodeId(183), RuntimeNodeId(184), RuntimeNodeId(185), RuntimeNodeId(186), RuntimeNodeId(187), RuntimeNodeId(188), RuntimeNodeId(189), RuntimeNodeId(190), RuntimeNodeId(192), RuntimeNodeId(193), RuntimeNodeId(194), RuntimeNodeId(195), RuntimeNodeId(196), RuntimeNodeId(197), RuntimeNodeId(198), RuntimeNodeId(199), RuntimeNodeId(200), RuntimeNodeId(201), RuntimeNodeId(202), RuntimeNodeId(203), RuntimeNodeId(204), RuntimeNodeId(205), RuntimeNodeId(206), RuntimeNodeId(207), RuntimeNodeId(208), RuntimeNodeId(209), RuntimeNodeId(210), RuntimeNodeId(211), RuntimeNodeId(212), RuntimeNodeId(213), RuntimeNodeId(214), RuntimeNodeId(215), RuntimeNodeId(216), RuntimeNodeId(217), RuntimeNodeId(218), RuntimeNodeId(219), RuntimeNodeId(220), RuntimeNodeId(221), RuntimeNodeId(222), RuntimeNodeId(223), RuntimeNodeId(224), RuntimeNodeId(225), RuntimeNodeId(226), RuntimeNodeId(227), RuntimeNodeId(228), RuntimeNodeId(229), RuntimeNodeId(230), RuntimeNodeId(231), RuntimeNodeId(232), RuntimeNodeId(233), RuntimeNodeId(234), RuntimeNodeId(235), RuntimeNodeId(236), RuntimeNodeId(237), RuntimeNodeId(238), RuntimeNodeId(239), RuntimeNodeId(240), RuntimeNodeId(241), RuntimeNodeId(242), RuntimeNodeId(243), RuntimeNodeId(244), RuntimeNodeId(245), RuntimeNodeId(246), RuntimeNodeId(247), RuntimeNodeId(248), RuntimeNodeId(249), RuntimeNodeId(250), RuntimeNodeId(251), RuntimeNodeId(252), RuntimeNodeId(253), RuntimeNodeId(254), RuntimeNodeId(255), RuntimeNodeId(256), RuntimeNodeId(257), RuntimeNodeId(258), RuntimeNodeId(259), RuntimeNodeId(260), RuntimeNodeId(261), RuntimeNodeId(262), RuntimeNodeId(264), RuntimeNodeId(265), RuntimeNodeId(266), RuntimeNodeId(269), RuntimeNodeId(270), RuntimeNodeId(271), RuntimeNodeId(272), RuntimeNodeId(276), RuntimeNodeId(277), RuntimeNodeId(281), RuntimeNodeId(283), RuntimeNodeId(285), RuntimeNodeId(287), RuntimeNodeId(289), RuntimeNodeId(291), RuntimeNodeId(294), RuntimeNodeId(296), RuntimeNodeId(298), RuntimeNodeId(300), RuntimeNodeId(302), RuntimeNodeId(305), RuntimeNodeId(307), RuntimeNodeId(309), RuntimeNodeId(312)]
+    presentation_reasons: container owns reachable semantic interactions; absorbed compatible descendant presentation from region 1; absorbed compatible descendant presentation from region 221
+    reasons: semantic region = Group; role = Container; coherent multi-control semantic surface is persistent; no currently realized user-facing items; collapsed to minimal demand
+  region=3 semantic=0 kind=Toolbar priority=Secondary obligation=Persistent demand=Compact visibility=PreferDirect purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 0, width: 640, height: 25 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 52 })
+    presentation=CommandBar title="Commands" items=233 dominant_eligible=false sources=[RegionId(0), RegionId(220)] nodes=[RuntimeNodeId(5), RuntimeNodeId(279)]
+    presentation_reasons: command hierarchy is reachable through a compact command surface; coalesced compatible sibling region 220 under semantic parent 244
+    reasons: semantic region = CommandSet; role = MenuBar; thin horizontal band directly above primary content; coherent multi-control semantic surface is persistent; compact semantic control surface is peripheral to the dominant region
+  region=4 semantic=1 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=218 dominant_eligible=false sources=[RegionId(1), RegionId(2), RegionId(3), RegionId(4), RegionId(5), RegionId(6), RegionId(7), RegionId(8), RegionId(9), RegionId(10), RegionId(11), RegionId(12), RegionId(13), RegionId(14), RegionId(15), RegionId(16), RegionId(17), RegionId(18), RegionId(19), RegionId(20), RegionId(21), RegionId(22), RegionId(23), RegionId(24), RegionId(25), RegionId(26), RegionId(27), RegionId(28), RegionId(29), RegionId(30), RegionId(31), RegionId(32), RegionId(33), RegionId(34), RegionId(35), RegionId(36), RegionId(37), RegionId(38), RegionId(39), RegionId(40), RegionId(41), RegionId(42), RegionId(43), RegionId(44), RegionId(45), RegionId(46), RegionId(47), RegionId(48), RegionId(49), RegionId(50), RegionId(51), RegionId(52), RegionId(53), RegionId(54), RegionId(55), RegionId(56), RegionId(57), RegionId(58), RegionId(59), RegionId(60), RegionId(61), RegionId(62), RegionId(63), RegionId(64), RegionId(65), RegionId(66), RegionId(67), RegionId(68), RegionId(69), RegionId(70), RegionId(71), RegionId(72), RegionId(73), RegionId(74), RegionId(75), RegionId(76), RegionId(77), RegionId(78), RegionId(79), RegionId(80), RegionId(81), RegionId(82), RegionId(83), RegionId(84), RegionId(85), RegionId(86), RegionId(87), RegionId(88), RegionId(89), RegionId(90), RegionId(91), RegionId(92), RegionId(93), RegionId(94), RegionId(95), RegionId(96), RegionId(97), RegionId(98), RegionId(99), RegionId(100), RegionId(101), RegionId(102), RegionId(103), RegionId(104), RegionId(105), RegionId(106), RegionId(107), RegionId(108), RegionId(109), RegionId(110), RegionId(111), RegionId(112), RegionId(113), RegionId(114), RegionId(115), RegionId(116), RegionId(117), RegionId(118), RegionId(119), RegionId(120), RegionId(121), RegionId(122), RegionId(123), RegionId(124), RegionId(125), RegionId(126), RegionId(127), RegionId(128), RegionId(129), RegionId(130), RegionId(131), RegionId(132), RegionId(133), RegionId(134), RegionId(135), RegionId(136), RegionId(137), RegionId(138), RegionId(139), RegionId(140), RegionId(141), RegionId(142), RegionId(143), RegionId(144), RegionId(145), RegionId(146), RegionId(147), RegionId(148), RegionId(149), RegionId(150), RegionId(151), RegionId(152), RegionId(153), RegionId(154), RegionId(155), RegionId(156), RegionId(157), RegionId(158), RegionId(159), RegionId(160), RegionId(161), RegionId(162), RegionId(163), RegionId(164), RegionId(165), RegionId(166), RegionId(167), RegionId(168), RegionId(169), RegionId(170), RegionId(171), RegionId(172), RegionId(173), RegionId(174), RegionId(175), RegionId(176), RegionId(177), RegionId(178), RegionId(179), RegionId(180), RegionId(181), RegionId(182), RegionId(183), RegionId(184), RegionId(185), RegionId(186), RegionId(187), RegionId(188), RegionId(189), RegionId(190), RegionId(191), RegionId(192), RegionId(193), RegionId(194), RegionId(195), RegionId(196), RegionId(197), RegionId(198), RegionId(199), RegionId(200), RegionId(201), RegionId(202), RegionId(203), RegionId(204), RegionId(205), RegionId(206), RegionId(207), RegionId(208), RegionId(209), RegionId(210), RegionId(211), RegionId(212), RegionId(213), RegionId(214), RegionId(215), RegionId(216), RegionId(217), RegionId(218)] nodes=[RuntimeNodeId(10), RuntimeNodeId(15), RuntimeNodeId(16), RuntimeNodeId(17), RuntimeNodeId(19), RuntimeNodeId(20), RuntimeNodeId(21), RuntimeNodeId(22), RuntimeNodeId(24), RuntimeNodeId(25), RuntimeNodeId(26), RuntimeNodeId(30), RuntimeNodeId(31), RuntimeNodeId(38), RuntimeNodeId(39), RuntimeNodeId(40), RuntimeNodeId(41), RuntimeNodeId(42), RuntimeNodeId(43), RuntimeNodeId(44), RuntimeNodeId(45), RuntimeNodeId(47), RuntimeNodeId(48), RuntimeNodeId(49), RuntimeNodeId(50), RuntimeNodeId(58), RuntimeNodeId(60), RuntimeNodeId(61), RuntimeNodeId(62), RuntimeNodeId(63), RuntimeNodeId(67), RuntimeNodeId(68), RuntimeNodeId(69), RuntimeNodeId(70), RuntimeNodeId(71), RuntimeNodeId(72), RuntimeNodeId(73), RuntimeNodeId(78), RuntimeNodeId(79), RuntimeNodeId(80), RuntimeNodeId(81), RuntimeNodeId(82), RuntimeNodeId(83), RuntimeNodeId(84), RuntimeNodeId(85), RuntimeNodeId(88), RuntimeNodeId(89), RuntimeNodeId(90), RuntimeNodeId(91), RuntimeNodeId(92), RuntimeNodeId(93), RuntimeNodeId(97), RuntimeNodeId(98), RuntimeNodeId(99), RuntimeNodeId(100), RuntimeNodeId(101), RuntimeNodeId(102), RuntimeNodeId(107), RuntimeNodeId(108), RuntimeNodeId(109), RuntimeNodeId(110), RuntimeNodeId(111), RuntimeNodeId(112), RuntimeNodeId(113), RuntimeNodeId(114), RuntimeNodeId(115), RuntimeNodeId(116), RuntimeNodeId(117), RuntimeNodeId(118), RuntimeNodeId(119), RuntimeNodeId(120), RuntimeNodeId(121), RuntimeNodeId(122), RuntimeNodeId(123), RuntimeNodeId(124), RuntimeNodeId(125), RuntimeNodeId(126), RuntimeNodeId(127), RuntimeNodeId(128), RuntimeNodeId(130), RuntimeNodeId(131), RuntimeNodeId(132), RuntimeNodeId(133), RuntimeNodeId(134), RuntimeNodeId(135), RuntimeNodeId(136), RuntimeNodeId(137), RuntimeNodeId(138), RuntimeNodeId(139), RuntimeNodeId(140), RuntimeNodeId(141), RuntimeNodeId(142), RuntimeNodeId(143), RuntimeNodeId(144), RuntimeNodeId(145), RuntimeNodeId(146), RuntimeNodeId(147), RuntimeNodeId(148), RuntimeNodeId(149), RuntimeNodeId(150), RuntimeNodeId(151), RuntimeNodeId(152), RuntimeNodeId(153), RuntimeNodeId(154), RuntimeNodeId(155), RuntimeNodeId(156), RuntimeNodeId(157), RuntimeNodeId(158), RuntimeNodeId(160), RuntimeNodeId(161), RuntimeNodeId(162), RuntimeNodeId(163), RuntimeNodeId(164), RuntimeNodeId(165), RuntimeNodeId(166), RuntimeNodeId(167), RuntimeNodeId(168), RuntimeNodeId(169), RuntimeNodeId(170), RuntimeNodeId(171), RuntimeNodeId(172), RuntimeNodeId(174), RuntimeNodeId(175), RuntimeNodeId(176), RuntimeNodeId(177), RuntimeNodeId(178), RuntimeNodeId(179), RuntimeNodeId(180), RuntimeNodeId(181), RuntimeNodeId(182), RuntimeNodeId(183), RuntimeNodeId(184), RuntimeNodeId(185), RuntimeNodeId(186), RuntimeNodeId(187), RuntimeNodeId(188), RuntimeNodeId(189), RuntimeNodeId(190), RuntimeNodeId(192), RuntimeNodeId(193), RuntimeNodeId(194), RuntimeNodeId(195), RuntimeNodeId(196), RuntimeNodeId(197), RuntimeNodeId(198), RuntimeNodeId(199), RuntimeNodeId(200), RuntimeNodeId(201), RuntimeNodeId(202), RuntimeNodeId(203), RuntimeNodeId(204), RuntimeNodeId(205), RuntimeNodeId(206), RuntimeNodeId(207), RuntimeNodeId(208), RuntimeNodeId(209), RuntimeNodeId(210), RuntimeNodeId(211), RuntimeNodeId(212), RuntimeNodeId(213), RuntimeNodeId(214), RuntimeNodeId(215), RuntimeNodeId(216), RuntimeNodeId(217), RuntimeNodeId(218), RuntimeNodeId(219), RuntimeNodeId(220), RuntimeNodeId(221), RuntimeNodeId(222), RuntimeNodeId(223), RuntimeNodeId(224), RuntimeNodeId(225), RuntimeNodeId(226), RuntimeNodeId(227), RuntimeNodeId(228), RuntimeNodeId(229), RuntimeNodeId(230), RuntimeNodeId(231), RuntimeNodeId(232), RuntimeNodeId(233), RuntimeNodeId(234), RuntimeNodeId(235), RuntimeNodeId(236), RuntimeNodeId(237), RuntimeNodeId(238), RuntimeNodeId(239), RuntimeNodeId(240), RuntimeNodeId(241), RuntimeNodeId(242), RuntimeNodeId(243), RuntimeNodeId(244), RuntimeNodeId(245), RuntimeNodeId(246), RuntimeNodeId(247), RuntimeNodeId(248), RuntimeNodeId(249), RuntimeNodeId(250), RuntimeNodeId(251), RuntimeNodeId(252), RuntimeNodeId(253), RuntimeNodeId(254), RuntimeNodeId(255), RuntimeNodeId(256), RuntimeNodeId(257), RuntimeNodeId(258), RuntimeNodeId(259), RuntimeNodeId(260), RuntimeNodeId(261), RuntimeNodeId(262), RuntimeNodeId(264), RuntimeNodeId(265), RuntimeNodeId(266), RuntimeNodeId(269), RuntimeNodeId(270), RuntimeNodeId(271), RuntimeNodeId(272), RuntimeNodeId(276), RuntimeNodeId(277)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 2 under semantic parent 0; coalesced compatible sibling region 3 under semantic parent 0; coalesced compatible sibling region 4 under semantic parent 0; coalesced compatible sibling region 5 under semantic parent 0; coalesced compatible sibling region 6 under semantic parent 0; coalesced compatible sibling region 7 under semantic parent 0; coalesced compatible sibling region 8 under semantic parent 0; coalesced compatible sibling region 9 under semantic parent 0; coalesced compatible sibling region 10 under semantic parent 0; coalesced compatible sibling region 11 under semantic parent 0; coalesced compatible sibling region 12 under semantic parent 0; coalesced compatible sibling region 13 under semantic parent 0; coalesced compatible sibling region 14 under semantic parent 0; coalesced compatible sibling region 15 under semantic parent 0; coalesced compatible sibling region 16 under semantic parent 0; coalesced compatible sibling region 17 under semantic parent 0; coalesced compatible sibling region 18 under semantic parent 0; coalesced compatible sibling region 19 under semantic parent 0; coalesced compatible sibling region 20 under semantic parent 0; coalesced compatible sibling region 21 under semantic parent 0; coalesced compatible sibling region 22 under semantic parent 0; coalesced compatible sibling region 23 under semantic parent 0; coalesced compatible sibling region 24 under semantic parent 0; coalesced compatible sibling region 25 under semantic parent 0; coalesced compatible sibling region 26 under semantic parent 0; coalesced compatible sibling region 27 under semantic parent 0; coalesced compatible sibling region 28 under semantic parent 0; coalesced compatible sibling region 29 under semantic parent 0; coalesced compatible sibling region 30 under semantic parent 0; coalesced compatible sibling region 31 under semantic parent 0; coalesced compatible sibling region 32 under semantic parent 0; coalesced compatible sibling region 33 under semantic parent 0; coalesced compatible sibling region 34 under semantic parent 0; coalesced compatible sibling region 35 under semantic parent 0; coalesced compatible sibling region 36 under semantic parent 0; coalesced compatible sibling region 37 under semantic parent 0; coalesced compatible sibling region 38 under semantic parent 0; coalesced compatible sibling region 39 under semantic parent 0; coalesced compatible sibling region 40 under semantic parent 0; coalesced compatible sibling region 41 under semantic parent 0; coalesced compatible sibling region 42 under semantic parent 0; coalesced compatible sibling region 43 under semantic parent 0; coalesced compatible sibling region 44 under semantic parent 0; coalesced compatible sibling region 45 under semantic parent 0; coalesced compatible sibling region 46 under semantic parent 0; coalesced compatible sibling region 47 under semantic parent 0; coalesced compatible sibling region 48 under semantic parent 0; coalesced compatible sibling region 49 under semantic parent 0; coalesced compatible sibling region 50 under semantic parent 0; coalesced compatible sibling region 51 under semantic parent 0; coalesced compatible sibling region 52 under semantic parent 0; coalesced compatible sibling region 53 under semantic parent 0; coalesced compatible sibling region 54 under semantic parent 0; coalesced compatible sibling region 55 under semantic parent 0; coalesced compatible sibling region 56 under semantic parent 0; coalesced compatible sibling region 57 under semantic parent 0; coalesced compatible sibling region 58 under semantic parent 0; coalesced compatible sibling region 59 under semantic parent 0; coalesced compatible sibling region 60 under semantic parent 0; coalesced compatible sibling region 61 under semantic parent 0; coalesced compatible sibling region 62 under semantic parent 0; coalesced compatible sibling region 63 under semantic parent 0; coalesced compatible sibling region 64 under semantic parent 0; coalesced compatible sibling region 65 under semantic parent 0; coalesced compatible sibling region 66 under semantic parent 0; coalesced compatible sibling region 67 under semantic parent 0; coalesced compatible sibling region 68 under semantic parent 0; coalesced compatible sibling region 69 under semantic parent 0; coalesced compatible sibling region 70 under semantic parent 0; coalesced compatible sibling region 71 under semantic parent 0; coalesced compatible sibling region 72 under semantic parent 0; coalesced compatible sibling region 73 under semantic parent 0; coalesced compatible sibling region 74 under semantic parent 0; coalesced compatible sibling region 75 under semantic parent 0; coalesced compatible sibling region 76 under semantic parent 0; coalesced compatible sibling region 77 under semantic parent 0; coalesced compatible sibling region 78 under semantic parent 0; coalesced compatible sibling region 79 under semantic parent 0; coalesced compatible sibling region 80 under semantic parent 0; coalesced compatible sibling region 81 under semantic parent 0; coalesced compatible sibling region 82 under semantic parent 0; coalesced compatible sibling region 83 under semantic parent 0; coalesced compatible sibling region 84 under semantic parent 0; coalesced compatible sibling region 85 under semantic parent 0; coalesced compatible sibling region 86 under semantic parent 0; coalesced compatible sibling region 87 under semantic parent 0; coalesced compatible sibling region 88 under semantic parent 0; coalesced compatible sibling region 89 under semantic parent 0; coalesced compatible sibling region 90 under semantic parent 0; coalesced compatible sibling region 91 under semantic parent 0; coalesced compatible sibling region 92 under semantic parent 0; coalesced compatible sibling region 93 under semantic parent 0; coalesced compatible sibling region 94 under semantic parent 0; coalesced compatible sibling region 95 under semantic parent 0; coalesced compatible sibling region 96 under semantic parent 0; coalesced compatible sibling region 97 under semantic parent 0; coalesced compatible sibling region 98 under semantic parent 0; coalesced compatible sibling region 99 under semantic parent 0; coalesced compatible sibling region 100 under semantic parent 0; coalesced compatible sibling region 101 under semantic parent 0; coalesced compatible sibling region 102 under semantic parent 0; coalesced compatible sibling region 103 under semantic parent 0; coalesced compatible sibling region 104 under semantic parent 0; coalesced compatible sibling region 105 under semantic parent 0; coalesced compatible sibling region 106 under semantic parent 0; coalesced compatible sibling region 107 under semantic parent 0; coalesced compatible sibling region 108 under semantic parent 0; coalesced compatible sibling region 109 under semantic parent 0; coalesced compatible sibling region 110 under semantic parent 0; coalesced compatible sibling region 111 under semantic parent 0; coalesced compatible sibling region 112 under semantic parent 0; coalesced compatible sibling region 113 under semantic parent 0; coalesced compatible sibling region 114 under semantic parent 0; coalesced compatible sibling region 115 under semantic parent 0; coalesced compatible sibling region 116 under semantic parent 0; coalesced compatible sibling region 117 under semantic parent 0; coalesced compatible sibling region 118 under semantic parent 0; coalesced compatible sibling region 119 under semantic parent 0; coalesced compatible sibling region 120 under semantic parent 0; coalesced compatible sibling region 121 under semantic parent 0; coalesced compatible sibling region 122 under semantic parent 0; coalesced compatible sibling region 123 under semantic parent 0; coalesced compatible sibling region 124 under semantic parent 0; coalesced compatible sibling region 125 under semantic parent 0; coalesced compatible sibling region 126 under semantic parent 0; coalesced compatible sibling region 127 under semantic parent 0; coalesced compatible sibling region 128 under semantic parent 0; coalesced compatible sibling region 129 under semantic parent 0; coalesced compatible sibling region 130 under semantic parent 0; coalesced compatible sibling region 131 under semantic parent 0; coalesced compatible sibling region 132 under semantic parent 0; coalesced compatible sibling region 133 under semantic parent 0; coalesced compatible sibling region 134 under semantic parent 0; coalesced compatible sibling region 135 under semantic parent 0; coalesced compatible sibling region 136 under semantic parent 0; coalesced compatible sibling region 137 under semantic parent 0; coalesced compatible sibling region 138 under semantic parent 0; coalesced compatible sibling region 139 under semantic parent 0; coalesced compatible sibling region 140 under semantic parent 0; coalesced compatible sibling region 141 under semantic parent 0; coalesced compatible sibling region 142 under semantic parent 0; coalesced compatible sibling region 143 under semantic parent 0; coalesced compatible sibling region 144 under semantic parent 0; coalesced compatible sibling region 145 under semantic parent 0; coalesced compatible sibling region 146 under semantic parent 0; coalesced compatible sibling region 147 under semantic parent 0; coalesced compatible sibling region 148 under semantic parent 0; coalesced compatible sibling region 149 under semantic parent 0; coalesced compatible sibling region 150 under semantic parent 0; coalesced compatible sibling region 151 under semantic parent 0; coalesced compatible sibling region 152 under semantic parent 0; coalesced compatible sibling region 153 under semantic parent 0; coalesced compatible sibling region 154 under semantic parent 0; coalesced compatible sibling region 155 under semantic parent 0; coalesced compatible sibling region 156 under semantic parent 0; coalesced compatible sibling region 157 under semantic parent 0; coalesced compatible sibling region 158 under semantic parent 0; coalesced compatible sibling region 159 under semantic parent 0; coalesced compatible sibling region 160 under semantic parent 0; coalesced compatible sibling region 161 under semantic parent 0; coalesced compatible sibling region 162 under semantic parent 0; coalesced compatible sibling region 163 under semantic parent 0; coalesced compatible sibling region 164 under semantic parent 0; coalesced compatible sibling region 165 under semantic parent 0; coalesced compatible sibling region 166 under semantic parent 0; coalesced compatible sibling region 167 under semantic parent 0; coalesced compatible sibling region 168 under semantic parent 0; coalesced compatible sibling region 169 under semantic parent 0; coalesced compatible sibling region 170 under semantic parent 0; coalesced compatible sibling region 171 under semantic parent 0; coalesced compatible sibling region 172 under semantic parent 0; coalesced compatible sibling region 173 under semantic parent 0; coalesced compatible sibling region 174 under semantic parent 0; coalesced compatible sibling region 175 under semantic parent 0; coalesced compatible sibling region 176 under semantic parent 0; coalesced compatible sibling region 177 under semantic parent 0; coalesced compatible sibling region 178 under semantic parent 0; coalesced compatible sibling region 179 under semantic parent 0; coalesced compatible sibling region 180 under semantic parent 0; coalesced compatible sibling region 181 under semantic parent 0; coalesced compatible sibling region 182 under semantic parent 0; coalesced compatible sibling region 183 under semantic parent 0; coalesced compatible sibling region 184 under semantic parent 0; coalesced compatible sibling region 185 under semantic parent 0; coalesced compatible sibling region 186 under semantic parent 0; coalesced compatible sibling region 187 under semantic parent 0; coalesced compatible sibling region 188 under semantic parent 0; coalesced compatible sibling region 189 under semantic parent 0; coalesced compatible sibling region 190 under semantic parent 0; coalesced compatible sibling region 191 under semantic parent 0; coalesced compatible sibling region 192 under semantic parent 0; coalesced compatible sibling region 193 under semantic parent 0; coalesced compatible sibling region 194 under semantic parent 0; coalesced compatible sibling region 195 under semantic parent 0; coalesced compatible sibling region 196 under semantic parent 0; coalesced compatible sibling region 197 under semantic parent 0; coalesced compatible sibling region 198 under semantic parent 0; coalesced compatible sibling region 199 under semantic parent 0; coalesced compatible sibling region 200 under semantic parent 0; coalesced compatible sibling region 201 under semantic parent 0; coalesced compatible sibling region 202 under semantic parent 0; coalesced compatible sibling region 203 under semantic parent 0; coalesced compatible sibling region 204 under semantic parent 0; coalesced compatible sibling region 205 under semantic parent 0; coalesced compatible sibling region 206 under semantic parent 0; coalesced compatible sibling region 207 under semantic parent 0; coalesced compatible sibling region 208 under semantic parent 0; coalesced compatible sibling region 209 under semantic parent 0; coalesced compatible sibling region 210 under semantic parent 0; coalesced compatible sibling region 211 under semantic parent 0; coalesced compatible sibling region 212 under semantic parent 0; coalesced compatible sibling region 213 under semantic parent 0; coalesced compatible sibling region 214 under semantic parent 0; coalesced compatible sibling region 215 under semantic parent 0; coalesced compatible sibling region 216 under semantic parent 0; coalesced compatible sibling region 217 under semantic parent 0; coalesced compatible sibling region 218 under semantic parent 0; presented by ancestor spatial region 2
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=5 semantic=2 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(2)] nodes=[RuntimeNodeId(15)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=6 semantic=3 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(3)] nodes=[RuntimeNodeId(16)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=7 semantic=4 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(4)] nodes=[RuntimeNodeId(17)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=8 semantic=5 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(5)] nodes=[RuntimeNodeId(19)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=9 semantic=6 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(6)] nodes=[RuntimeNodeId(20)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=10 semantic=7 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(7)] nodes=[RuntimeNodeId(21)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=11 semantic=8 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(8)] nodes=[RuntimeNodeId(22)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=12 semantic=9 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(9)] nodes=[RuntimeNodeId(24)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=13 semantic=10 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(10)] nodes=[RuntimeNodeId(25)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=14 semantic=11 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(11)] nodes=[RuntimeNodeId(26)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=15 semantic=12 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(12)] nodes=[RuntimeNodeId(30)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=16 semantic=13 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(13)] nodes=[RuntimeNodeId(31)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=17 semantic=14 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(14)] nodes=[RuntimeNodeId(38)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=18 semantic=15 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(15)] nodes=[RuntimeNodeId(39)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=19 semantic=16 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(16)] nodes=[RuntimeNodeId(40)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=20 semantic=17 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(17)] nodes=[RuntimeNodeId(41)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=21 semantic=18 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(18)] nodes=[RuntimeNodeId(42)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=22 semantic=19 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(19)] nodes=[RuntimeNodeId(43)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=23 semantic=20 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(20)] nodes=[RuntimeNodeId(44)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=24 semantic=21 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(21)] nodes=[RuntimeNodeId(45)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=25 semantic=22 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(22)] nodes=[RuntimeNodeId(47)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=26 semantic=23 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(23)] nodes=[RuntimeNodeId(48)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=27 semantic=24 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(24)] nodes=[RuntimeNodeId(49)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=28 semantic=25 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(25)] nodes=[RuntimeNodeId(50)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=29 semantic=26 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(26)] nodes=[RuntimeNodeId(58)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=30 semantic=27 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(27)] nodes=[RuntimeNodeId(60)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=31 semantic=28 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(28)] nodes=[RuntimeNodeId(61)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=32 semantic=29 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(29)] nodes=[RuntimeNodeId(62)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=33 semantic=30 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(30)] nodes=[RuntimeNodeId(63)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=34 semantic=31 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(31)] nodes=[RuntimeNodeId(67)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=35 semantic=32 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(32)] nodes=[RuntimeNodeId(68)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=36 semantic=33 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(33)] nodes=[RuntimeNodeId(69)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=37 semantic=34 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(34)] nodes=[RuntimeNodeId(70)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=38 semantic=35 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(35)] nodes=[RuntimeNodeId(71)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=39 semantic=36 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(36)] nodes=[RuntimeNodeId(72)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=40 semantic=37 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(37)] nodes=[RuntimeNodeId(73)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=41 semantic=38 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(38)] nodes=[RuntimeNodeId(78)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=42 semantic=39 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(39)] nodes=[RuntimeNodeId(79)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=43 semantic=40 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(40)] nodes=[RuntimeNodeId(80)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=44 semantic=41 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(41)] nodes=[RuntimeNodeId(81)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=45 semantic=42 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(42)] nodes=[RuntimeNodeId(82)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=46 semantic=43 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(43)] nodes=[RuntimeNodeId(83)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=47 semantic=44 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(44)] nodes=[RuntimeNodeId(84)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=48 semantic=45 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(45)] nodes=[RuntimeNodeId(85)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=49 semantic=46 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(46)] nodes=[RuntimeNodeId(88)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=50 semantic=47 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(47)] nodes=[RuntimeNodeId(89)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=51 semantic=48 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(48)] nodes=[RuntimeNodeId(90)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=52 semantic=49 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(49)] nodes=[RuntimeNodeId(91)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=53 semantic=50 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(50)] nodes=[RuntimeNodeId(92)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=54 semantic=51 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(51)] nodes=[RuntimeNodeId(93)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=55 semantic=52 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(52)] nodes=[RuntimeNodeId(97)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=56 semantic=53 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(53)] nodes=[RuntimeNodeId(98)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=57 semantic=54 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(54)] nodes=[RuntimeNodeId(99)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=58 semantic=55 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(55)] nodes=[RuntimeNodeId(100)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=59 semantic=56 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(56)] nodes=[RuntimeNodeId(101)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=60 semantic=57 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(57)] nodes=[RuntimeNodeId(102)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=61 semantic=58 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(58)] nodes=[RuntimeNodeId(107)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=62 semantic=59 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(59)] nodes=[RuntimeNodeId(108)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=63 semantic=60 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(60)] nodes=[RuntimeNodeId(109)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=64 semantic=61 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(61)] nodes=[RuntimeNodeId(110)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=65 semantic=62 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(62)] nodes=[RuntimeNodeId(111)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=66 semantic=63 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(63)] nodes=[RuntimeNodeId(112)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=67 semantic=64 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(64)] nodes=[RuntimeNodeId(113)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=68 semantic=65 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(65)] nodes=[RuntimeNodeId(114)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=69 semantic=66 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(66)] nodes=[RuntimeNodeId(115)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=70 semantic=67 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(67)] nodes=[RuntimeNodeId(116)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=71 semantic=68 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(68)] nodes=[RuntimeNodeId(117)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=72 semantic=69 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(69)] nodes=[RuntimeNodeId(118)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=73 semantic=70 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(70)] nodes=[RuntimeNodeId(119)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=74 semantic=71 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(71)] nodes=[RuntimeNodeId(120)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=75 semantic=72 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(72)] nodes=[RuntimeNodeId(121)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=76 semantic=73 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(73)] nodes=[RuntimeNodeId(122)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=77 semantic=74 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(74)] nodes=[RuntimeNodeId(123)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=78 semantic=75 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(75)] nodes=[RuntimeNodeId(124)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=79 semantic=76 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(76)] nodes=[RuntimeNodeId(125)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=80 semantic=77 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(77)] nodes=[RuntimeNodeId(126)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=81 semantic=78 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(78)] nodes=[RuntimeNodeId(127)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=82 semantic=79 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(79)] nodes=[RuntimeNodeId(128)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=83 semantic=80 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(80)] nodes=[RuntimeNodeId(130)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=84 semantic=81 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(81)] nodes=[RuntimeNodeId(131)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=85 semantic=82 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(82)] nodes=[RuntimeNodeId(132)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=86 semantic=83 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(83)] nodes=[RuntimeNodeId(133)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=87 semantic=84 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(84)] nodes=[RuntimeNodeId(134)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=88 semantic=85 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(85)] nodes=[RuntimeNodeId(135)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=89 semantic=86 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(86)] nodes=[RuntimeNodeId(136)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=90 semantic=87 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(87)] nodes=[RuntimeNodeId(137)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=91 semantic=88 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(88)] nodes=[RuntimeNodeId(138)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=92 semantic=89 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(89)] nodes=[RuntimeNodeId(139)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=93 semantic=90 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(90)] nodes=[RuntimeNodeId(140)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=94 semantic=91 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(91)] nodes=[RuntimeNodeId(141)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=95 semantic=92 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(92)] nodes=[RuntimeNodeId(142)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=96 semantic=93 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(93)] nodes=[RuntimeNodeId(143)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=97 semantic=94 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(94)] nodes=[RuntimeNodeId(144)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=98 semantic=95 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(95)] nodes=[RuntimeNodeId(145)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=99 semantic=96 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(96)] nodes=[RuntimeNodeId(146)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=100 semantic=97 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(97)] nodes=[RuntimeNodeId(147)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=101 semantic=98 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(98)] nodes=[RuntimeNodeId(148)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=102 semantic=99 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(99)] nodes=[RuntimeNodeId(149)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=103 semantic=100 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(100)] nodes=[RuntimeNodeId(150)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=104 semantic=101 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(101)] nodes=[RuntimeNodeId(151)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=105 semantic=102 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(102)] nodes=[RuntimeNodeId(152)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=106 semantic=103 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(103)] nodes=[RuntimeNodeId(153)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=107 semantic=104 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(104)] nodes=[RuntimeNodeId(154)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=108 semantic=105 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(105)] nodes=[RuntimeNodeId(155)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=109 semantic=106 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(106)] nodes=[RuntimeNodeId(156)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=110 semantic=107 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(107)] nodes=[RuntimeNodeId(157)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=111 semantic=108 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(108)] nodes=[RuntimeNodeId(158)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=112 semantic=109 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(109)] nodes=[RuntimeNodeId(160)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=113 semantic=110 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(110)] nodes=[RuntimeNodeId(161)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=114 semantic=111 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(111)] nodes=[RuntimeNodeId(162)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=115 semantic=112 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(112)] nodes=[RuntimeNodeId(163)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=116 semantic=113 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(113)] nodes=[RuntimeNodeId(164)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=117 semantic=114 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(114)] nodes=[RuntimeNodeId(165)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=118 semantic=115 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(115)] nodes=[RuntimeNodeId(166)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=119 semantic=116 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(116)] nodes=[RuntimeNodeId(167)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=120 semantic=117 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(117)] nodes=[RuntimeNodeId(168)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=121 semantic=118 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(118)] nodes=[RuntimeNodeId(169)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=122 semantic=119 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(119)] nodes=[RuntimeNodeId(170)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=123 semantic=120 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(120)] nodes=[RuntimeNodeId(171)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=124 semantic=121 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(121)] nodes=[RuntimeNodeId(172)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=125 semantic=122 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(122)] nodes=[RuntimeNodeId(174)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=126 semantic=123 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(123)] nodes=[RuntimeNodeId(175)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=127 semantic=124 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(124)] nodes=[RuntimeNodeId(176)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=128 semantic=125 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(125)] nodes=[RuntimeNodeId(177)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=129 semantic=126 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(126)] nodes=[RuntimeNodeId(178)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=130 semantic=127 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(127)] nodes=[RuntimeNodeId(179)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=131 semantic=128 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(128)] nodes=[RuntimeNodeId(180)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=132 semantic=129 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(129)] nodes=[RuntimeNodeId(181)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=133 semantic=130 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(130)] nodes=[RuntimeNodeId(182)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=134 semantic=131 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(131)] nodes=[RuntimeNodeId(183)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=135 semantic=132 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(132)] nodes=[RuntimeNodeId(184)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=136 semantic=133 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(133)] nodes=[RuntimeNodeId(185)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=137 semantic=134 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(134)] nodes=[RuntimeNodeId(186)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=138 semantic=135 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(135)] nodes=[RuntimeNodeId(187)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=139 semantic=136 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(136)] nodes=[RuntimeNodeId(188)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=140 semantic=137 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(137)] nodes=[RuntimeNodeId(189)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=141 semantic=138 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(138)] nodes=[RuntimeNodeId(190)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=142 semantic=139 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(139)] nodes=[RuntimeNodeId(192)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=143 semantic=140 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(140)] nodes=[RuntimeNodeId(193)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=144 semantic=141 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(141)] nodes=[RuntimeNodeId(194)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=145 semantic=142 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(142)] nodes=[RuntimeNodeId(195)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=146 semantic=143 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(143)] nodes=[RuntimeNodeId(196)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=147 semantic=144 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(144)] nodes=[RuntimeNodeId(197)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=148 semantic=145 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(145)] nodes=[RuntimeNodeId(198)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=149 semantic=146 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(146)] nodes=[RuntimeNodeId(199)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=150 semantic=147 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(147)] nodes=[RuntimeNodeId(200)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=151 semantic=148 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(148)] nodes=[RuntimeNodeId(201)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=152 semantic=149 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(149)] nodes=[RuntimeNodeId(202)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=153 semantic=150 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(150)] nodes=[RuntimeNodeId(203)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=154 semantic=151 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(151)] nodes=[RuntimeNodeId(204)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=155 semantic=152 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(152)] nodes=[RuntimeNodeId(205)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=156 semantic=153 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(153)] nodes=[RuntimeNodeId(206)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=157 semantic=154 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(154)] nodes=[RuntimeNodeId(207)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=158 semantic=155 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(155)] nodes=[RuntimeNodeId(208)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=159 semantic=156 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(156)] nodes=[RuntimeNodeId(209)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=160 semantic=157 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(157)] nodes=[RuntimeNodeId(210)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=161 semantic=158 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(158)] nodes=[RuntimeNodeId(211)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=162 semantic=159 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(159)] nodes=[RuntimeNodeId(212)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=163 semantic=160 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(160)] nodes=[RuntimeNodeId(213)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=164 semantic=161 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(161)] nodes=[RuntimeNodeId(214)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=165 semantic=162 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(162)] nodes=[RuntimeNodeId(215)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=166 semantic=163 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(163)] nodes=[RuntimeNodeId(216)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=167 semantic=164 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(164)] nodes=[RuntimeNodeId(217)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=168 semantic=165 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(165)] nodes=[RuntimeNodeId(218)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=169 semantic=166 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(166)] nodes=[RuntimeNodeId(219)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=170 semantic=167 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(167)] nodes=[RuntimeNodeId(220)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=171 semantic=168 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(168)] nodes=[RuntimeNodeId(221)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=172 semantic=169 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(169)] nodes=[RuntimeNodeId(222)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=173 semantic=170 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(170)] nodes=[RuntimeNodeId(223)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=174 semantic=171 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(171)] nodes=[RuntimeNodeId(224)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=175 semantic=172 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(172)] nodes=[RuntimeNodeId(225)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=176 semantic=173 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(173)] nodes=[RuntimeNodeId(226)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=177 semantic=174 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(174)] nodes=[RuntimeNodeId(227)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=178 semantic=175 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(175)] nodes=[RuntimeNodeId(228)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=179 semantic=176 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(176)] nodes=[RuntimeNodeId(229)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=180 semantic=177 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(177)] nodes=[RuntimeNodeId(230)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=181 semantic=178 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(178)] nodes=[RuntimeNodeId(231)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=182 semantic=179 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(179)] nodes=[RuntimeNodeId(232)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=183 semantic=180 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(180)] nodes=[RuntimeNodeId(233)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=184 semantic=181 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(181)] nodes=[RuntimeNodeId(234)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=185 semantic=182 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(182)] nodes=[RuntimeNodeId(235)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=186 semantic=183 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(183)] nodes=[RuntimeNodeId(236)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=187 semantic=184 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(184)] nodes=[RuntimeNodeId(237)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=188 semantic=185 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(185)] nodes=[RuntimeNodeId(238)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=189 semantic=186 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(186)] nodes=[RuntimeNodeId(239)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=190 semantic=187 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(187)] nodes=[RuntimeNodeId(240)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=191 semantic=188 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(188)] nodes=[RuntimeNodeId(241)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=192 semantic=189 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(189)] nodes=[RuntimeNodeId(242)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=193 semantic=190 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(190)] nodes=[RuntimeNodeId(243)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=194 semantic=191 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(191)] nodes=[RuntimeNodeId(244)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=195 semantic=192 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(192)] nodes=[RuntimeNodeId(245)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=196 semantic=193 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(193)] nodes=[RuntimeNodeId(246)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=197 semantic=194 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(194)] nodes=[RuntimeNodeId(247)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=198 semantic=195 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(195)] nodes=[RuntimeNodeId(248)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=199 semantic=196 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(196)] nodes=[RuntimeNodeId(249)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=200 semantic=197 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(197)] nodes=[RuntimeNodeId(250)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=201 semantic=198 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(198)] nodes=[RuntimeNodeId(251)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=202 semantic=199 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(199)] nodes=[RuntimeNodeId(252)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=203 semantic=200 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(200)] nodes=[RuntimeNodeId(253)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=204 semantic=201 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(201)] nodes=[RuntimeNodeId(254)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=205 semantic=202 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(202)] nodes=[RuntimeNodeId(255)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=206 semantic=203 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(203)] nodes=[RuntimeNodeId(256)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=207 semantic=204 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(204)] nodes=[RuntimeNodeId(257)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=208 semantic=205 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(205)] nodes=[RuntimeNodeId(258)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=209 semantic=206 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(206)] nodes=[RuntimeNodeId(259)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=210 semantic=207 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(207)] nodes=[RuntimeNodeId(260)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=211 semantic=208 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(208)] nodes=[RuntimeNodeId(261)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=212 semantic=209 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(209)] nodes=[RuntimeNodeId(262)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=213 semantic=210 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(210)] nodes=[RuntimeNodeId(264)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=214 semantic=211 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(211)] nodes=[RuntimeNodeId(265)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=215 semantic=212 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(212)] nodes=[RuntimeNodeId(266)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=216 semantic=213 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(213)] nodes=[RuntimeNodeId(269)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=217 semantic=214 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(214)] nodes=[RuntimeNodeId(270)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=218 semantic=215 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(215)] nodes=[RuntimeNodeId(271)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=219 semantic=216 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(216)] nodes=[RuntimeNodeId(272)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=220 semantic=217 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(217)] nodes=[RuntimeNodeId(276)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=221 semantic=218 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Commands" items=1 dominant_eligible=false sources=[RegionId(218)] nodes=[RuntimeNodeId(277)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 4
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = MenuItem
+  region=222 semantic=220 kind=Toolbar priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Commands" items=15 dominant_eligible=false sources=[RegionId(220)] nodes=[RuntimeNodeId(279)]
+    presentation_reasons: command hierarchy is reachable through a compact command surface; coalesced into spatial region 3
+    reasons: semantic region = CommandSet; geometry unavailable; semantic hierarchy fallback; role = Unknown(tool bar)
+  region=223 semantic=221 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Controls" items=15 dominant_eligible=false sources=[RegionId(221), RegionId(222), RegionId(223), RegionId(224), RegionId(225), RegionId(226), RegionId(227), RegionId(228), RegionId(229), RegionId(230), RegionId(231), RegionId(232), RegionId(233), RegionId(234), RegionId(235)] nodes=[RuntimeNodeId(281), RuntimeNodeId(283), RuntimeNodeId(285), RuntimeNodeId(287), RuntimeNodeId(289), RuntimeNodeId(291), RuntimeNodeId(294), RuntimeNodeId(296), RuntimeNodeId(298), RuntimeNodeId(300), RuntimeNodeId(302), RuntimeNodeId(305), RuntimeNodeId(307), RuntimeNodeId(309), RuntimeNodeId(312)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced compatible sibling region 222 under semantic parent 220; coalesced compatible sibling region 223 under semantic parent 220; coalesced compatible sibling region 224 under semantic parent 220; coalesced compatible sibling region 225 under semantic parent 220; coalesced compatible sibling region 226 under semantic parent 220; coalesced compatible sibling region 227 under semantic parent 220; coalesced compatible sibling region 228 under semantic parent 220; coalesced compatible sibling region 229 under semantic parent 220; coalesced compatible sibling region 230 under semantic parent 220; coalesced compatible sibling region 231 under semantic parent 220; coalesced compatible sibling region 232 under semantic parent 220; coalesced compatible sibling region 233 under semantic parent 220; coalesced compatible sibling region 234 under semantic parent 220; coalesced compatible sibling region 235 under semantic parent 220; presented by ancestor spatial region 2
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=224 semantic=222 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Open..." items=1 dominant_eligible=false sources=[RegionId(222)] nodes=[RuntimeNodeId(283)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=225 semantic=223 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Save" items=1 dominant_eligible=false sources=[RegionId(223)] nodes=[RuntimeNodeId(285)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=226 semantic=224 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Save As..." items=1 dominant_eligible=false sources=[RegionId(224)] nodes=[RuntimeNodeId(287)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=227 semantic=225 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Reload" items=1 dominant_eligible=false sources=[RegionId(225)] nodes=[RuntimeNodeId(289)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=228 semantic=226 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Close Tab" items=1 dominant_eligible=false sources=[RegionId(226)] nodes=[RuntimeNodeId(291)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=229 semantic=227 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Undo" items=1 dominant_eligible=false sources=[RegionId(227)] nodes=[RuntimeNodeId(294)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=230 semantic=228 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Redo" items=1 dominant_eligible=false sources=[RegionId(228)] nodes=[RuntimeNodeId(296)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=231 semantic=229 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Cut" items=1 dominant_eligible=false sources=[RegionId(229)] nodes=[RuntimeNodeId(298)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=232 semantic=230 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Copy" items=1 dominant_eligible=false sources=[RegionId(230)] nodes=[RuntimeNodeId(300)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=233 semantic=231 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Paste" items=1 dominant_eligible=false sources=[RegionId(231)] nodes=[RuntimeNodeId(302)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=234 semantic=232 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Find" items=1 dominant_eligible=false sources=[RegionId(232)] nodes=[RuntimeNodeId(305)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=235 semantic=233 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Search bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Find and Replace..." items=1 dominant_eligible=false sources=[RegionId(233)] nodes=[RuntimeNodeId(307)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=236 semantic=234 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Go to..." items=1 dominant_eligible=false sources=[RegionId(234)] nodes=[RuntimeNodeId(309)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=237 semantic=235 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Fullscreen" items=1 dominant_eligible=false sources=[RegionId(235)] nodes=[RuntimeNodeId(312)]
+    presentation_reasons: safe semantic interaction is directly presentable; coalesced into spatial region 223
+    reasons: semantic region = Control; geometry unavailable; semantic hierarchy fallback; role = Button
+  region=238 semantic=242 kind=TabStrip priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Navigate bounds=Some(SpatialBounds { x: 0, y: 27, width: 640, height: 451 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 56, width: 1000, height: 939 })
+    presentation=DiagnosticOnly title="Tabs" items=2 dominant_eligible=false sources=[RegionId(242), RegionId(241)] nodes=[RuntimeNodeId(313), RuntimeNodeId(314)]
+    presentation_reasons: semantic container provides navigation structure; absorbed compatible descendant presentation from region 241
+    reasons: semantic region = Unknown; role = TabList; unnamed non-interactive tab wrapper is already represented by its primary descendant
+  region=239 semantic=241 kind=TabStrip priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Navigate bounds=None space=Screen normalized=None
+    presentation=DiagnosticOnly title="Tabs" items=1 dominant_eligible=false sources=[RegionId(241)] nodes=[RuntimeNodeId(314)]
+    presentation_reasons: semantic container provides navigation structure; presented by ancestor spatial region 238
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Tab
+  region=240 semantic=240 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 27, width: 640, height: 451 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 56, width: 1000, height: 939 })
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(240)] nodes=[RuntimeNodeId(315)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Group; role = Container
+  region=241 semantic=237 kind=PrimaryContent priority=Primary obligation=Persistent demand=Expand visibility=Collapsible purpose=Unknown bounds=Some(SpatialBounds { x: 1, y: 28, width: 638, height: 449 }) space=Screen normalized=Some(NormalizedBounds { x: 1, y: 58, width: 996, height: 935 })
+    presentation=InlineContent title="Document" items=1 dominant_eligible=true sources=[RegionId(237)] nodes=[RuntimeNodeId(316)]
+    presentation_reasons: 1 meaningful block(s) or multiline semantic payload available; content root = 316; bounded content model blocks = 1; partial content = false
+    reasons: semantic region = Control; role = TextInput; presentation-capable InlineContent selected for dominant allocation; trusted geometry available for dominance comparison; primary surface policy: Persistent / Expand
+  region=242 semantic=238 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(238)] nodes=[RuntimeNodeId(317)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=243 semantic=239 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=None space=Unknown normalized=None
+    presentation=DiagnosticOnly title="Details" items=0 dominant_eligible=false sources=[RegionId(239)] nodes=[RuntimeNodeId(318)]
+    presentation_reasons: no standalone user-facing presentation payload
+    reasons: semantic region = Unknown; geometry unavailable; semantic hierarchy fallback; role = Slider
+  region=244 semantic=243 kind=Status priority=Secondary obligation=Contextual demand=Compact visibility=Collapsible purpose=Unknown bounds=None space=Screen normalized=None
+    presentation=Status title="Status" items=0 dominant_eligible=false sources=[RegionId(243)] nodes=[RuntimeNodeId(319)]
+    presentation_reasons: status semantics map to a compact status presentation
+    reasons: semantic region = Status; geometry unavailable; semantic hierarchy fallback; role = StatusBar
+  VerticalSplit { children: [Leaf(SpatialRegionId(3)), Leaf(SpatialRegionId(241)), Leaf(SpatialRegionId(2)), Leaf(SpatialRegionId(244))], weights: [1, 6, 1, 1] }
+Spatial: candidates=49 requests=49 successes=14 failures=1 rejected=34 regions=245 leaves=4 actionable=233 unplaced=0 analysis_ms=0.440

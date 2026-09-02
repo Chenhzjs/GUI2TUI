@@ -1,0 +1,50 @@
+┌ GUI2TUI — /var/tmp/gui2tui-p4c-s61Zxk/work/review.txt - Mousepad ────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Document ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││ Document — 17 lines                                                                                                                                        ││
+││> Document: semantic content                                                                                                                                ││
+││GUI2TUI v0.2 Review                                                                                                                                         ││
+││                                                                                                                                                            ││
+││Spatial reconstruction                                                                                                                                      ││
+││                                                                                                                                                            ││
+││The current prototype identifies important semantic regions and organizes them                                                                              ││
+││into a terminal-native layout.                                                                                                                              ││
+││                                                                                                                                                            ││
+││Accessibility boundaries                                                                                                                                    ││
+││                                                                                                                                                            ││
+││GUI2TUI consumes semantics exposed through AT-SPI. Missing or unreliable                                                                                    ││
+││information is degraded safely rather than guessed.                                                                                                         ││
+││                                                                                                                                                            ││
+││Next steps                                                                                                                                                  ││
+││                                                                                                                                                            ││
+││Responsive region composition will improve navigation and adapt the interface                                                                               ││
+││to smaller terminals.                                                                                                                                       ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+│┌ /var/tmp/gui2tui-p4c-s61Zxk/work/review.txt - Mousepad ────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││  Status                                                                                                                                                    ││
+││                                                                                                                                                            ││
+││                                                                                                                                                            ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Loaded 319 semantic nodes via AT-SPI Cache in 13 ms                                                                            

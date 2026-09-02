@@ -1,0 +1,76 @@
+Terminal 140x40 class=Wide direct=5 collapsed=1
+Semantic surface coverage:
+Persistent surfaces: 4
+represented directly or collapsed: 4
+collapsed but reachable: 0
+discoverable: 1
+primary task represented: true
+persistent inputs: 1/1
+control surfaces: 1/1
+tab/current contexts: 1/1
+meaningful statuses: 1/1
+command surfaces discoverable: 1
+structural suppressed: 71
+missing: []
+Direct surface coverage:
+Pinned surfaces: 1
+directly represented: 1
+forced to collapse: 0
+improperly collapsed: []
+Terminal 100x36 class=Medium direct=3 collapsed=3
+Semantic surface coverage:
+Persistent surfaces: 4
+represented directly or collapsed: 4
+collapsed but reachable: 1
+discoverable: 1
+primary task represented: true
+persistent inputs: 1/1
+control surfaces: 1/1
+tab/current contexts: 1/1
+meaningful statuses: 1/1
+command surfaces discoverable: 1
+structural suppressed: 71
+missing: []
+Direct surface coverage:
+Pinned surfaces: 1
+directly represented: 1
+forced to collapse: 0
+improperly collapsed: []
+Terminal 80x30 class=Medium direct=3 collapsed=3
+Semantic surface coverage:
+Persistent surfaces: 4
+represented directly or collapsed: 4
+collapsed but reachable: 1
+discoverable: 1
+primary task represented: true
+persistent inputs: 1/1
+control surfaces: 1/1
+tab/current contexts: 1/1
+meaningful statuses: 1/1
+command surfaces discoverable: 1
+structural suppressed: 71
+missing: []
+Direct surface coverage:
+Pinned surfaces: 1
+directly represented: 1
+forced to collapse: 0
+improperly collapsed: []
+Terminal 60x24 class=Narrow direct=2 collapsed=4
+Semantic surface coverage:
+Persistent surfaces: 4
+represented directly or collapsed: 4
+collapsed but reachable: 2
+discoverable: 1
+primary task represented: true
+persistent inputs: 1/1
+control surfaces: 1/1
+tab/current contexts: 1/1
+meaningful statuses: 1/1
+command surfaces discoverable: 1
+structural suppressed: 71
+missing: []
+Direct surface coverage:
+Pinned surfaces: 1
+directly represented: 1
+forced to collapse: 0
+improperly collapsed: []

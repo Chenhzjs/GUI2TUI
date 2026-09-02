@@ -3,3 +3,4 @@
 /tmp/
 tests/fixtures/.~lock.*#
 __pycache__/
+.DS_Store

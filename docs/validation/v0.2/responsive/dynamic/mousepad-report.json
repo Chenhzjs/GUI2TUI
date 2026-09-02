@@ -1,0 +1,72 @@
+{
+  "application": "mousepad",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "presentation_coverage": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "multiline_reader": "PASS",
+    "dynamic_current_context": "PASS",
+    "command_dialog_close": "PASS",
+    "reader_death_restart_stale_generation": "PASS"
+  },
+  "result": "PASS",
+  "selector": "Mousepad",
+  "snapshot_wall_ms": 28.13,
+  "nodes": 319,
+  "advertised_action_nodes": 233,
+  "cache_forced_exit": 0,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 245,
+    "leaves": 4,
+    "primary": 1,
+    "structural": 0
+  },
+  "layout_timings_ms": {
+    "surface_inference": 0.4,
+    "topology_inference": 0.023,
+    "composition_planning": 0.0,
+    "layout_compilation": 0.003
+  },
+  "layout_reachability": {
+    "actionable": 233,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 1,
+    "supporting": 1,
+    "structural_only": 0,
+    "diagnostic_only": 4,
+    "duplicate_command_summary": 2,
+    "flat_rows": 8
+  },
+  "spatial_evidence": {
+    "nodes": 319,
+    "candidates": 49,
+    "requests": 49,
+    "successes": 14,
+    "failures": 1,
+    "rejected": 34,
+    "elapsed_ms": 1.143
+  },
+  "presentation_coverage": {
+    "terminal_classes": 4,
+    "missing": 0
+  },
+  "first_frame_ms": 121.1,
+  "tui_bootstrap": {
+    "nodes": 319,
+    "strategy": "AT-SPI Cache",
+    "ms": 17
+  },
+  "resources_bootstrap": {
+    "rss_kib": 13124,
+    "fd": 18
+  },
+  "resources_after_workflow": {
+    "rss_kib": 17460,
+    "fd": 18
+  }
+}

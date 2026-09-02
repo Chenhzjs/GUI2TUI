@@ -1,0 +1,53 @@
+{
+  "application": "gtk-demo",
+  "mode": "probe",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS"
+  },
+  "result": "PROBE PASS",
+  "selector": "gtk4-demo",
+  "snapshot_wall_ms": 101.81,
+  "nodes": 91,
+  "advertised_action_nodes": 46,
+  "cache_forced_exit": 0,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 52,
+    "leaves": 2,
+    "primary": 1,
+    "structural": 0
+  },
+  "layout_reachability": {
+    "actionable": 22,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 27,
+    "supporting": 7,
+    "structural_only": 0,
+    "diagnostic_only": 1,
+    "duplicate_command_summary": 1,
+    "flat_rows": 36
+  },
+  "spatial_evidence": {
+    "nodes": 95,
+    "candidates": 66,
+    "requests": 66,
+    "successes": 57,
+    "failures": 1,
+    "rejected": 8,
+    "elapsed_ms": 2.182
+  },
+  "first_frame_ms": 107.32,
+  "tui_bootstrap": {
+    "nodes": 95,
+    "strategy": "AT-SPI Cache",
+    "ms": 8
+  },
+  "resources_bootstrap": {
+    "rss_kib": 11596,
+    "fd": 18
+  }
+}

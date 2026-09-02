@@ -1,0 +1,48 @@
+{
+  "application": "eog",
+  "mode": "probe",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS"
+  },
+  "result": "PROBE PASS",
+  "selector": "eog",
+  "snapshot_wall_ms": 86.19,
+  "nodes": 117,
+  "advertised_action_nodes": 30,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 77,
+    "leaves": 4,
+    "primary": 1,
+    "structural": 8
+  },
+  "layout_reachability": {
+    "actionable": 28,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 26,
+    "supporting": 3,
+    "structural_only": 8,
+    "diagnostic_only": 8,
+    "duplicate_command_summary": 1,
+    "flat_rows": 46
+  },
+  "spatial_evidence": {
+    "nodes": 117,
+    "candidates": 53,
+    "requests": 53,
+    "successes": 25,
+    "failures": 1,
+    "rejected": 27,
+    "elapsed_ms": 1.549
+  },
+  "first_frame_ms": 115.6,
+  "resources_bootstrap": {
+    "rss_kib": 12116,
+    "fd": 19
+  }
+}

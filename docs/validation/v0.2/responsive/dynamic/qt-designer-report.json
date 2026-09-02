@@ -1,0 +1,71 @@
+{
+  "application": "designer",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "presentation_coverage": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "real_choice_navigation": "PASS",
+    "real_form_control_toggle": "PASS",
+    "real_command_dialog_context": "PASS"
+  },
+  "result": "PASS",
+  "selector": "designer",
+  "snapshot_wall_ms": 255.16,
+  "nodes": 311,
+  "advertised_action_nodes": 165,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "DialogForm",
+    "regions": 221,
+    "leaves": 12,
+    "primary": 0,
+    "structural": 5
+  },
+  "layout_timings_ms": {
+    "surface_inference": 0.312,
+    "topology_inference": 0.081,
+    "composition_planning": 0.001,
+    "layout_compilation": 0.005
+  },
+  "layout_reachability": {
+    "actionable": 116,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 23,
+    "supporting": 13,
+    "structural_only": 5,
+    "diagnostic_only": 45,
+    "duplicate_command_summary": 8,
+    "flat_rows": 94
+  },
+  "spatial_evidence": {
+    "nodes": 311,
+    "candidates": 90,
+    "requests": 90,
+    "successes": 72,
+    "failures": 0,
+    "rejected": 18,
+    "elapsed_ms": 2.291
+  },
+  "presentation_coverage": {
+    "terminal_classes": 4,
+    "missing": 0
+  },
+  "first_frame_ms": 348.19,
+  "tui_bootstrap": {
+    "nodes": 311,
+    "strategy": "recursive walk",
+    "ms": 292
+  },
+  "resources_bootstrap": {
+    "rss_kib": 12980,
+    "fd": 17
+  },
+  "resources_after_workflow": {
+    "rss_kib": 16848,
+    "fd": 17
+  }
+}

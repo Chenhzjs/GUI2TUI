@@ -1,0 +1,95 @@
+Application "gtk4-demo"
+└── Window "GTK Demo" [active]
+    ├── Container [horizontal]
+    │   ├── Container [vertical]
+    │   │   ├── Form "Search"
+    │   │   │   └── Container
+    │   │   │       └── Container
+    │   │   │           └── TextInput [editable,has-popup]
+    │   │   └── Container
+    │   │       ├── List "Demo list"
+    │   │       │   ├── ListItem [selected] actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2I0MTA4YzJiXzE0NjhfNDQxM19iMTkyXzlhOGM2MzZhMmJlNw
+    │   │       │   │   └── Button "GTK Demo" [focused] actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2QxNjc4ZmJlXzdlMzJfNGUwNl9hMDZhX2I0YzRlMjJlMTY5NA
+    │   │       │   │       └── Label "GTK Demo"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5Lzc1YmJjZTkxX2Y2N2VfNGU0Y19hYzI1X2RkN2RmOThiMzRiYw
+    │   │       │   │   └── Button "Application Class" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2JjMTMwMDFlX2E1NTNfNDAzZl85ODU0XzZhZTk1MGZiZDg2Zg
+    │   │       │   │       └── Label "Application Class"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2NhNGJkOTljXzk1NDRfNGU1OV9iMGJhXzQ4MzM5ZDY5NmNkYg
+    │   │       │   │   └── Button "Assistant" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2VmZDM5MDZkX2ZmNjFfNGI5Y184Yjg4Xzc5M2FiZjRlYWZlMw
+    │   │       │   │       └── Label "Assistant"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzU4OGQxMzFmXzc2ZTFfNDY2OF85ODcxXzk5ZmUwYzlmODJmZg
+    │   │       │   │   └── Button "Benchmark" [expandable,expanded] actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzRkY2E5ZmI1X2Y2MGFfNDY3NV9iMjY1XzBmYzYxZmViMmEzOQ
+    │   │       │   │       └── Label "Benchmark"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzY2YmZhYmYzXzliOTJfNDhiY185MmE0X2MyM2I2MDM2MWQ5OA
+    │   │       │   │   └── Button "Fishbowl" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzUyYjI0YjcyXzY3NThfNDhhOV9hZjFkX2RhYmRiMWVkM2E0Yg
+    │   │       │   │       └── Label "Fishbowl"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2QyMWFiNGU1XzgxZmVfNGI3Nl9iZDQwXzhjOTM2NzgwZmQ4NA
+    │   │       │   │   └── Button "Frames" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2E5ZWU1N2QyXzRjMTdfNGM3OF85MTQ2XzQ3YTZlMzczZDlkMA
+    │   │       │   │       └── Label "Frames"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2IyOWNlMWI4X2FjZGFfNDUyNV85YjFjXzg1OWFjZTk0YzQ2OQ
+    │   │       │   │   └── Button "Scrolling" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzYyNWJjMGJhXzFjZjJfNGJmNV84Zjk5X2FlYmRlYmIyMzdlZg
+    │   │       │   │       └── Label "Scrolling"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzdjNWYzOWZjX2UyZjlfNDkzYl9hOTQyX2U2MTIxMTQ1NzViNA
+    │   │       │   │   └── Button "Themes" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2NkNTU4ZTg5XzAyNmRfNDBkZV9hZGNhX2IxM2RiNzdhMTIxNA
+    │   │       │   │       └── Label "Themes"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzYzMzYxZDkyX2JlYzNfNGVhN185NjM0XzZkNDFlNGRiNjdiZA
+    │   │       │   │   └── Button "Builder" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzAzMWNlNzliXzkzMmZfNDUzZl9iN2NjXzc4ZWZjOGFlYmVmNg
+    │   │       │   │       └── Label "Builder"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2Q5ZmI1OGMxXzc5YThfNGY5OV84ZDRkXzI5ZjRjNjIxMmYyZA
+    │   │       │   │   └── Button "Clipboard" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzBiYTdhMDAwX2FmZjNfNDVlY184MTUwXzcyNDJmOTIyOGUyNw
+    │   │       │   │       └── Label "Clipboard"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzE5NzM2YmE2XzViNmNfNDI5Y19iODMyXzkyM2YwMzA4YmRiMQ
+    │   │       │   │   └── Button "Combo Boxes" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzIzZTc0MjE2X2YyZWZfNDU5Ml9iMzA4XzZhZWFkNDQyZjAwMg
+    │   │       │   │       └── Label "Combo Boxes"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzgxYjg3ZjRiX2RkMzVfNDdlM184NTVmXzhmYjYyMWQ4ZDQyZA
+    │   │       │   │   └── Button "Constraints" [expandable,expanded] actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzQ1MmRhYTQ2XzU3Y2RfNGQ1OF9hYzhjX2Q5YjgxM2FiODIwOQ
+    │   │       │   │       └── Label "Constraints"
+    │   │       │   ├── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5Lzk2NDM1Mjc2X2Q4OTBfNDRkMl9iN2VkX2VhM2VjM2EzMWZjNQ
+    │   │       │   │   └── Button "Simple Constraints" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzMwNTBjODQ0XzMzNzZfNDJmNl9iZjI1XzZhYzk0YzE3ODU3ZA
+    │   │       │   │       └── Label "Simple Constraints"
+    │   │       │   └── ListItem actions=[listitem.scroll-to] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2UwNjk5OGYzX2Y1YmZfNDMxM19hYzY2X2ZjMjdkZTgyOTJjNw
+    │   │       │       └── Button "Interactive Constraints" actions=[listitem.toggle-expand,listitem.collapse,listitem.expand] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzY2YWU0ZDZhX2FlOTRfNDI0OF9hNGM1Xzc1YWYxOTY1Y2IzNA
+    │   │       │           └── Label "Interactive Constraints"
+    │   │       └── Slider [vertical]
+    │   │           └── Container [vertical]
+    │   └── Container
+    │       ├── Container [horizontal]
+    │       │   └── TabList
+    │       │       ├── Button "Previous tab" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2EwOTE5MGRjXzE3ZjNfNDEyOV84N2FmXzZhYzgxOTc2Y2YwOA
+    │       │       ├── Tab "Info" [selected]
+    │       │       │   └── Label "Info"
+    │       │       ├── Tab "Source"
+    │       │       │   └── Label "Source"
+    │       │       ├── Tab "fontify.h"
+    │       │       │   └── Label "fontify.h"
+    │       │       ├── Tab "fontify.c"
+    │       │       │   └── Label "fontify.c"
+    │       │       ├── Tab "main.ui"
+    │       │       │   └── Label "main.ui"
+    │       │       └── Button "Next tab" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2VlMTk3OWYwXzcyYTlfNGQ4YV9hYzViXzJlZTEwOGU1YThmZg
+    │       └── Container
+    │           ├── Container "Page 1"
+    │           │   └── Container
+    │           │       └── TextInput "Info" value="GTK Demo\nGTK Demo is a collection of useful examples to demonstrate GTK widgets and features. It is a useful example in itself.\nYou can select examples in the sidebar or search for them by typing a search term. Double-clicking or hitting the \u{201c}Run\u{201d} button w\u{2026}" [multi-line,has-popup,read-only]
+    │           ├── Container "Page 2"
+    │           ├── Container "Page 3"
+    │           ├── Container "Page 4"
+    │           └── Container "Page 5"
+    ├── Container
+    │   └── Container
+    │       └── Container
+    │           ├── Container [horizontal]
+    │           │   ├── Button "Run" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzRhZGViMzVmX2FhMDlfNDc4MF9iMmRmXzUzMjEwY2M4OWMwZg
+    │           │   │   └── Label "Run"
+    │           │   └── ToggleButton "Search" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5L2ZhYjJlNjY0X2RkMzJfNGU1Y184YzE2X2U0ZmNjZjdkOGU0Mg
+    │           ├── Label "GTK Demo"
+    │           └── Container [horizontal]
+    │               ├── Button "Primary menu" [has-popup]
+    │               │   ├── ToggleButton "Primary menu" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzUzOTAxYjQwXzBjOTFfNDZlZV84NDQ1Xzk3MDczZTVjYWY4NQ
+    │               │   │   └── Container [horizontal]
+    │               │   └── Menu [vertical]
+    │               └── Container
+    │                   ├── Button "Minimize" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzEwOTZjMTdhX2ZlMjVfNGFhMV9iNDU5XzVmZTYwMGRlOGRjOA
+    │                   ├── Button "Maximize" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzlmMDk2MzFjXzJmOWJfNGRjOF9iODc4X2Y0Y2FjNzI0NGVlOQ
+    │                   └── Button "Close" actions=[Click] id=atspi1_OjEuMwAvb3JnL2d0ay9EZW1vNC9hMTF5LzE2YTNlMDc2X2M4NGRfNGJmNV9hNTU5X2JlZmQ3YWVhMzA3Yg
+    └── Container

@@ -1,0 +1,324 @@
+Application "mousepad"
+└── Window "/var/tmp/gui2tui-p4c-TCRjQr/work/review.txt - Mousepad" [resizable]
+    └── Container [vertical]
+        ├── Container [horizontal]
+        │   └── MenuBar
+        │       ├── Menu "File"
+        │       │   ├── Menu "New From Template      "
+        │       │   ├── Unknown(separator)
+        │       │   ├── Menu "Open Recent      "
+        │       │   │   └── MenuItem "Clear History      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85Mw
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── MenuItem "New      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMQ
+        │       │   ├── MenuItem "New Window      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMg
+        │       │   ├── MenuItem "Reload      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMjg
+        │       │   ├── MenuItem "Open...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zNQ
+        │       │   ├── MenuItem "Save      "
+        │       │   ├── MenuItem "Save As...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zOQ
+        │       │   ├── MenuItem "Save All      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80MA
+        │       │   ├── MenuItem "Print...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80Mw
+        │       │   ├── MenuItem "Detach Tab      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80NQ
+        │       │   ├── MenuItem "Close Tab      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80Nw
+        │       │   ├── MenuItem "Close Window      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80OA
+        │       │   └── MenuItem "Quit      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS80OQ
+        │       ├── Menu "Edit"
+        │       │   ├── Unknown(separator)
+        │       │   ├── Menu "Paste Special      "
+        │       │   │   ├── MenuItem "Paste from History      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85NA
+        │       │   │   └── MenuItem "Paste as Column      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85NQ
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── Menu "Convert      "
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── MenuItem "Tabs to Spaces      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDE
+        │       │   │   ├── MenuItem "Leading Spaces to Tabs      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDI
+        │       │   │   ├── MenuItem "Strip Trailing Spaces      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDQ
+        │       │   │   ├── MenuItem "Transpose      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDY
+        │       │   │   ├── MenuItem "To Lowercase      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85Ng
+        │       │   │   ├── MenuItem "To Uppercase      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85Nw
+        │       │   │   ├── MenuItem "To Title Case      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85OA
+        │       │   │   └── MenuItem "To Opposite Case      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS85OQ
+        │       │   ├── Menu "Move      "
+        │       │   │   ├── MenuItem "One Line Up      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDc
+        │       │   │   ├── MenuItem "One Line Down      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDg
+        │       │   │   ├── MenuItem "One Word Left      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMDk
+        │       │   │   └── MenuItem "One Word Right      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMTA
+        │       │   ├── Unknown(separator)
+        │       │   ├── MenuItem "Undo      "
+        │       │   ├── MenuItem "Redo      "
+        │       │   ├── MenuItem "Cut      "
+        │       │   ├── MenuItem "Copy      "
+        │       │   ├── MenuItem "Paste      "
+        │       │   ├── MenuItem "Delete Selection      "
+        │       │   ├── MenuItem "Delete Line      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS81OA
+        │       │   ├── MenuItem "Select All      "
+        │       │   ├── MenuItem "Duplicate Line / Selection      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS82NA
+        │       │   ├── MenuItem "Increase Indent      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS82NQ
+        │       │   ├── MenuItem "Decrease Indent      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS82Ng
+        │       │   └── MenuItem "Preferences...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS82OA
+        │       ├── Menu "Search"
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── MenuItem "Incremental Search      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMTg
+        │       │   ├── MenuItem "Highlight All      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMTk
+        │       │   ├── MenuItem "Find      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS82OQ
+        │       │   ├── MenuItem "Find Next      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83MQ
+        │       │   ├── MenuItem "Find Previous      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83Mg
+        │       │   ├── MenuItem "Find and Replace...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83Mw
+        │       │   └── MenuItem "Go to...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83Ng
+        │       ├── Menu "View"
+        │       │   ├── Unknown(separator)
+        │       │   ├── Menu "Color Scheme      "
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── MenuItem "None      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDU
+        │       │   │   ├── MenuItem "Classic      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDY
+        │       │   │   ├── MenuItem "Cobalt      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDc
+        │       │   │   ├── MenuItem "Kate      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDg
+        │       │   │   ├── MenuItem "Oblivion      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDk
+        │       │   │   ├── MenuItem "Solarized Dark      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTA
+        │       │   │   ├── MenuItem "Solarized Light      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTE
+        │       │   │   └── MenuItem "Tango      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTI
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── MenuItem "Line Numbers      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjA
+        │       │   ├── MenuItem "Menubar      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjE
+        │       │   ├── MenuItem "Toolbar      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjI
+        │       │   ├── MenuItem "Statusbar      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjM
+        │       │   ├── MenuItem "Fullscreen      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjQ
+        │       │   └── MenuItem "Select Font...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83Nw
+        │       ├── Menu "Document"
+        │       │   ├── Menu "Tab Size      "
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── MenuItem "2      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTM
+        │       │   │   ├── MenuItem "3      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTQ
+        │       │   │   ├── MenuItem "4      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTU
+        │       │   │   ├── MenuItem "8      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTY
+        │       │   │   ├── MenuItem "Other...      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTc
+        │       │   │   └── MenuItem "Insert Spaces      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTg
+        │       │   ├── Unknown(separator)
+        │       │   ├── Menu "Filetype      "
+        │       │   │   ├── Unknown(separator)
+        │       │   │   ├── Menu "Markup      "
+        │       │   │   │   ├── MenuItem "AsciiDoc      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNjg
+        │       │   │   │   ├── MenuItem "BibTeX      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNjk
+        │       │   │   │   ├── MenuItem "DTD      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzA
+        │       │   │   │   ├── MenuItem "Django Template      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzE
+        │       │   │   │   ├── MenuItem "DocBook      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzI
+        │       │   │   │   ├── MenuItem "ERB      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzM
+        │       │   │   │   ├── MenuItem "ERB (HTML)      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzQ
+        │       │   │   │   ├── MenuItem "ERB (JavaScript)      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzU
+        │       │   │   │   ├── MenuItem "HTML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzY
+        │       │   │   │   ├── MenuItem "Jade      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzc
+        │       │   │   │   ├── MenuItem "LaTeX      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzg
+        │       │   │   │   ├── MenuItem "MXML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNzk
+        │       │   │   │   ├── MenuItem "Mallard      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODA
+        │       │   │   │   ├── MenuItem "Markdown      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODE
+        │       │   │   │   ├── MenuItem "MediaWiki      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODI
+        │       │   │   │   ├── MenuItem "Sweave      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODM
+        │       │   │   │   ├── MenuItem "Tera Template      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODQ
+        │       │   │   │   ├── MenuItem "Texinfo      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODU
+        │       │   │   │   ├── MenuItem "XML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODY
+        │       │   │   │   ├── MenuItem "XSLT      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODc
+        │       │   │   │   ├── MenuItem "reStructuredText      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODg
+        │       │   │   │   └── MenuItem "txt2tags      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xODk
+        │       │   │   ├── Menu "Other      "
+        │       │   │   │   ├── MenuItem ".desktop      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTA
+        │       │   │   │   ├── MenuItem ".ini      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTE
+        │       │   │   │   ├── MenuItem "CMake      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTI
+        │       │   │   │   ├── MenuItem "CSS      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTM
+        │       │   │   │   ├── MenuItem "CSV      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTQ
+        │       │   │   │   ├── MenuItem "ChangeLog      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTU
+        │       │   │   │   ├── MenuItem "DPatch      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTY
+        │       │   │   │   ├── MenuItem "Diff      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTc
+        │       │   │   │   ├── MenuItem "Fluent      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTg
+        │       │   │   │   ├── MenuItem "GDB Log      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xOTk
+        │       │   │   │   ├── MenuItem "Graphviz Dot      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDA
+        │       │   │   │   ├── MenuItem "GtkRC      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDE
+        │       │   │   │   ├── MenuItem "JSON      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDI
+        │       │   │   │   ├── MenuItem "Less      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDM
+        │       │   │   │   ├── MenuItem "NSIS      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDQ
+        │       │   │   │   ├── MenuItem "OCL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDU
+        │       │   │   │   ├── MenuItem "Protobuf      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDY
+        │       │   │   │   ├── MenuItem "Puppet      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDc
+        │       │   │   │   ├── MenuItem "RPM spec      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDg
+        │       │   │   │   ├── MenuItem "SCSS      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMDk
+        │       │   │   │   ├── MenuItem "TOML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTA
+        │       │   │   │   ├── MenuItem "Terraform      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTE
+        │       │   │   │   ├── MenuItem "YAML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTI
+        │       │   │   │   ├── MenuItem "YARA      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTM
+        │       │   │   │   ├── MenuItem "Yacc      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ
+        │       │   │   │   ├── MenuItem "gettext translation      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTU
+        │       │   │   │   ├── MenuItem "libtool      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTY
+        │       │   │   │   ├── MenuItem "logcat      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTc
+        │       │   │   │   └── MenuItem "pkg-config      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTg
+        │       │   │   ├── Menu "Scientific      "
+        │       │   │   │   ├── MenuItem "FCL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTk
+        │       │   │   │   ├── MenuItem "GAP      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjA
+        │       │   │   │   ├── MenuItem "IDL/PV-WAVE/GDL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjE
+        │       │   │   │   ├── MenuItem "ImageJ      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjI
+        │       │   │   │   ├── MenuItem "Julia      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjM
+        │       │   │   │   ├── MenuItem "Matlab      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjQ
+        │       │   │   │   ├── MenuItem "Maxima      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjU
+        │       │   │   │   ├── MenuItem "Modelica      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjY
+        │       │   │   │   ├── MenuItem "Octave      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjc
+        │       │   │   │   ├── MenuItem "R      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjg
+        │       │   │   │   ├── MenuItem "SPICE      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMjk
+        │       │   │   │   ├── MenuItem "STAR      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzA
+        │       │   │   │   └── MenuItem "Scilab      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzE
+        │       │   │   ├── Menu "Script      "
+        │       │   │   │   ├── MenuItem "DOS Batch      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzI
+        │       │   │   │   ├── MenuItem "Fish      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzM
+        │       │   │   │   ├── MenuItem "GDScript      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzQ
+        │       │   │   │   ├── MenuItem "JSX      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzU
+        │       │   │   │   ├── MenuItem "JavaScript      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzY
+        │       │   │   │   ├── MenuItem "Lua      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzc
+        │       │   │   │   ├── MenuItem "PHP      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzg
+        │       │   │   │   ├── MenuItem "Perl      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMzk
+        │       │   │   │   ├── MenuItem "Python      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDA
+        │       │   │   │   ├── MenuItem "Python 2      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDE
+        │       │   │   │   ├── MenuItem "Ruby      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDI
+        │       │   │   │   ├── MenuItem "Tcl      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDM
+        │       │   │   │   ├── MenuItem "TypeScript      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDQ
+        │       │   │   │   ├── MenuItem "TypeScript JSX      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDU
+        │       │   │   │   ├── MenuItem "awk      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDY
+        │       │   │   │   ├── MenuItem "m4      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDc
+        │       │   │   │   └── MenuItem "sh      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDg
+        │       │   │   ├── Menu "Source      "
+        │       │   │   │   ├── MenuItem "ABNF      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNDk
+        │       │   │   │   ├── MenuItem "ANS-Forth94      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTA
+        │       │   │   │   ├── MenuItem "ASP      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTE
+        │       │   │   │   ├── MenuItem "ActionScript      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTI
+        │       │   │   │   ├── MenuItem "Ada      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTM
+        │       │   │   │   ├── MenuItem "Automake      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTQ
+        │       │   │   │   ├── MenuItem "BennuGD      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTU
+        │       │   │   │   ├── MenuItem "Bluespec SystemVerilog      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTY
+        │       │   │   │   ├── MenuItem "Boo      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTc
+        │       │   │   │   ├── MenuItem "C      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTg
+        │       │   │   │   ├── MenuItem "C#      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNTk
+        │       │   │   │   ├── MenuItem "C++      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjA
+        │       │   │   │   ├── MenuItem "C++ Header      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjE
+        │       │   │   │   ├── MenuItem "C/ObjC Header      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjI
+        │       │   │   │   ├── MenuItem "CG Shader Language      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjM
+        │       │   │   │   ├── MenuItem "COBOL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjQ
+        │       │   │   │   ├── MenuItem "CUDA      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjU
+        │       │   │   │   ├── MenuItem "Common Lisp      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjY
+        │       │   │   │   ├── MenuItem "D      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjc
+        │       │   │   │   ├── MenuItem "Dart      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjg
+        │       │   │   │   ├── MenuItem "Dockerfile      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNjk
+        │       │   │   │   ├── MenuItem "Eiffel      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzA
+        │       │   │   │   ├── MenuItem "Erlang      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzE
+        │       │   │   │   ├── MenuItem "F#      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzI
+        │       │   │   │   ├── MenuItem "Forth      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzM
+        │       │   │   │   ├── MenuItem "Fortran 95      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzQ
+        │       │   │   │   ├── MenuItem "Genie      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzU
+        │       │   │   │   ├── MenuItem "Go      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzY
+        │       │   │   │   ├── MenuItem "Gradle      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzc
+        │       │   │   │   ├── MenuItem "Groovy      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzg
+        │       │   │   │   ├── MenuItem "Haskell      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yNzk
+        │       │   │   │   ├── MenuItem "Haxe      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODA
+        │       │   │   │   ├── MenuItem "IDL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODE
+        │       │   │   │   ├── MenuItem "J      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODI
+        │       │   │   │   ├── MenuItem "Java      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODM
+        │       │   │   │   ├── MenuItem "Kotlin      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODQ
+        │       │   │   │   ├── MenuItem "LLVM IR      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODU
+        │       │   │   │   ├── MenuItem "Lean      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODY
+        │       │   │   │   ├── MenuItem "Lex      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODc
+        │       │   │   │   ├── MenuItem "Literate Haskell      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODg
+        │       │   │   │   ├── MenuItem "Logtalk      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yODk
+        │       │   │   │   ├── MenuItem "Makefile      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTA
+        │       │   │   │   ├── MenuItem "Meson      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTE
+        │       │   │   │   ├── MenuItem "Nemerle      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTI
+        │       │   │   │   ├── MenuItem "NetRexx      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTM
+        │       │   │   │   ├── MenuItem "OCaml      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTQ
+        │       │   │   │   ├── MenuItem "OOC      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTU
+        │       │   │   │   ├── MenuItem "Objective-C      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTY
+        │       │   │   │   ├── MenuItem "Objective-J      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTc
+        │       │   │   │   ├── MenuItem "Opal      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTg
+        │       │   │   │   ├── MenuItem "OpenCL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yOTk
+        │       │   │   │   ├── MenuItem "OpenGL Shading Language      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDA
+        │       │   │   │   ├── MenuItem "Pascal      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDE
+        │       │   │   │   ├── MenuItem "Pig      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDI
+        │       │   │   │   ├── MenuItem "PowerShell      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDM
+        │       │   │   │   ├── MenuItem "Prolog      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDQ
+        │       │   │   │   ├── MenuItem "Rust      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDU
+        │       │   │   │   ├── MenuItem "SPARQL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDY
+        │       │   │   │   ├── MenuItem "SQL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDc
+        │       │   │   │   ├── MenuItem "Scala      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDg
+        │       │   │   │   ├── MenuItem "Scheme      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMDk
+        │       │   │   │   ├── MenuItem "Solidity      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTA
+        │       │   │   │   ├── MenuItem "Standard ML      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTE
+        │       │   │   │   ├── MenuItem "Swift      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTI
+        │       │   │   │   ├── MenuItem "SystemVerilog      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTM
+        │       │   │   │   ├── MenuItem "Thrift      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTQ
+        │       │   │   │   ├── MenuItem "VB.NET      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTU
+        │       │   │   │   ├── MenuItem "VHDL      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTY
+        │       │   │   │   ├── MenuItem "Vala      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTc
+        │       │   │   │   └── MenuItem "Verilog      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMTg
+        │       │   │   └── MenuItem "Plain Text      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNTk
+        │       │   ├── Menu "Line Ending      "
+        │       │   │   ├── MenuItem "Unix (LF)      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNjU
+        │       │   │   ├── MenuItem "Mac (CR)      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNjY
+        │       │   │   └── MenuItem "DOS / Windows (CR LF)      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNjc
+        │       │   ├── Unknown(separator)
+        │       │   ├── Unknown(separator)
+        │       │   ├── MenuItem "Word Wrap      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjU
+        │       │   ├── MenuItem "Auto Indent      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjY
+        │       │   ├── MenuItem "Write Unicode BOM      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjg
+        │       │   ├── MenuItem "Viewer Mode      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjk
+        │       │   ├── MenuItem "Previous Tab      "
+        │       │   └── MenuItem "Next Tab      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84Nw
+        │       └── Menu "Help"
+        │           ├── MenuItem "Contents      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84OA
+        │           └── MenuItem "About      " actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84OQ
+        ├── Container [horizontal]
+        │   └── Unknown(tool bar) [horizontal]
+        │       ├── Container
+        │       │   └── Button "New" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzA
+        │       ├── Container
+        │       │   └── Button "Open..." [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzE
+        │       ├── Container
+        │       │   └── Button "Save" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzI
+        │       ├── Container
+        │       │   └── Button "Save As..." [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzM
+        │       ├── Container
+        │       │   └── Button "Reload" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzQ
+        │       ├── Container
+        │       │   └── Button "Close Tab" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzU
+        │       ├── Container
+        │       ├── Container
+        │       │   └── Button "Undo" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzY
+        │       ├── Container
+        │       │   └── Button "Redo" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzc
+        │       ├── Container
+        │       │   └── Button "Cut" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzg
+        │       ├── Container
+        │       │   └── Button "Copy" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzk
+        │       ├── Container
+        │       │   └── Button "Paste" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDA
+        │       ├── Container
+        │       ├── Container
+        │       │   └── Button "Find" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDE
+        │       ├── Container
+        │       │   └── Button "Find and Replace..." [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDI
+        │       ├── Container
+        │       │   └── Button "Go to..." [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDM
+        │       ├── Container
+        │       └── Container
+        │           └── Button "Fullscreen" [has-tooltip] actions=[Click] id=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDQ
+        ├── TabList
+        │   ├── Tab "review.txt" [focused,multi-line,selected]
+        │   │   └── Container
+        │   │       ├── TextInput value="GUI2TUI real editor review\nSection 0: accessibility workflow paragraph for semantic navigation.\nSection 1: accessibility workflow paragraph for semantic navigation.\nSection 2: accessibility workflow paragraph for semantic navigation.\nSection 3: accessibili\u{2026}" [editable,has-tooltip,multi-line]
+        │   │       ├── Slider [horizontal]
+        │   │       └── Slider [vertical]
+        │   └── Tab "Untitled 1" [multi-line]
+        │       └── Container
+        │           ├── TextInput [editable,has-tooltip,multi-line]
+        │           ├── Slider [horizontal]
+        │           └── Slider [vertical]
+        └── StatusBar [horizontal]

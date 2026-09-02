@@ -1,0 +1,50 @@
+┌ GUI2TUI — GUI2TUI Browser Fixture - Google Chrome ───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Web Document ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││ GUI2TUI Browser Fixture — 132 lines                                                                                                                        ││
+││> Document: GUI2TUI Browser Fixture                                                                                                                         ││
+││# GUI2TUI Browser Fixture                                                                                                                                   ││
+││GUI2TUI Browser Fixture                                                                                                                                     ││
+││Fixture navigation                                                                                                                                          ││
+││[Link] Architecture                                                                                                                                         ││
+││Architecture                                                                                                                                                ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││[Link] Evaluation                                                                                                                                           ││
+││Evaluation                                                                                                                                                  ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││Semantic content article                                                                                                                                    ││
+││# Semantic architecture                                                                                                                                     ││
+││Semantic architecture                                                                                                                                       ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││GUI2TUI turns accessibility semantics into terminal-native tasks and readable content.                                                                      ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││The reader deliberately reflows paragraphs instead of copying graphical coordinates.                                                                        ││
+││# Progressive materialization                                                                                                                               ││
+││Progressive materialization                                                                                                                                 ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││• [text unavailable through the application's accessibility interface]                                                                                      ││
+││•                                                                                                                                                           ││
+││Load the visible semantic viewport.                                                                                                                         ││
+││• [text unavailable through the application's accessibility interface]                                                                                      ││
+││•                                                                                                                                                           ││
+││Keep a small look-ahead window.                                                                                                                             ││
+││• [text unavailable through the application's accessibility interface]                                                                                      ││
+││•                                                                                                                                                           ││
+││Invalidate only content changed by accessibility events.                                                                                                    ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││Graphical layout is not the semantic contract.                                                                                                              ││
+││# Evaluation                                                                                                                                                ││
+││Evaluation                                                                                                                                                  ││
+││[text unavailable through the application's accessibility interface]                                                                                        ││
+││Status: original article paragraph.                                                                                                                         ││
+││[Link] Semantic reference                                                                                                                                   ││
+││Semantic reference                                                                                                                                          ││
+││[Link] Architecture diagram with semantic graph and terminal reader                                                                                         ││
+││[Media] Architecture diagram with semantic graph and terminal reader                                                                                        ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+│┌ GUI2TUI Browser Fixture - Google Chrome ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐│
+││  Untitled - Google Chrome                                                                                                                                  ││
+││  [ Selection (options unavailable) ▼ ]  (read-only)                                                                                                        ││
+││  [ Virtual semantic results: Active Alpha ▼ ]  (read-only)                                                                                                 ││
+│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help | Tab Focus | Enter Use | Loaded 391 semantic nodes via recursive walk in 273 ms                                                                         

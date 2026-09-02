@@ -1,0 +1,72 @@
+{
+  "application": "gtk-demo",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "presentation_coverage": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "semantic_detail_reader": "PASS",
+    "search_text_input_safe_fallback": "PASS",
+    "dynamic_control_visibility": "PASS",
+    "normal_scene_grouping": "PASS"
+  },
+  "result": "PASS",
+  "selector": "gtk4-demo",
+  "snapshot_wall_ms": 98.53,
+  "nodes": 91,
+  "advertised_action_nodes": 46,
+  "cache_forced_exit": 0,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 52,
+    "leaves": 7,
+    "primary": 1,
+    "structural": 0
+  },
+  "layout_timings_ms": {
+    "surface_inference": 0.082,
+    "topology_inference": 0.185,
+    "composition_planning": 0.0,
+    "layout_compilation": 0.004
+  },
+  "layout_reachability": {
+    "actionable": 22,
+    "unplaced": 0
+  },
+  "structural_noise": {
+    "user_relevant": 27,
+    "supporting": 7,
+    "structural_only": 0,
+    "diagnostic_only": 1,
+    "duplicate_command_summary": 1,
+    "flat_rows": 36
+  },
+  "spatial_evidence": {
+    "nodes": 95,
+    "candidates": 67,
+    "requests": 67,
+    "successes": 57,
+    "failures": 1,
+    "rejected": 9,
+    "elapsed_ms": 2.74
+  },
+  "presentation_coverage": {
+    "terminal_classes": 4,
+    "missing": 0
+  },
+  "first_frame_ms": 112.41,
+  "tui_bootstrap": {
+    "nodes": 95,
+    "strategy": "AT-SPI Cache",
+    "ms": 10
+  },
+  "resources_bootstrap": {
+    "rss_kib": 11748,
+    "fd": 17
+  },
+  "resources_after_workflow": {
+    "rss_kib": 13496,
+    "fd": 17
+  }
+}

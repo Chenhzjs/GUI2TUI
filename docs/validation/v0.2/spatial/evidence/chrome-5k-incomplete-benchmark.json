@@ -1,0 +1,68 @@
+{
+  "application": "chrome-large",
+  "mode": "benchmark",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS"
+  },
+  "result": "PASS",
+  "selector": "Google Chrome",
+  "snapshot_wall_ms": 3195.78,
+  "nodes": 5158,
+  "advertised_action_nodes": 5158,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 3627,
+    "leaves": 21,
+    "primary": 1,
+    "structural": 1
+  },
+  "layout_reachability": {
+    "actionable": 0,
+    "unplaced": 0
+  },
+  "spatial_evidence": {
+    "nodes": 5158,
+    "candidates": 128,
+    "requests": 128,
+    "successes": 79,
+    "failures": 0,
+    "rejected": 49,
+    "elapsed_ms": 2.587
+  },
+  "first_frame_ms": 3632.58,
+  "tui_bootstrap": {
+    "nodes": 5158,
+    "strategy": "recursive walk",
+    "ms": 3525
+  },
+  "resources_bootstrap": {
+    "rss_kib": 41844,
+    "fd": 19
+  },
+  "benchmark": [
+    {
+      "first_frame_ms": 3721.22,
+      "rss_kib": 41736,
+      "fd": 19
+    },
+    {
+      "first_frame_ms": 3768.71,
+      "rss_kib": 41696,
+      "fd": 19
+    },
+    {
+      "first_frame_ms": 3721.11,
+      "rss_kib": 41720,
+      "fd": 19
+    },
+    {
+      "first_frame_ms": 3646.54,
+      "rss_kib": 41676,
+      "fd": 19
+    }
+  ],
+  "warm_first_frame_median_ms": 3721.11
+}

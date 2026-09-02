@@ -1,0 +1,47 @@
+{
+  "application": "eog",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "command_dialog_close": "PASS",
+    "graphical_primary_normal_scene": "PASS",
+    "structural_noise_suppressed": "PASS"
+  },
+  "result": "PASS",
+  "selector": "eog",
+  "snapshot_wall_ms": 86.77,
+  "nodes": 117,
+  "advertised_action_nodes": 30,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 77,
+    "leaves": 4,
+    "primary": 1,
+    "structural": 8
+  },
+  "layout_reachability": {
+    "actionable": 28,
+    "unplaced": 0
+  },
+  "spatial_evidence": {
+    "nodes": 117,
+    "candidates": 53,
+    "requests": 53,
+    "successes": 25,
+    "failures": 1,
+    "rejected": 27,
+    "elapsed_ms": 1.596
+  },
+  "first_frame_ms": 117.52,
+  "resources_bootstrap": {
+    "rss_kib": 10616,
+    "fd": 19
+  },
+  "resources_after_workflow": {
+    "rss_kib": 12168,
+    "fd": 19
+  }
+}

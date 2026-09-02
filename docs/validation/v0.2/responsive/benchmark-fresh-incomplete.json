@@ -1,0 +1,59 @@
+{
+  "condition": "fresh/incomplete AT-SPI Cache",
+  "fixture_nodes": 5158,
+  "cache_items": 228,
+  "runs_per_revision": 5,
+  "baseline": {
+    "revision": "8f5bda736892372e395bac95a817644ea567c099",
+    "layout": "v0.1 flat",
+    "samples": [
+      {"result_dir": "/var/tmp/gui2tui-p4c-ucjNAg", "first_frame_ms": 3656.25, "semantic_bootstrap_ms": 3618, "rss_kib": 38420, "fd": 18},
+      {"result_dir": "/var/tmp/gui2tui-p4c-36Pl8r", "first_frame_ms": 3833.52, "semantic_bootstrap_ms": 3738, "rss_kib": 38464, "fd": 18},
+      {"result_dir": "/var/tmp/gui2tui-p4c-HDvXBp", "first_frame_ms": 3766.44, "semantic_bootstrap_ms": 3645, "rss_kib": 38888, "fd": 18},
+      {"result_dir": "/var/tmp/gui2tui-p4c-m2Tbtc", "first_frame_ms": 3767.55, "semantic_bootstrap_ms": 3656, "rss_kib": 38856, "fd": 18},
+      {"result_dir": "/var/tmp/gui2tui-p4c-61E5US", "first_frame_ms": 3981.53, "semantic_bootstrap_ms": 3861, "rss_kib": 38368, "fd": 18}
+    ],
+    "median": {"first_frame_ms": 3767.55, "semantic_bootstrap_ms": 3656, "rss_kib": 38464, "fd": 18}
+  },
+  "current": {
+    "revision": "8f5bda736892372e395bac95a817644ea567c099+uncommitted-v0.2B",
+    "layout": "spatial",
+    "samples": [
+      {"result_dir": "/var/tmp/gui2tui-p4c-7ggzh5", "first_frame_ms": 3862.66, "semantic_bootstrap_ms": 3788, "rss_kib": 42172, "fd": 18, "geometry_ms": 3.859, "surface_ms": 4.564, "topology_ms": 17.140, "composition_ms": 0.001, "layout_ms": 0.022},
+      {"result_dir": "/var/tmp/gui2tui-p4c-ysaiQT", "first_frame_ms": 3836.89, "semantic_bootstrap_ms": 3742, "rss_kib": 42248, "fd": 18, "geometry_ms": 3.644, "surface_ms": 3.995, "topology_ms": 17.150, "composition_ms": 0.001, "layout_ms": 0.024},
+      {"result_dir": "/var/tmp/gui2tui-p4c-pRr5ca", "first_frame_ms": 3773.47, "semantic_bootstrap_ms": 3657, "rss_kib": 42340, "fd": 18, "geometry_ms": 3.398, "surface_ms": 4.475, "topology_ms": 17.490, "composition_ms": 0.000, "layout_ms": 0.023},
+      {"result_dir": "/var/tmp/gui2tui-p4c-uETGEL", "first_frame_ms": 4064.85, "semantic_bootstrap_ms": 3906, "rss_kib": 42196, "fd": 18, "geometry_ms": 3.398, "surface_ms": 4.212, "topology_ms": 17.210, "composition_ms": 0.001, "layout_ms": 0.024},
+      {"result_dir": "/var/tmp/gui2tui-p4c-lrC6q8", "first_frame_ms": 4052.65, "semantic_bootstrap_ms": 3886, "rss_kib": 42376, "fd": 18, "geometry_ms": 4.614, "surface_ms": 4.885, "topology_ms": 18.381, "composition_ms": 0.001, "layout_ms": 0.030}
+    ],
+    "median": {
+      "first_frame_ms": 3862.66,
+      "semantic_bootstrap_ms": 3788,
+      "rss_kib": 42248,
+      "fd": 18,
+      "geometry_ms": 3.644,
+      "geometry_rpcs": 128,
+      "surface_ms": 4.475,
+      "topology_ms": 17.210,
+      "composition_ms": 0.001,
+      "layout_ms": 0.024,
+      "combined_spatial_presentation_ms": 25.354
+    }
+  },
+  "comparison": {
+    "first_frame_delta_ms": 95.11,
+    "first_frame_delta_percent": 2.52,
+    "semantic_bootstrap_delta_ms": 132,
+    "semantic_bootstrap_delta_percent": 3.61,
+    "rss_delta_kib": 3784,
+    "rss_delta_percent": 9.84,
+    "fd_delta": 0,
+    "node_count_equal": true,
+    "regression_threshold_exceeded": false
+  },
+  "fallback": {
+    "strategy": "recursive walk",
+    "reason": "bulk Cache incomplete: 228 reachable records, 3 missing child references",
+    "cache_ready_reproduction": "not required for this same-condition comparison",
+    "readiness_wait_or_fixed_sleep_added": false
+  }
+}

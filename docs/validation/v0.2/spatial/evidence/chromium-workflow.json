@@ -1,0 +1,56 @@
+{
+  "application": "chrome",
+  "mode": "workflow",
+  "checks": {
+    "discovery_tree": "PASS",
+    "layout_reachability": "PASS",
+    "normal_scene_has_no_compiler_dump": "PASS",
+    "progressive_cancellation": "PASS",
+    "reader_outline_search_frames": "PASS",
+    "external_content_mutation": "PASS",
+    "table_navigation": "PASS",
+    "headless_modality_no_fake_open": "PASS",
+    "headless_reference_payload_zero": "PASS",
+    "reader_death_restart_stale_generation": "PASS"
+  },
+  "result": "PASS",
+  "selector": "Google Chrome",
+  "snapshot_wall_ms": 258.22,
+  "nodes": 391,
+  "advertised_action_nodes": 391,
+  "cache_forced_exit": 1,
+  "spatial_plan": {
+    "composition": "ContentDominant",
+    "regions": 243,
+    "leaves": 23,
+    "primary": 1,
+    "structural": 1
+  },
+  "layout_reachability": {
+    "actionable": 3,
+    "unplaced": 0
+  },
+  "spatial_evidence": {
+    "nodes": 391,
+    "candidates": 128,
+    "requests": 128,
+    "successes": 80,
+    "failures": 0,
+    "rejected": 48,
+    "elapsed_ms": 2.391
+  },
+  "first_frame_ms": 316.66,
+  "tui_bootstrap": {
+    "nodes": 391,
+    "strategy": "recursive walk",
+    "ms": 273
+  },
+  "resources_bootstrap": {
+    "rss_kib": 13796,
+    "fd": 19
+  },
+  "resources_after_workflow": {
+    "rss_kib": 14136,
+    "fd": 19
+  }
+}
