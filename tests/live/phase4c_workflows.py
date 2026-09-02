@@ -894,11 +894,28 @@ def workflow(terminal, selector, app, command):
             REPORT["checks"]["search_text_input_safe_fallback"] = "PASS"
         search = locator_for(inspect("--app", selector).stdout, "ToggleButton", "Search")
         inspect("--action-name", search, "Click")
-        hidden_frame = save("search-hidden-frame.txt", terminal.pump(1))
-        hidden = save("search-hidden-tree.txt", inspect("--app", selector).stdout)
-        hidden_search = next(line for line in hidden.splitlines()
-                             if 'ToggleButton "Search"' in line)
+        deadline = time.monotonic() + 8
+        while True:
+            hidden_frame = terminal.pump(.2)
+            hidden = inspect("--app", selector).stdout
+            hidden_plan = inspect("--app", selector, "--dump-layout-plan").stdout
+            hidden_search = next(line for line in hidden.splitlines()
+                                 if 'ToggleButton "Search"' in line)
+            if ("checked" not in hidden_search
+                    and "pressed" not in hidden_search
+                    and "[Text input]" not in hidden_frame
+                    and 'presentation=InputSurface title="Input"' not in hidden_plan):
+                break
+            assert time.monotonic() < deadline, (
+                hidden_search,
+                f"text_input_visible={'[Text input]' in hidden_frame}",
+                hidden_plan,
+            )
+        save("search-hidden-frame.txt", hidden_frame)
+        save("search-hidden-tree.txt", hidden)
+        save("search-hidden-plan.txt", hidden_plan)
         assert "checked" not in hidden_search and "pressed" not in hidden_search, hidden_search
+        assert 'presentation=InputSurface title="Input"' not in hidden_plan, hidden_plan
         coverage = save(
             "search-hidden-coverage.txt",
             inspect("--app", selector, "--dump-presentation-coverage").stdout)

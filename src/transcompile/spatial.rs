@@ -1765,7 +1765,7 @@ fn is_persistent_surface_anchor(node: &SemanticNode) -> bool {
     ) || is_presentable_single_line_input(node)
 }
 
-fn is_presentable_single_line_input(node: &SemanticNode) -> bool {
+fn is_single_line_editable_input(node: &SemanticNode) -> bool {
     node.role == SemanticRole::TextInput
         && node.text_input_kind == Some(TextInputKind::Plain)
         && (node.capabilities.contains(&SemanticCapability::EditText)
@@ -1774,6 +1774,14 @@ fn is_presentable_single_line_input(node: &SemanticNode) -> bool {
             .states
             .iter()
             .any(|state| matches!(state, SemanticState::Other(value) if value == "multi-line"))
+}
+
+fn is_presentable_single_line_input(node: &SemanticNode) -> bool {
+    is_single_line_editable_input(node)
+        && node
+            .states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == "showing"))
 }
 
 fn presentation_container_owns(
@@ -3604,6 +3612,31 @@ fn refine_surface_policy(
             .iter()
             .filter_map(|id| nodes.get(id).copied())
             .collect::<Vec<_>>();
+        let contains_hidden_input = source_nodes.iter().any(|node| {
+            is_single_line_editable_input(node) && !is_presentable_single_line_input(node)
+        });
+        let contains_showing_input = source_nodes
+            .iter()
+            .any(|node| is_presentable_single_line_input(node));
+        let hidden_input_only = contains_hidden_input
+            && !contains_showing_input
+            && source_nodes.iter().all(|node| {
+                is_single_line_editable_input(node)
+                    || (node.actions.is_empty() && node.capabilities.is_empty())
+            });
+        if hidden_input_only {
+            region.presentation.kind = RegionPresentationKind::DiagnosticOnly;
+            region.presentation.dominant_eligible = false;
+            region.priority = PresentationPriority::HiddenByDefault;
+            region.importance = LayoutImportance::Structural;
+            region.obligation = PresentationObligation::DiagnosticOnly;
+            region.demand = LayoutDemand::Hidden;
+            region.visibility = VisibilityGuarantee::DiscoverableOnly;
+            region
+                .reasons
+                .push("non-showing input surface is omitted from the normal scene".into());
+            continue;
+        }
         let indistinguishable_noninteractive_image = !source_nodes.is_empty()
             && region
                 .presentation
@@ -4666,6 +4699,8 @@ mod tests {
         let mut input = node(id, SemanticRole::TextInput, name, geometry);
         input.text_input_kind = Some(TextInputKind::Plain);
         input.states.push(SemanticState::Editable);
+        input.states.push(SemanticState::Other("showing".into()));
+        input.states.push(SemanticState::Other("visible".into()));
         input.capabilities.push(SemanticCapability::EditText);
         input
     }
@@ -4735,6 +4770,10 @@ mod tests {
     fn top_level_input_is_persistent_but_document_local_input_is_not_promoted() {
         let mut root = node(0, SemanticRole::Window, "app", Some((0, 0, 1000, 700)));
         let top = plain_input(1, "Destination", Some((0, 0, 1000, 50)));
+        let mut hidden = plain_input(4, "Hidden filter", Some((0, 0, 1000, 50)));
+        hidden.states.retain(|state| {
+            !matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible")
+        });
         let mut document = node(
             2,
             SemanticRole::Document,
@@ -4746,7 +4785,7 @@ mod tests {
             "Search this document",
             Some((200, 150, 500, 40)),
         ));
-        root.children = vec![top, document];
+        root.children = vec![top, hidden, document];
         let analysis = analyze_regions(&root);
         let evidence = SpatialEvidenceIndex::from_tree(
             &root,
@@ -4775,6 +4814,14 @@ mod tests {
             assert_ne!(local.obligation, PresentationObligation::Persistent);
             assert_eq!(local.purpose, InteractionPurpose::Search);
         }
+        let hidden = layout
+            .plan
+            .regions
+            .iter()
+            .find(|region| region.source_nodes.contains(&RuntimeNodeId::new(4)))
+            .expect("hidden input remains diagnostic");
+        assert_eq!(hidden.demand, LayoutDemand::Hidden);
+        assert_eq!(hidden.visibility, VisibilityGuarantee::DiscoverableOnly);
     }
 
     #[test]
