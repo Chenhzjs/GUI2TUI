@@ -5,16 +5,16 @@ represented directly or collapsed: 5
 collapsed but reachable: 0
 discoverable: 1
 primary task represented: true
-persistent inputs: 1/1
-control surfaces: 2/2
+persistent inputs: 0/0
+control surfaces: 3/3
 tab/current contexts: 1/1
 meaningful statuses: 0/0
 command surfaces discoverable: 1
 structural suppressed: 45
 missing: []
 Direct surface coverage:
-Pinned surfaces: 2
-directly represented: 2
+Pinned surfaces: 1
+directly represented: 1
 forced to collapse: 0
 improperly collapsed: []
 Terminal 100x36 class=Medium direct=3 collapsed=4
@@ -24,16 +24,16 @@ represented directly or collapsed: 5
 collapsed but reachable: 2
 discoverable: 1
 primary task represented: true
-persistent inputs: 1/1
-control surfaces: 2/2
+persistent inputs: 0/0
+control surfaces: 3/3
 tab/current contexts: 1/1
 meaningful statuses: 0/0
 command surfaces discoverable: 1
 structural suppressed: 45
 missing: []
 Direct surface coverage:
-Pinned surfaces: 2
-directly represented: 2
+Pinned surfaces: 1
+directly represented: 1
 forced to collapse: 0
 improperly collapsed: []
 Terminal 80x30 class=Medium direct=3 collapsed=4
@@ -43,34 +43,34 @@ represented directly or collapsed: 5
 collapsed but reachable: 2
 discoverable: 1
 primary task represented: true
-persistent inputs: 1/1
-control surfaces: 2/2
+persistent inputs: 0/0
+control surfaces: 3/3
 tab/current contexts: 1/1
 meaningful statuses: 0/0
 command surfaces discoverable: 1
 structural suppressed: 45
 missing: []
 Direct surface coverage:
-Pinned surfaces: 2
-directly represented: 2
+Pinned surfaces: 1
+directly represented: 1
 forced to collapse: 0
 improperly collapsed: []
-Terminal 60x24 class=Narrow direct=4 collapsed=3
+Terminal 60x24 class=Narrow direct=3 collapsed=4
 Semantic surface coverage:
 Persistent surfaces: 5
 represented directly or collapsed: 5
-collapsed but reachable: 1
+collapsed but reachable: 2
 discoverable: 1
 primary task represented: true
-persistent inputs: 1/1
-control surfaces: 2/2
+persistent inputs: 0/0
+control surfaces: 3/3
 tab/current contexts: 1/1
 meaningful statuses: 0/0
 command surfaces discoverable: 1
 structural suppressed: 45
 missing: []
 Direct surface coverage:
-Pinned surfaces: 2
-directly represented: 2
+Pinned surfaces: 1
+directly represented: 1
 forced to collapse: 0
 improperly collapsed: []

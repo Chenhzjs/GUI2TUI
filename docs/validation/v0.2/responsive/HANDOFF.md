@@ -4,7 +4,7 @@
 
 Phase: 0.2B — Responsive Region Composition & Semantic Surface Preservation  
 Starting revision: `8f5bda736892372e395bac95a817644ea567c099`  
-Validated code HEAD: `8f28082bd1863e18ea51f14b6449e2cd0ca295d9`  
+Validated code HEAD: `aaf2c1ef56a2066cc2a3cab85d2555e9cfcf4b40`
 SpatialTopology: implemented with normalized inference-only geometry and generic relations  
 PresentationObligation: implemented and orthogonal to size  
 LayoutDemand: implemented and refined from realized payload  
@@ -33,6 +33,8 @@ The pinned/direct visibility contract, real dynamic tab/control update checks, f
 - `ba07e66 feat: add generic spatial presentation architecture`
 - `40d2d4d feat: render and navigate responsive spatial scenes`
 - `8f28082 test: validate responsive spatial workflows`
+- `bd44dad docs: record v0.2 spatial validation`
+- `aaf2c1e fix: suppress hidden presentation inputs`
 - No reset, rebase, tag move or worktree discard occurred.
 
 ---
@@ -237,7 +239,7 @@ The graphical task remains the default active surface with honest `[fidelity-req
 
 ![GTK Demo narrow](gtk-demo-narrow.png)
 
-Generic multiline semantic content remains the main detail surface while the demo list, search/input, current tab and Run controls remain separate compact surfaces. The real Search toggle check observed the control surface pressed/shown and then hidden again; the TUI refreshed without restart, retained no stale pinned surface, and coverage stayed missing=0/improperly-collapsed=0. The result follows semantic payload, state, ancestry and topology; no toolkit identity participates.
+Generic multiline semantic content remains the main detail surface while the demo list, search/input, current tab and Run controls remain separate compact surfaces. The real Search toggle check observed the control surface pressed/shown and then hidden again. After hiding, the TextInput remained in the AT-SPI tree without `showing`, the refreshed layout contained no `InputSurface`, the TUI retained no stale input row, and coverage stayed missing=0/improperly-collapsed=0 without restart. The result follows semantic payload, state, ancestry and topology; no toolkit identity participates. Raw before/after tree, scene, plan, frame and coverage evidence is under `dynamic/gtk-demo-*`.
 
 ---
 
@@ -358,6 +360,6 @@ Yes. GUI2TUI now uses generic semantic evidence plus trusted GUI spatial topolog
 
 ## 30. Next Codex context
 
-GUI2TUI v0.2B 已在 `v0.2/spatial-layout` 完成并按逻辑提交。核心提交为 `ba07e66`（空间证据/拓扑/呈现模型）、`40d2d4d`（响应式 renderer 与 region 交互）、`8f28082`（真实 workflow 与动态验证）。新增独立 `VisibilityGuarantee`：应用级单行输入及当前 tab/context 为 Pinned，紧凑控制面为 PreferDirect；响应式选择先满足通用最小直显尺寸，F6 仅承接可折叠部分。`PresentationCoverageAudit` 已拆为语义覆盖与直显覆盖；五个真实 workflow 在 140/100/80/60 列均 missing=0、improperly-collapsed=0、unplaced=0。13 张原图及逐宽度诊断已存入 responsive 目录。Chromium 60 列仍直显 Address/Search 与 current context；EOG 窄屏保留紧凑缩放行；Qt Designer 保持非等分多区。Mousepad 真实证据显示 640x25 MenuBar 可安全汇入 Commands，另一个 tool bar 不 showing、几何无效且无安全子控件，因此未虚构按钮。真实动态验证已通过：Mousepad 新建 tab 后安全切回旧 tab，GTK Demo Search 显示/隐藏无需重启且无陈旧 surface。5K 同条件性能 +2.52%，128/5158 几何 RPC；完整 Cache 不可复现属于环境限制，未加入等待 hack。macOS 280 与 Linux 281 tests、fmt/check/clippy/diff 全部通过。后续不得回退 v0.1 tag 或加入应用/toolkit 特判；下一阶段若启动，应另行定义而非继续扩展 0.2B。
+GUI2TUI v0.2B 已在 `v0.2/spatial-layout` 完成并按逻辑提交。核心提交为 `ba07e66`（空间证据/拓扑/呈现模型）、`40d2d4d`（响应式 renderer 与 region 交互）、`8f28082`（真实 workflow 与动态验证）、`aaf2c1e`（抑制 non-showing 输入的陈旧呈现）。新增独立 `VisibilityGuarantee`：应用级单行输入及当前 tab/context 为 Pinned，紧凑控制面为 PreferDirect；响应式选择先满足通用最小直显尺寸，F6 仅承接可折叠部分。`PresentationCoverageAudit` 已拆为语义覆盖与直显覆盖；五个真实 workflow 在 140/100/80/60 列均 missing=0、improperly-collapsed=0、unplaced=0。13 张原图及逐宽度诊断已存入 responsive 目录。Chromium 60 列仍直显 Address/Search 与 current context；EOG 窄屏保留紧凑缩放行；Qt Designer 保持非等分多区。Mousepad 真实证据显示 640x25 MenuBar 可安全汇入 Commands，另一个 tool bar 不 showing、几何无效且无安全子控件，因此未虚构按钮。真实动态验证已通过：Mousepad 新建 tab 后安全切回旧 tab；GTK Demo Search 隐藏后 AT-SPI 节点虽仍存在但无 showing，layout 不再生成 InputSurface，且无需重启。5K 同条件性能 +2.52%，128/5158 几何 RPC；完整 Cache 不可复现属于环境限制，未加入等待 hack。macOS 280 与 Linux 281 tests、fmt/check/clippy/diff 全部通过。后续不得回退 v0.1 tag 或加入应用/toolkit 特判；下一阶段若启动，应另行定义而非继续扩展 0.2B。
 
 ===== END GUI2TUI v0.2 PHASE 0.2B HANDOFF =====

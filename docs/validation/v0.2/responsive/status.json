@@ -2,11 +2,12 @@
   "phase": "0.2B",
   "status": "VALIDATED",
   "starting_revision": "8f5bda736892372e395bac95a817644ea567c099",
-  "validated_code_head": "8f28082bd1863e18ea51f14b6449e2cd0ca295d9",
+  "validated_code_head": "aaf2c1ef56a2066cc2a3cab85d2555e9cfcf4b40",
   "phase_commits": [
     "ba07e66222c43531ef93fea65b86f9d41e8c773c",
     "40d2d4d11aae3ff883ca34272cd467ac7e939614",
-    "8f28082bd1863e18ea51f14b6449e2cd0ca295d9"
+    "8f28082bd1863e18ea51f14b6449e2cd0ca295d9",
+    "aaf2c1ef56a2066cc2a3cab85d2555e9cfcf4b40"
   ],
   "presentation_coverage": {
     "reference_workflows": 5,
@@ -51,7 +52,7 @@
   },
   "dynamic_surface_validation": {
     "current_context": "PASS: Mousepad new tab then safe AT-SPI Selection back to review.txt",
-    "control_visibility": "PASS: GTK Demo Search toggle shown then hidden without restart",
+    "control_visibility": "PASS: GTK Demo Search toggle shown then hidden without restart; non-showing input produces no stale InputSurface",
     "coverage_missing": 0,
     "improperly_collapsed_pinned": 0,
     "evidence_directory": "dynamic"

@@ -1,0 +1,38 @@
+Scene title="GTK Demo"
+  Element 36 strategy=StructuredSummary kind=DocumentSummary { title: "Info", blocks: 1, headings: 0, links: 0, forms: 0, completeness: "Complete" } sources=[73] binding=runtime:73 intent=BeginRead capability=BrowseContent
+  Element 0 strategy=Unsupported kind=Unsupported { label: "Search" } sources=[5]
+  Element 1 strategy=Selector kind=Group { label: "Demo list" } sources=[10]
+  Element 2 strategy=Selector kind=SelectionItem { label: "Item", selected: true } sources=[11] binding=runtime:11 intent=Select capability=Select
+  Element 3 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[14] binding=runtime:14 intent=Select capability=Select
+  Element 4 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[17] binding=runtime:17 intent=Select capability=Select
+  Element 5 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[20] binding=runtime:20 intent=Select capability=Select
+  Element 6 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[23] binding=runtime:23 intent=Select capability=Select
+  Element 7 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[26] binding=runtime:26 intent=Select capability=Select
+  Element 8 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[29] binding=runtime:29 intent=Select capability=Select
+  Element 9 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[32] binding=runtime:32 intent=Select capability=Select
+  Element 10 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[35] binding=runtime:35 intent=Select capability=Select
+  Element 11 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[38] binding=runtime:38 intent=Select capability=Select
+  Element 12 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[41] binding=runtime:41 intent=Select capability=Select
+  Element 13 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[44] binding=runtime:44 intent=Select capability=Select
+  Element 14 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[47] binding=runtime:47 intent=Select capability=Select
+  Element 15 strategy=Selector kind=SelectionItem { label: "Item", selected: false } sources=[50] binding=runtime:50 intent=Select capability=Select
+  Element 16 strategy=Unsupported kind=Unsupported { label: "Slider" } sources=[53]
+  Element 17 strategy=Unsupported kind=Unsupported { label: "TabList" } sources=[57]
+  Element 18 strategy=DirectWidget kind=Button { label: "Previous tab" } sources=[58] binding=runtime:58 intent=Activate capability=Activate
+  Element 19 strategy=Unsupported kind=Unsupported { label: "Info" } sources=[59]
+  Element 20 strategy=Unsupported kind=Unsupported { label: "Source" } sources=[61]
+  Element 21 strategy=Unsupported kind=Unsupported { label: "fontify.h" } sources=[63]
+  Element 22 strategy=Unsupported kind=Unsupported { label: "fontify.c" } sources=[65]
+  Element 23 strategy=Unsupported kind=Unsupported { label: "main.ui" } sources=[67]
+  Element 24 strategy=DirectWidget kind=Button { label: "Next tab" } sources=[69] binding=runtime:69 intent=Activate capability=Activate
+  Element 25 strategy=ReflowGroup kind=Group { label: "Page 1" } sources=[71]
+  Element 27 strategy=ReflowGroup kind=Group { label: "Page 2" } sources=[74]
+  Element 28 strategy=ReflowGroup kind=Group { label: "Page 3" } sources=[75]
+  Element 29 strategy=ReflowGroup kind=Group { label: "Page 4" } sources=[76]
+  Element 30 strategy=ReflowGroup kind=Group { label: "Page 5" } sources=[77]
+  Element 31 strategy=DirectWidget kind=Button { label: "Run" } sources=[82] binding=runtime:82 intent=Activate capability=Activate
+  Element 32 strategy=DirectWidget kind=Toggle { label: "Search", pressed: true } sources=[84] binding=runtime:84 intent=Toggle capability=Toggle
+  Element 33 strategy=StructuredSummary kind=Text { text: "GTK Demo" } sources=[85]
+  Element 34 strategy=DirectWidget kind=Button { label: "Primary menu" } sources=[87] binding=runtime:87 intent=Activate capability=None
+  Element 35 strategy=CommandList kind=CommandHeader { label: "Commands (3 available — press : to browse/search)" } sources=[91]
+Metrics elements=36 interactive=20 commands=0 opaque=0 unsupported=8

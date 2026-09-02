@@ -13,7 +13,7 @@
   },
   "result": "PASS",
   "selector": "gtk4-demo",
-  "snapshot_wall_ms": 98.53,
+  "snapshot_wall_ms": 96.03,
   "nodes": 91,
   "advertised_action_nodes": 46,
   "cache_forced_exit": 0,
@@ -25,8 +25,8 @@
     "structural": 0
   },
   "layout_timings_ms": {
-    "surface_inference": 0.082,
-    "topology_inference": 0.185,
+    "surface_inference": 0.087,
+    "topology_inference": 0.181,
     "composition_planning": 0.0,
     "layout_compilation": 0.004
   },
@@ -49,24 +49,24 @@
     "successes": 57,
     "failures": 1,
     "rejected": 9,
-    "elapsed_ms": 2.74
+    "elapsed_ms": 3.008
   },
   "presentation_coverage": {
     "terminal_classes": 4,
     "missing": 0
   },
-  "first_frame_ms": 112.41,
+  "first_frame_ms": 121.3,
   "tui_bootstrap": {
     "nodes": 95,
     "strategy": "AT-SPI Cache",
     "ms": 10
   },
   "resources_bootstrap": {
-    "rss_kib": 11748,
-    "fd": 17
+    "rss_kib": 11968,
+    "fd": 18
   },
   "resources_after_workflow": {
-    "rss_kib": 13496,
-    "fd": 17
+    "rss_kib": 13640,
+    "fd": 18
   }
 }
