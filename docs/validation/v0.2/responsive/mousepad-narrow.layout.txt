@@ -7,7 +7,7 @@ LayoutPlan generation=1 trust=Consistent composition=ContentDominant regions=245
     presentation_reasons: application/window container organizes descendants but is not a pane itself
     reasons: semantic region = Navigation; geometry unavailable; semantic hierarchy fallback; role = Application
   region=1 semantic=245 kind=Unknown priority=HiddenByDefault obligation=DiagnosticOnly demand=Hidden visibility=DiscoverableOnly purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 0, width: 640, height: 480 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 1000 })
-    presentation=DiagnosticOnly title="/Users/chenhz/Documents/GUI2TUI/tests/fixtures/spatial_review.txt - Mousepad" items=0 dominant_eligible=false sources=[RegionId(245)] nodes=[RuntimeNodeId(2)]
+    presentation=DiagnosticOnly title="<checkout>/tests/fixtures/spatial_review.txt - Mousepad" items=0 dominant_eligible=false sources=[RegionId(245)] nodes=[RuntimeNodeId(2)]
     presentation_reasons: application/window container organizes descendants but is not a pane itself; window remains structural because a descendant content surface owns presentation
     reasons: semantic region = Navigation; role = Window
   region=2 semantic=244 kind=Unknown priority=Auxiliary obligation=Persistent demand=Minimal visibility=PreferDirect purpose=Unknown bounds=Some(SpatialBounds { x: 0, y: 0, width: 640, height: 480 }) space=Screen normalized=Some(NormalizedBounds { x: 0, y: 0, width: 1000, height: 1000 })
