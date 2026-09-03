@@ -11,13 +11,13 @@ SemanticRegion + bounded SpatialEvidenceIndex
     -> semantic surface selection/coalescing
     -> responsive composition
     -> terminal-independent TuiLayoutPlan
-    -> optional experimental renderer (`gui2tui --layout spatial`)
+    -> responsive renderer (the default; `gui2tui --layout spatial` is explicit)
 ```
 
-The stable v0.1 renderer remains the default. The spatial renderer is an
-explicit prototype used to prove hierarchy, dominance, grouping, bounded
-inline content and width-aware semantic surface preservation in the normal
-application scene.
+The v0.2 spatial renderer is the default user experience. The compatibility
+linear renderer remains available with `--layout flat` for workflows that need
+the pre-v0.2 presentation. Both modes share the same semantic/runtime
+contracts; spatial composition is presentation-only.
 
 ## Evidence and trust
 
@@ -103,7 +103,7 @@ scene excludes blocked background sources from the region order.
 
 ## Renderer
 
-The experimental renderer consumes `TuiLayoutPlan` and realizes bordered
+The renderer consumes `TuiLayoutPlan` and realizes bordered
 panes, stacks, horizontal/vertical splits, compact support bars, overlays and a
 scrollable content viewport. `LayoutImportance::{Dominant, Supporting,
 Compact, Structural}` controls terminal-native allocation independently of GUI

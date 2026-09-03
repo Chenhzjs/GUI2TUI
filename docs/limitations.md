@@ -1,4 +1,4 @@
-# v0.1 limitations
+# v0.2 limitations
 
 - Applications must expose useful Linux accessibility semantics. GTK/Qt/browser implementations
   differ. Read-only/unavailable is an honest result, not an invitation to inject guessed actions.

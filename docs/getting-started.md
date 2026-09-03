@@ -1,16 +1,16 @@
 # Getting started
 
-GUI2TUI presents accessibility semantics as terminal controls and a document Reader.
+GUI2TUI v0.2 presents accessibility semantics and spatial relationships as a
+responsive terminal application, with terminal controls and a document Reader.
 It is useful where applications expose enough semantic information; unsupported controls
 are visibly read-only, never guessed mouse clicks or anonymous actions.
 
 ## Manual installation
 
-v0.1.1 is marked pre-release because its saved-launcher wait could block and a
-strict Snap/private-D-Bus incompatibility was not diagnosed early. Until the
-corrective v0.1.2 package is published, build the current source on Linux with
-`cargo build --release` and use `target/release/gui2tui`. Do not treat v0.1.1
-as launcher-readiness evidence.
+The v0.2.0 release candidate uses the responsive spatial presentation by
+default. Build the current source on Linux with `cargo build --release` and
+use `target/release/gui2tui`; `--layout flat` remains available as a
+compatibility fallback.
 
 The release exposes one user command. Keep its private implementation
 components in the archive layout:
@@ -38,7 +38,7 @@ provide session accessibility. The binary does not link against GTK/Qt.
 
 ```bash
 gui2tui doctor
-gui2tui                # application selector, no required config
+gui2tui                # application selector with responsive v0.2 scenes
 gui2tui --app NAME     # exact or unambiguous accessible application name
 ```
 

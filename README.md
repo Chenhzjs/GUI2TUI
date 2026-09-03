@@ -4,10 +4,10 @@
 
 # GUI2TUI
 
-**Turn Linux GUI semantics into terminal-native workflows.**
+**Turn Linux GUI semantics and spatial relationships into responsive terminal-native workflows.**
 
-GUI2TUI recompiles accessibility-exposed application semantics into an
-interactive TUI - not pixels into ASCII.
+GUI2TUI recompiles accessibility-exposed application semantics and spatial
+topology into an interactive TUI — not pixels into ASCII.
 
 [![Release](https://img.shields.io/github/v/release/Chenhzjs/GUI2TUI?display_name=tag&sort=semver)](https://github.com/Chenhzjs/GUI2TUI/releases/latest)
 [![CI](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml/badge.svg)](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml)
@@ -21,22 +21,21 @@ interactive TUI - not pixels into ASCII.
 
 ## See it in action
 
-![Real GUI2TUI split-screen demo: GTK application and terminal runtime](docs/assets/readme/hero-demo.gif)
+![Real GUI2TUI v0.2 Qt Designer scene with responsive region navigation](docs/validation/v0.2/terminal-ux/qt-designer-wide.png)
 
-This is a real 60-second GTK/AT-SPI/GUI2TUI recording. The terminal opens
-semantic content in Reader, searches it, then invokes a named action; the
-checkbox and status in the original GUI change authoritatively.
+This is a real v0.2 scene captured from Qt Designer through AT-SPI. The
+terminal preserves semantic surfaces, composes them responsively, and exposes
+hierarchical region navigation. Geometry influences presentation, never
+semantic correctness.
 
-[Watch the full 60-second demo](https://github.com/Chenhzjs/GUI2TUI/releases/download/v0.1.0/gui2tui-v0.1-demo.mp4)
-· [Recording method and text walkthrough](docs/demo/README.md)
-· [More real GUI-to-TUI frames](docs/gui-to-tui-examples.md)
+[Recording method and walkthrough](docs/demo/README.md)
+· [More real v0.2 GUI-to-TUI frames](docs/gui-to-tui-examples.md)
 
 ## Download and quick start
 
-The v0.1.1 launcher build is currently marked **pre-release** after a real
-Snap Chromium/private-session failure exposed missing diagnostics and a
-blocking selector wait. The fixes are being validated as v0.1.2; do not use
-v0.1.1 as evidence that a saved browser launcher works.
+The v0.2.0 release candidate is qualified from the current v0.2 source. It
+uses responsive spatial presentation by default; `--layout flat` remains a
+compatibility fallback.
 
 ```bash
 git clone https://github.com/Chenhzjs/GUI2TUI.git
@@ -106,9 +105,11 @@ See [Getting started](docs/getting-started.md) for installation details and
 ```text
 GUI application
       ↓
-AT-SPI accessibility semantics
+AT-SPI semantics + spatial evidence
       ↓
-GUI2TUI semantic runtime
+Semantic graph + spatial topology
+      ↓
+Region presentation + responsive composition
       ↓
 Terminal-native tasks and content
 ```
@@ -118,11 +119,28 @@ emulator. It reorganizes exposed roles, relations, state and safe operations for
 a terminal: buttons remain actions, choices become terminal selectors, and
 document-like content becomes a reflowed Reader.
 
-GUI2TUI v0.1 provides terminal-native interaction for Linux GUI applications
-that expose usable AT-SPI accessibility semantics. Coverage depends on the
-accessibility information exposed by each application.
+v0.1 established semantic GUI → terminal workflows. v0.2 adds generic spatial
+reconstruction and responsive composition: preserve spatial relationships, not
+pixel coordinates, and prioritize useful semantic surfaces as terminal space
+changes. Coverage depends on what each application exposes through Linux
+Accessibility / AT-SPI.
 
-## What works in v0.1
+## v0.2 navigation
+
+The terminal-generated Region Navigator is distinct from GUI TabList semantics:
+
+```text
+F6 / Shift+F6       major region
+Ctrl+Tab             sibling pane
+Ctrl+Shift+Tab       previous sibling pane
+Tab / Shift+Tab      control in the active pane
+```
+
+Depending on terminal space, regions may split, stack, collapse, summarize or
+move into navigation. At most two useful navigation levels are shown; missing
+or unreliable accessibility data degrades safely.
+
+## What works in v0.2
 
 - Application discovery, saved launchers and terminal application selector
 - Buttons, checkboxes, choices, menus and semantic command palette
@@ -134,12 +152,24 @@ accessibility information exposed by each application.
 - Headless operation and optional same-host modality viewer
 - Reference-first external resources and explicit static visual snapshots
 - GTK, Qt, Chromium, Firefox and LibreOffice representative workflows
+- Responsive spatial composition and hierarchical region navigation
 
 ## Examples from real GUI applications
 
 The following are shortened exports from real Linux AT-SPI sessions, not UI
 mockups. GUI2TUI reorganizes the exposed semantics instead of copying the GUI's
 pixel layout.
+
+### v0.2 spatial scenes
+
+These captures are real accessibility-backed v0.2 scenes (not mockups):
+
+| Application | Representative scene |
+| --- | --- |
+| Chromium | [responsive document + address/search surface](docs/validation/v0.2/terminal-ux/chromium-normal.png) |
+| Qt Designer | [hierarchical Region Navigator](docs/validation/v0.2/terminal-ux/qt-designer-wide.png) |
+| EOG | [graphical content + compact controls](docs/validation/v0.2/terminal-ux/eog-normal.png) |
+| Mousepad | [document-centered normal scene](docs/validation/v0.2/terminal-ux/mousepad-normal.png) |
 
 ### Chrome and Firefox: web page → Reader, outline and search
 
@@ -245,7 +275,7 @@ and the [semantic contract](docs/semantic-contract.md) for the technical model.
 
 ## Real-world validation
 
-| Family | Validated example | v0.1 result |
+| Family | Validated example | v0.2 result |
 | --- | --- | --- |
 | GTK | Mousepad, controlled GTK fixtures | Validated workflows |
 | Qt | Qt Designer, controlled Qt fixtures | Validated workflows |
@@ -258,7 +288,7 @@ These are bounded workflow claims, not promises that every control in every
 application is supported. See the detailed [compatibility matrix](docs/compatibility.md)
 and [Phase 4C evidence](docs/phase4c-validation.md).
 
-## v0.1 limitations
+## Known limitations
 
 - Large Chromium trees may need several seconds while the accessibility Cache
   is incomplete and GUI2TUI performs a correctness walk.
@@ -282,6 +312,7 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Architecture](docs/architecture.md)
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
+- [v0.2.0 release notes](docs/release-notes-v0.2.0.md)
 - [Unreleased corrective notes for v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
 - [Launcher compatibility and failure classes](docs/launcher-compatibility.md)

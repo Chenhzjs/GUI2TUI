@@ -79,8 +79,8 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = PresentationMode::Transcompiled, hide = true)]
     presentation: PresentationMode,
 
-    /// Experimental terminal-native spatial reconstruction and responsive composition (v0.2).
-    #[arg(long, value_enum, default_value_t = LayoutMode::Flat)]
+    /// Terminal-native spatial reconstruction and responsive composition (v0.2).
+    #[arg(long, value_enum, default_value_t = LayoutMode::Spatial)]
     layout: LayoutMode,
 
     /// Private local modality broker socket; absent means safe read-only fallback.
@@ -98,9 +98,9 @@ struct Cli {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum LayoutMode {
-    /// Keep the stable v0.1 linear scene renderer.
+    /// Keep the compatibility linear scene renderer.
     Flat,
-    /// Render the experimental SpatialEvidence/TuiLayoutPlan composition.
+    /// Render the SpatialEvidence/TuiLayoutPlan composition (the v0.2 default).
     Spatial,
 }
 

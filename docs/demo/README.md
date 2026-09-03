@@ -1,10 +1,10 @@
-# GUI2TUI v0.1 demo
+# GUI2TUI demo assets
 
-The public demo is a real split-screen recording of the GTK demo fixture and
-the GUI2TUI terminal runtime. It is not a mockup. The terminal discovers the
-application through AT-SPI, opens semantic content in Reader, searches exposed
-content, and invokes a named safe action. The original GTK checkbox and status
-label provide the independent GUI-side confirmation.
+The repository contains a real split-screen recording of the GTK demo fixture
+and GUI2TUI terminal runtime, plus v0.2 spatial scene captures. The recording
+is retained as a semantic-operation walkthrough; the README hero now uses a
+fresh v0.2 Qt Designer scene so the primary public presentation does not show
+obsolete flat-layout UX.
 
 ## Reproduce
 
@@ -31,7 +31,7 @@ PNG/GIF preview. These tools are not GUI2TUI runtime dependencies.
 
 ## Captured frames
 
-Reader and semantic search:
+Reader and semantic search (semantic-operation walkthrough):
 
 ![GUI2TUI Reader over a real GTK accessibility tree](../assets/readme/reader-search.png)
 
@@ -43,3 +43,7 @@ Only synthetic text is used. The script deletes its private session directory
 on exit. The full MP4 is a GitHub Release asset rather than a Git-tracked file.
 Exact capture dimensions, hashes and the production source boundary are recorded
 in [`recording.json`](recording.json).
+
+For v0.2 spatial examples, see the real captures under
+`docs/validation/v0.2/terminal-ux/` and the links in the README. They show
+responsive composition and Region Navigator behavior without fabricated UI.

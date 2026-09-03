@@ -1,5 +1,22 @@
 # Compatibility matrix
 
+## v0.2.0 release-candidate smoke (2026-09-03)
+
+| Application | Result | Evidence / safe limitation |
+| --- | --- | --- |
+| Mousepad | PASS | Document, Reader, commands and multiline safety preserved |
+| Chromium | PASS | Web Document, application Address/Search, context and responsive navigation preserved |
+| Firefox | PASS WITH SAFE LIMITATION | Reader/search and core surfaces; some writes are rejected by the application and remain read-only |
+| EOG / Image Viewer | PASS | Graphical Content, honest placeholder/materialize path and compact controls |
+| GTK Demo | PASS | Content, GUI tab context, controls and semantic action read-back |
+| Qt Designer | PASS | Multi-region composition, two-level Region Navigator and narrow layout |
+| LibreOffice Writer | PASS WITH SAFE LIMITATION | Reader/Outline/Search and dialogs; long documents remain `PartialRealized` |
+| VS Code / Electron | PARTIAL | Discovery/search where exposed; anonymous actions and unsupported editing remain refused |
+
+The smoke uses the existing real-application workflow corpus and AT-SPI only.
+It is bounded compatibility evidence, not a claim that every application or
+control is fully supported.
+
 ## Static acquisition and topology (Phase 3H, 2026-08-31)
 
 | Capability | GTK Picture | LibreOffice embedded Image | Chrome / Firefox references |

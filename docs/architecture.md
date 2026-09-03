@@ -37,8 +37,9 @@ Input travels in the reverse direction through bindings:
       → AT-SPI
 
 No production transcompiler rule selects behavior by toolkit or application
-name. The legacy flat widget projection remains available with
---presentation legacy; the default is transcompiled.
+name. The compatibility linear layout remains available with `--layout flat`;
+the v0.2 spatial/responsive composition is the default. `--presentation legacy`
+continues to select the pre-v0.2 projection when explicitly requested.
 
 Document/rich-text subtrees are derived into `SemanticContentModel`. Their main-scene presentation
 is one bounded summary rather than one row per paragraph; interactive descendants retain scene
