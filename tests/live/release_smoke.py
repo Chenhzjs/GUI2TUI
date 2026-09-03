@@ -101,7 +101,9 @@ try:
     scene = wait_for(child, "Activate safely")
     assert "alice" in scene
     save("scene.txt", scene)
-    button_y = next(i for i, line in enumerate(scene.splitlines()) if "[ Activate safely ]" in line)
+    # v0.2 spatial presentation compacts button labels (`[Activate safely]`)
+    # while the compatibility layout retains padded labels.
+    button_y = next(i for i, line in enumerate(scene.splitlines()) if "Activate safely" in line)
     button_x = scene.splitlines()[button_y].index("Activate safely")
     child.send(b"?")
     help_frame = frame(child)
