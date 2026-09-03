@@ -3,11 +3,11 @@
 ## 1. Status
 
 - **Phase:** 0.3A — Capability Evidence & Operation Contract Qualification
-- **Starting HEAD:** `cbf4559` (`docs: record v0.3 capability recovery discovery`)
+- **Starting HEAD:** `554137b` (`docs: qualify v0.3 capability evidence contracts`)
 - **Final HEAD:** documentation commit containing this handoff (reported by Git)
 - **Worktree:** clean after the documentation commit
 - **Roadmap:** `docs/planning/v0.3-roadmap.md`
-- **Fresh Linux evidence:** collected in OrbStack Ubuntu 24.04 arm64 with the existing project setup
+- **Fresh Linux evidence:** collected in OrbStack Ubuntu 24.04 arm64 with the existing project setup, including a controlled reversible Value mutation
 - **Production behavior changed:** no
 - **Production source changed:** no
 - **Tests added:** no
@@ -37,7 +37,8 @@ Later phases remain not authorized; the roadmap has no release phase yet.
   status enabled through `gdbus`
 - **Display/session:** existing `dbus-run-session` + Xvfb (1280×800, X11),
   `NO_AT_BRIDGE=0`, `QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`
-- **Applications/fixtures:** GTK4 and Qt6 project live fixtures, EOG 45.3,
+- **Applications/fixtures:** GTK4 and Qt6 project live fixtures, a temporary
+  validation-only Qt6 `QSlider` Value target, EOG 45.3,
   Google Chrome 152, Firefox 154 launch attempts. Existing v0.2 evidence for
   Mousepad, Qt Designer and LibreOffice Writer was used for document/partial
   realization context; no broad compatibility campaign was run.
@@ -58,6 +59,9 @@ GTK TextInput "GTK rich text article" [multi-line,...,read-only]
 GTK List "Demo items" actions=[list.unselect-all,list.select-all]
   interfaces=[...,Selection]
 EOG Slider [horizontal,...] interfaces=[...,Value]
+Value target "Probe value" role=Slider current=4 min=0 max=10 increment=1
+set_current_value(5) -> Ok; fresh CurrentValue -> 5.0
+restore set_current_value(4) -> Ok; fresh CurrentValue -> 4.0
 ```
 
 The dangerous Qt rich-text Text path was not re-invoked; existing generation
@@ -110,23 +114,24 @@ materialization infrastructure, not a mutation backend.
 ## 7. Value operation contract
 
 - **Public evidence:** fresh EOG tree contained Slider/scroll-bar roles with
-  AT-SPI `Value`; backend currently reads textual/current value only. The
-  dependency exposes current/min/max/increment and a setter, but GUI2TUI has no
-  semantic Value mutation operation.
-- **Preconditions:** a future candidate must expose finite current/min/max,
-  meaningful increment, writable state, current generation and active scope.
-- **Safe probe:** only reversible bounded values in a controlled fixture;
-  EOG off-screen scroll bars were metadata-only and not mutated.
-- **Invocation:** not performed; no safe candidate with a complete setter
-  contract was available through existing tooling.
-- **Verification:** required contract is authoritative current-value read-back,
-  accepting only documented clamping/normalization.
-- **Normalization:** unknown until a controlled writable Value fixture is
-  available; never infer from the request result.
+  AT-SPI `Value`; a temporary validation-only Qt6 `QSlider` exposed current,
+  minimum, maximum, and increment.
+- **Preconditions:** role Slider, current=4, bounds 0..10, increment=1,
+  writable controlled fixture, current generation and active scope.
+- **Safe probe:** candidate 5 was in range, differed from 4, and had no
+  destructive side effect.
+- **Invocation:** public `Value.set_current_value(5.0)` returned `Ok(())`.
+- **Verification:** fresh `Value.current_value()` returned `5.0`; this is the
+  authoritative outcome, not the setter return.
+- **Restoration:** `set_current_value(4.0)` returned `Ok(())`; an independent
+  fresh read returned `4.0`, confirming the fixture was restored before exit.
+- **Normalization:** none observed; returned value exactly matched the
+  requested bounded value.
 - **Failure:** rejected/unavailable/unchanged/timeout/stale/unverified must
   remain non-capabilities.
-- **Qualification:** **PARTIALLY QUALIFIED / suitable first 0.3B candidate**;
-  implementation must begin with a bounded fixture and setter/read-back probe.
+- **Qualification:** **QUALIFIED FOR LATER IMPLEMENTATION** as a bounded native
+  candidate. The live contract was completed on the temporary Qt6 slider;
+  this phase still does not expose Value in the product.
 
 ## 8. Selection operation contract
 
@@ -185,6 +190,9 @@ Selection and expansion work should record operation observations and retain
 generation-scoped quarantine where a probe is unsafe; do not create a global
 “Qt bad” or “Firefox bad” table.
 
+`PartialRealized` is a content-completeness state, not quarantine; it blocks
+whole-target mutation because the intended target cannot be proven complete.
+
 ## 12. Password safety
 
 PasswordText remained excluded before content reads, logging, export,
@@ -218,12 +226,12 @@ validation evidence only.
 
 | Candidate | Result | Reason |
 | --- | --- | --- |
-| Single-line Text | QUALIFIED FOR LATER IMPLEMENTATION | Existing verified EditSession contract; GTK/Qt read-back evidence |
+| Single-line Text | ALREADY IMPLEMENTED / VERIFIED REFERENCE CONTRACT | Existing verified EditSession contract; GTK/Qt read-back evidence |
 | Multiline Text | PARTIALLY QUALIFIED | Public reads exist, but complete writable target/range contract is absent |
 | Value | PARTIALLY QUALIFIED | Live Value exposure observed; setter/read-back fixture still required |
 | Selection | PARTIALLY QUALIFIED | Select strategies verified; deselect/clear/multi-select not yet qualified |
 | Expand/Collapse | DEFERRED | State is observable, explicit safe invocation/realization contract missing |
-| Partial Document | QUARANTINED | `PartialRealized` cannot be treated as a whole-write target |
+| Partial Document | NOT QUALIFIED FOR WHOLE-TARGET MUTATION | `PartialRealized` is incomplete representation, not interface quarantine |
 
 ## 18. P0 / P1 / open questions
 
