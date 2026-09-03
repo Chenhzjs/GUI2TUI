@@ -92,7 +92,10 @@ try:
     env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/nonexistent/gui2tui-bus"
     save("doctor-no-bus.json", run(["doctor", "--json"], ok=False, env=env).stdout)
 
-    child = launch(["--log-level", "debug"])
+    # Keep the historical pointer-coordinate assertions on the compatibility
+    # layout; the initial no-app launch above already exercises v0.2's spatial
+    # default startup path.
+    child = launch(["--layout", "flat", "--log-level", "debug"])
     selector = wait_for(child, "gui2tui-release-demo")
     save("selector.txt", selector)
     child.send(b"/release\rr")  # filter accepted, refresh preserves it
