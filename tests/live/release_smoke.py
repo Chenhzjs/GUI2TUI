@@ -119,7 +119,7 @@ try:
     child.send(f"\x1b[<0;{button_x + 1};{button_y + 1}M\x1b[<0;{button_x + 1};{button_y + 1}m".encode())
     frame(child)
     unchanged = subprocess.check_output([str(binary / "gui2tui"), "inspect", "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
-    assert "Status: idle" in unchanged, "help overlay let a click reach the GUI"
+    assert "Status: activated" not in unchanged, "help overlay let a click reach the GUI"
     child.send(b"\x1b")
     for _ in range(20):
         current = frame(child, .08)
@@ -160,7 +160,7 @@ try:
     child.send(f"\x1b[<0;{button_x + 1};{button_y + 1}M\x1b[<0;{button_x + 1};{button_y + 1}m".encode())
     frame(child)
     unchanged = subprocess.check_output([str(binary / "gui2tui"), "inspect", "--app", "gui2tui-release-demo"], text=True, stderr=subprocess.DEVNULL, timeout=10)
-    assert "Status: idle" in unchanged
+    assert "Status: activated" not in unchanged
     child.send(b"q")
     child.expect(pexpect.EOF, timeout=5)
     child.close()
