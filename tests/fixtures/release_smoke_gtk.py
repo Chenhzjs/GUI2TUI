@@ -20,7 +20,37 @@ class Demo(Gtk.Application):
             check.set_active(True)
             status.set_text("Status: activated")
         button.connect("clicked", activate)
-        for child in [Gtk.Label(label="Release demo"), entry, password, check, status, button]:
+        external_text = Gtk.TextView()
+        external_text.set_editable(True)
+        external_text.get_buffer().set_text("release alpha\nrelease beta\n")
+        external_text.update_property(
+            [Gtk.AccessibleProperty.LABEL], ["Release external text"]
+        )
+        external_change = Gtk.Button(label="Change release text independently")
+        external_change.connect(
+            "clicked",
+            lambda _button: external_text.get_buffer().set_text(
+                "release authoritative B\n"
+            ),
+        )
+        external_reset = Gtk.Button(label="Reset release text to A")
+        external_reset.connect(
+            "clicked",
+            lambda _button: external_text.get_buffer().set_text(
+                "release alpha\nrelease beta\n"
+            ),
+        )
+        for child in [
+            Gtk.Label(label="Release demo"),
+            entry,
+            password,
+            check,
+            status,
+            button,
+            external_text,
+            external_change,
+            external_reset,
+        ]:
             box.append(child)
         window.set_child(box)
         window.present()

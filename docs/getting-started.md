@@ -1,14 +1,15 @@
 # Getting started
 
-GUI2TUI v0.2 presents accessibility semantics and spatial relationships as a
-responsive terminal application, with terminal controls and a document Reader.
-It is useful where applications expose enough semantic information; unsupported controls
-are visibly read-only, never guessed mouse clicks or anonymous actions.
+GUI2TUI v0.3 presents accessibility semantics, spatial relationships, and
+verified operations as a responsive terminal application. It provides native
+controls, bounded Value adjustment, a document Reader, and optional configured
+interaction for qualified complete plain text. Insufficient capability remains
+visibly read-only; operations are never guessed.
 
 ## Manual installation
 
-The v0.2.0 release candidate uses the responsive spatial presentation by
-default. Build the current source on Linux with `cargo build --release` and
+The v0.3.0 release candidate uses responsive spatial presentation by default.
+Build the current source on Linux with `cargo build --release --locked` and
 use `target/release/gui2tui`; `--layout flat` remains available as a
 compatibility fallback.
 
@@ -38,7 +39,7 @@ provide session accessibility. The binary does not link against GTK/Qt.
 
 ```bash
 gui2tui doctor
-gui2tui                # application selector with responsive v0.2 scenes
+gui2tui                # application selector with responsive spatial scenes
 gui2tui --app NAME     # exact or unambiguous accessible application name
 ```
 
@@ -140,6 +141,27 @@ dependencies are reported with the corresponding `apt install` command.
 4. `:` opens scoped commands; F2 inside it toggles global search. Enter a document summary for Reader.
 5. `?` shows help for the current view. F1 always opens help, including search/edit input. Esc returns.
 6. `q` exits from Scene; Reader/Choice use Esc to return first. Ctrl-C always quits and restores terminal modes.
+
+## Optional complex-text handler
+
+Ordinary startup and native single-line/Value interaction require no external
+editor. To enable external interaction for targets GUI2TUI independently
+qualifies as complete, bounded, non-secret multiline plain text, configure one
+local executable and argv template:
+
+```toml
+[interaction.complex_text]
+program = "custom-editor-command"
+args = ["--wait", "{file}"]
+```
+
+The command is executed directly without a shell, and exactly one standalone
+`{file}` is required. It names a private GUI2TUI-owned candidate—not an
+application backing file. After the handler exits, GUI2TUI checks target
+identity and concurrent GUI changes, writes only through public AT-SPI, and
+independently reads the entire GUI text back. Missing configuration leaves the
+target readable and reports that external editing is not configured. See
+[Configuration](configuration.md) for the complete contract.
 
 ## Repeatable demo without a full desktop
 

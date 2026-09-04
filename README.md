@@ -4,10 +4,11 @@
 
 # GUI2TUI
 
-**Turn Linux GUI semantics and spatial relationships into responsive terminal-native workflows.**
+**Turn Linux GUI semantics and verified capabilities into responsive terminal-native workflows.**
 
-GUI2TUI recompiles accessibility-exposed application semantics and spatial
-topology into an interactive TUI — not pixels into ASCII.
+GUI2TUI recompiles accessibility-exposed application semantics, spatial
+topology, and trustworthy operations into an interactive TUI — not pixels into
+ASCII.
 
 [![Release](https://img.shields.io/github/v/release/Chenhzjs/GUI2TUI?display_name=tag&sort=semver)](https://github.com/Chenhzjs/GUI2TUI/releases/latest)
 [![CI](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml/badge.svg)](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml)
@@ -21,21 +22,22 @@ topology into an interactive TUI — not pixels into ASCII.
 
 ## See it in action
 
-![Real GUI2TUI v0.2 Qt Designer scene with responsive region navigation](docs/validation/v0.2/terminal-ux/qt-designer-wide.png)
+![A real GUI2TUI v0.3 Value interaction confirmed in both GUI and TUI](docs/demo/v0.3/value.png)
 
-This is a real v0.2 scene captured from Qt Designer through AT-SPI. The
-terminal preserves semantic surfaces, composes them responsively, and exposes
-hierarchical region navigation. Geometry influences presentation, never
-semantic correctness.
+This is a real v0.3 workflow: GUI2TUI adjusts a bounded Value through public
+AT-SPI and shows the fresh authoritative result. Complex plain text can use a
+configured local handler without turning that program—or an application
+backing file—into the semantic backend.
 
-[Recording method and walkthrough](docs/demo/README.md)
-· [More real v0.2 GUI-to-TUI frames](docs/gui-to-tui-examples.md)
+[Watch the 32-second v0.3 hero demo](docs/demo/v0.3/hero-v0.3.mp4)
+· [Full capability and refusal demo](docs/demo/v0.3/demo-v0.3.mp4)
+· [Recording method and evidence](docs/demo/v0.3/README.md)
 
 ## Download and quick start
 
-The v0.2.0 release candidate is qualified from the current v0.2 source. It
-uses responsive spatial presentation by default; `--layout flat` remains a
-compatibility fallback.
+The current source is prepared as the v0.3.0 release candidate. Responsive
+spatial presentation remains the default; `--layout flat` remains a
+compatibility fallback. Public v0.3.0 release publication is a separate step.
 
 ```bash
 git clone https://github.com/Chenhzjs/GUI2TUI.git
@@ -119,11 +121,12 @@ emulator. It reorganizes exposed roles, relations, state and safe operations for
 a terminal: buttons remain actions, choices become terminal selectors, and
 document-like content becomes a reflowed Reader.
 
-v0.1 established semantic GUI → terminal workflows. v0.2 adds generic spatial
-reconstruction and responsive composition: preserve spatial relationships, not
-pixel coordinates, and prioritize useful semantic surfaces as terminal space
-changes. Coverage depends on what each application exposes through Linux
-Accessibility / AT-SPI.
+v0.1 established semantic GUI → terminal workflows. v0.2 added generic spatial
+reconstruction and responsive composition. v0.3 adds verified capability
+recovery: GUI2TUI exposes mutation only when public semantics, current identity,
+safe invocation, and authoritative read-back make it trustworthy. Coverage
+still depends on what each application exposes through Linux Accessibility /
+AT-SPI.
 
 ## v0.2 navigation
 
@@ -140,11 +143,14 @@ Depending on terminal space, regions may split, stack, collapse, summarize or
 move into navigation. At most two useful navigation levels are shown; missing
 or unreliable accessibility data degrades safely.
 
-## What works in v0.2
+## What works in v0.3
 
 - Application discovery, saved launchers and terminal application selector
 - Buttons, checkboxes, choices, menus and semantic command palette
-- Safe atomic editing of plain single-line text fields
+- Safe atomic editing of qualified plain single-line text fields
+- Native adjustment of qualified bounded Slider/SpinButton-style Values
+- Optional configured interaction for complete, bounded, non-secret multiline
+  plain text, with conflict checks and public AT-SPI write-back
 - Reader, Outline and bounded semantic Search
 - Tables and explicitly partial/virtualized collections
 - Event-driven updates with fast AT-SPI Cache bootstrap and correctness fallback
@@ -153,6 +159,11 @@ or unreliable accessibility data degrades safely.
 - Reference-first external resources and explicit static visual snapshots
 - GTK, Qt, Chromium, Firefox and LibreOffice representative workflows
 - Responsive spatial composition and hierarchical region navigation
+
+The original GUI always remains authoritative. Setter/process success alone is
+not presented as success; GUI2TUI independently reads the resulting GUI state.
+Progress/status Values, incomplete or rich documents, passwords, anonymous
+actions, and unverified writes remain read-only or unavailable by design.
 
 ## Examples from real GUI applications
 
@@ -275,10 +286,10 @@ and the [semantic contract](docs/semantic-contract.md) for the technical model.
 
 ## Real-world validation
 
-| Family | Validated example | v0.2 result |
+| Family | Validated example | Current result |
 | --- | --- | --- |
-| GTK | Mousepad, controlled GTK fixtures | Validated workflows |
-| Qt | Qt Designer, controlled Qt fixtures | Validated workflows |
+| GTK | Mousepad, controlled GTK fixtures | Native text and configured complete-text workflows validated |
+| Qt | Qt Designer, controlled Qt fixtures | Spatial workflows and bounded Value validated; unsafe multiline Text remains quarantined |
 | Chromium | Google Chrome | Validated Reader/table/search workflows |
 | Firefox | Mozilla Firefox | Validated Reader/table/search workflows |
 | LibreOffice | Writer | Validated; long documents may be partial |
@@ -294,8 +305,12 @@ and [Phase 4C evidence](docs/phase4c-validation.md).
   is incomplete and GUI2TUI performs a correctness walk.
 - Long documents may expose only the currently realized semantic subset.
 - Electron coverage depends heavily on each application's accessibility tree.
-- Multiline/rich-text, password, IME, clipboard and remote-caret editing are not
-  implemented; document text remains readable through Reader where exposed.
+- External editing is limited to qualified complete, bounded, non-secret plain
+  text. Rich, partial, virtualized and quarantined text remains read-only.
+- Configured handlers must preserve GUI2TUI's owned artifact identity; editor
+  compatibility is not universal. No editor is required for normal startup.
+- Password editing/export, broad Selection recovery, generic Expand/Collapse,
+  IME, clipboard and remote-caret editing are not implemented.
 - Wayland static image acquisition is not implemented.
 - Remote companion transport and new-TTY attachment are not implemented.
 - Live game, video and 3D surfaces are not streamed.
@@ -312,6 +327,7 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Architecture](docs/architecture.md)
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
+- [v0.3.0 release notes](docs/release-notes-v0.3.0.md)
 - [v0.2.0 release notes](docs/release-notes-v0.2.0.md)
 - [Unreleased corrective notes for v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
@@ -333,13 +349,13 @@ The Rust backend talks to AT-SPI over D-Bus through `zbus`; it does not link to
 GTK, Qt or `libatspi`. See [Development](docs/development.md) for fixtures,
 Xvfb/browser probes, release packaging and the reproducible demo recorder.
 
-## Beyond v0.1
+## Current boundaries
 
-- broader compatibility validation;
-- improved accessibility-cache readiness;
-- optional remote modality transport;
-- additional static acquisition providers;
-- product UX, packaging and maintenance.
+- Accessibility completeness and operation quality remain application-defined.
+- Rich-text fidelity, broad Selection and generic Expand/Collapse recovery are
+  intentionally outside v0.3.
+- Remote modality transport, Wayland static capture, and live visual streaming
+  remain future work.
 
 ## License
 

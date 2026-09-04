@@ -1,5 +1,25 @@
 # Compatibility matrix
 
+## v0.3 verified capability evidence (2026-09-05)
+
+| Application / family | Result | v0.3 capability evidence / safe limitation |
+| --- | --- | --- |
+| Mousepad | PASS | Complete plain text qualified through the generic configured handler; public AT-SPI write and full read-back passed while the opened backing file remained byte-identical before GUI save |
+| Controlled GTK fixtures | PASS | Native single-line edit, complete complex-text positive/conflict/failure paths, password exclusion, named actions and capability UX passed |
+| Controlled Qt fixture | PASS WITH SAFE LIMITATION | Bounded Slider Value `4 → 5 → 4` passed; ProgressBar remained read-only; historically unsafe multiline Text remains quarantined |
+| Chromium | PASS WITH SAFE LIMITATION | Reader/table/search and spatial surfaces remain available; fields without trustworthy public write stay read-only and anonymous actions are refused |
+| Firefox | PASS WITH SAFE LIMITATION | Reader/search remain available; apparent EditableText setter success with unchanged authoritative read-back is not promoted to writable capability |
+| EOG / Image Viewer | PASS | Graphical modality remains useful; navigation ScrollBars do not become noisy writable Value controls |
+| GTK Demo | PASS WITH SAFE LIMITATION | Explicit named expand/collapse actions and state/read-back were observed, but generic target-to-realization ownership was not qualified, so no product Expand capability was added |
+| Qt Designer | PASS WITH SAFE LIMITATION | Existing semantic/spatial workflows remain validated; no multiline quarantine path was re-probed |
+| LibreOffice Writer | READ-ONLY BY DESIGN for whole-document mutation | Reader/Outline/Search remain useful; rich or `PartialRealized` content is not flattened into an external whole-text edit |
+| VS Code / Electron | PARTIAL | Discovery/search depend on exposed accessibility; Monaco/private editing and anonymous actions remain unavailable |
+
+These outcomes combine the bounded v0.3 phase evidence and demonstration
+corpus. Application names are validation examples only; production eligibility
+uses public roles, interfaces, state, completeness, scope, identity, and
+authoritative read-back.
+
 ## v0.2.0 release-candidate smoke (2026-09-03)
 
 | Application | Result | Evidence / safe limitation |

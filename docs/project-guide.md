@@ -242,7 +242,9 @@ layout reconstruction.
 - Public release: **v0.2.0**
 - Project state: **POST-v0.2 MAINTENANCE**
 - v0.2.0 source tag: immutable and already published
-- v0.3 functional development: **COMPLETE; RC NOT AUTHORIZED**
+- v0.3 functional development: **COMPLETE**
+- v0.3.0 release-candidate qualification: **CURRENT / AUTHORIZED**
+- v0.3.0 public release: **NOT AUTHORIZED**
 
 Release and validation details live in [v0.2.0 release notes](release-notes-v0.2.0.md)
 and [public release verification](release-v0.2.0-validation.md). The reviewed
@@ -256,8 +258,8 @@ configured complex plain-text interaction modality while preserving public
 Accessibility mutation, stale/conflict checks, and authoritative read-back.
 Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
-handoff before any further work; RC and release activity require explicit
-authorization.
+handoff before any further work. RC qualification is authorized; tag creation,
+publication, and release activity still require separate explicit authorization.
 
 ## 21. Glossary
 

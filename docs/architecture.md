@@ -36,6 +36,15 @@ Input travels in the reverse direction through bindings:
       → BackendOperation
       → AT-SPI
 
+Verified v0.3 mutations follow the same authority rule. Native single-line
+text and bounded Value operations invoke explicit public interfaces and then
+refresh from independent application read-back. Qualified complete multiline
+plain text may use a configured local process only as the human interaction
+modality: it edits a private bounded candidate, while GUI2TUI retains runtime
+identity, conflict checks, public AT-SPI write-back, and complete verification.
+`PartialRealized`, rich, password, stale, or unverifiable targets never enter
+that whole-text path.
+
 No production transcompiler rule selects behavior by toolkit or application
 name. The compatibility linear layout remains available with `--layout flat`;
 the v0.2 spatial/responsive composition is the default. `--presentation legacy`
