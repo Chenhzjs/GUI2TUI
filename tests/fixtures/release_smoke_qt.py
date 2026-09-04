@@ -2,16 +2,32 @@
 
 import sys
 
-from PyQt6.QtCore import QCoreApplication, Qt
-from PyQt6.QtWidgets import (
-    QApplication,
-    QLabel,
-    QMainWindow,
-    QProgressBar,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+try:
+    from PyQt6.QtCore import QCoreApplication, Qt
+    from PyQt6.QtWidgets import (
+        QApplication,
+        QLabel,
+        QMainWindow,
+        QProgressBar,
+        QSlider,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    HORIZONTAL = Qt.Orientation.Horizontal
+except ImportError:
+    from PyQt5.QtCore import QCoreApplication, Qt
+    from PyQt5.QtWidgets import (
+        QApplication,
+        QLabel,
+        QMainWindow,
+        QProgressBar,
+        QSlider,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    HORIZONTAL = Qt.Horizontal
 
 
 QCoreApplication.setApplicationName("gui2tui-release-value-demo")
@@ -23,7 +39,7 @@ class ValueDemo(QMainWindow):
         self.setWindowTitle("GUI2TUI Release Value Demo")
         content = QWidget()
         layout = QVBoxLayout(content)
-        value = QSlider(Qt.Orientation.Horizontal)
+        value = QSlider(HORIZONTAL)
         value.setAccessibleName("Release value")
         value.setRange(0, 10)
         value.setSingleStep(1)
