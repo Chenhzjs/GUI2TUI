@@ -17,7 +17,12 @@ if mode == "fail":
     raise SystemExit(7)
 
 original = path.read_text(encoding="utf-8")
-candidate = original + "handler candidate C\n"
+if mode == "reset":
+    candidate = "release alpha\nrelease beta\n"
+elif mode == "authoritative":
+    candidate = original + "release authoritative B\n"
+else:
+    candidate = original + "handler candidate C\n"
 with path.open("r+", encoding="utf-8") as stream:
     stream.seek(0)
     stream.write(candidate)

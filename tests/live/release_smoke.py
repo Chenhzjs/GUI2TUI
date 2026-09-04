@@ -25,10 +25,18 @@ def run(args, ok=True, env=None):
         assert out.returncode != 0, args
     return out
 
-def launch(args):
+def launch(args, env_updates=None):
     global transcript
     transcript = ""
-    return pexpect.spawn(str(binary / "gui2tui"), args, encoding=None, dimensions=(38, 130), env=os.environ.copy())
+    environment = os.environ.copy()
+    environment.update(env_updates or {})
+    return pexpect.spawn(
+        str(binary / "gui2tui"),
+        args,
+        encoding=None,
+        dimensions=(38, 130),
+        env=environment,
+    )
 
 def frame(child, seconds=.5):
     global transcript
@@ -98,11 +106,11 @@ def invoke_named_button(label):
         timeout=10,
     )
 
-def wait_for_tree(needle, present=True, timeout=10):
+def wait_for_tree(needle, present=True, timeout=10, application="gui2tui-release-demo"):
     deadline = time.monotonic() + timeout
     tree = ""
     while time.monotonic() < deadline:
-        tree = inspect_tree()
+        tree = inspect_tree(application=application)
         if (needle in tree) == present:
             return tree
         time.sleep(.1)
@@ -130,6 +138,7 @@ assert child.exitstatus == 0
 
 fixture = subprocess.Popen(["python3", str(bundle / "smoke/release_smoke_gtk.py")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 value_fixture = None
+text_fixture = None
 broker = None
 try:
     deadline = time.monotonic() + 10
@@ -301,33 +310,85 @@ try:
     )
     config.chmod(0o600)
 
+    # Mousepad is release-validation corpus, never a production dispatch key.
+    # It gives Jammy a real complete plain-text target while also proving that
+    # the configured handler never receives or changes the backing file.
+    backing = result / "release-text.txt"
+    starting_text = "release alpha\nrelease beta\n"
+    backing.write_text(starting_text, encoding="utf-8")
+    application_environment = os.environ.copy()
+    for name in ("data", "app-config", "app-cache"):
+        (result / name).mkdir(mode=0o700)
+    application_environment.update(
+        {
+            "XDG_DATA_HOME": str(result / "data"),
+            "XDG_CONFIG_HOME": str(result / "app-config"),
+            "XDG_CACHE_HOME": str(result / "app-cache"),
+            "GSETTINGS_BACKEND": "memory",
+        }
+    )
+    text_fixture = subprocess.Popen(
+        ["mousepad", "--disable-server", str(backing)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=application_environment,
+    )
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        apps = run(["inspect", "--list"])
+        if "mousepad" in apps.stdout.lower():
+            break
+        time.sleep(.15)
+    else:
+        raise AssertionError("Mousepad did not register with AT-SPI")
+    text_application = "mousepad"
+
     # Positive complete-text interaction from the extracted package.
-    os.environ["GUI2TUI_VALIDATION_HANDLER_MODE"] = "positive"
-    child = launch(["--app", "gui2tui-release-demo", "--no-mouse"])
+    child = launch(
+        ["--app", text_application, "--no-mouse"],
+        {"GUI2TUI_VALIDATION_HANDLER_MODE": "positive"},
+    )
     external_scene = wait_for(child, "Edit externally")
     time.sleep(1)
     child.send(b"e")
     external_after = wait_for_output(child, "External text update confirmed")
-    assert "handler candidate C" in inspect_tree()
+    assert "handler candidate C" in inspect_tree(application=text_application)
+    assert backing.read_text(encoding="utf-8") == starting_text
     save("external-text-scene.txt", external_scene)
     save("external-text-confirmed.txt", external_after)
     child.send(b"q")
     child.expect(pexpect.EOF, timeout=5)
     child.close()
     assert child.exitstatus == 0
-    invoke_named_button("Reset release text to A")
-    wait_for_tree("handler candidate C", present=False)
-    wait_for_tree("release alpha")
+    child = launch(
+        ["--app", text_application, "--no-mouse"],
+        {"GUI2TUI_VALIDATION_HANDLER_MODE": "reset"},
+    )
+    wait_for(child, "Edit externally")
+    child.send(b"e")
+    wait_for_output(child, "External text update confirmed")
+    child.send(b"q")
+    child.expect(pexpect.EOF, timeout=5)
+    child.close()
+    assert child.exitstatus == 0
+    wait_for_tree(
+        "handler candidate C", present=False, application=text_application
+    )
+    wait_for_tree("release alpha", application=text_application)
 
     # Concurrent authoritative GUI state B must win over private candidate C.
     ready = result / "handler-ready"
     resume = result / "handler-resume"
     ready.unlink(missing_ok=True)
     resume.unlink(missing_ok=True)
-    os.environ["GUI2TUI_VALIDATION_HANDLER_MODE"] = "conflict"
-    os.environ["GUI2TUI_VALIDATION_HANDLER_READY"] = str(ready)
-    os.environ["GUI2TUI_VALIDATION_HANDLER_RESUME"] = str(resume)
-    child = launch(["--app", "gui2tui-release-demo", "--no-mouse"])
+    child = launch(
+        ["--app", text_application, "--no-mouse"],
+        {
+            "GUI2TUI_VALIDATION_HANDLER_MODE": "conflict",
+            "GUI2TUI_VALIDATION_HANDLER_READY": str(ready),
+            "GUI2TUI_VALIDATION_HANDLER_RESUME": str(resume),
+        },
+    )
     wait_for(child, "Edit externally")
     time.sleep(1)
     child.send(b"e")
@@ -335,12 +396,23 @@ try:
     while not ready.exists() and time.monotonic() < deadline:
         time.sleep(.05)
     assert ready.exists(), "handler did not reach conflict barrier"
-    invoke_named_button("Change release text independently")
-    wait_for_tree("release authoritative B")
+    authoritative = launch(
+        ["--app", text_application, "--no-mouse"],
+        {"GUI2TUI_VALIDATION_HANDLER_MODE": "authoritative"},
+    )
+    wait_for(authoritative, "Edit externally")
+    authoritative.send(b"e")
+    wait_for_output(authoritative, "External text update confirmed")
+    authoritative.send(b"q")
+    authoritative.expect(pexpect.EOF, timeout=5)
+    authoritative.close()
+    assert authoritative.exitstatus == 0
+    wait_for_tree("release authoritative B", application=text_application)
     resume.touch()
     conflict = wait_for_output(child, "External text conflict detected")
-    assert "release authoritative B" in inspect_tree()
-    assert "handler candidate C" not in inspect_tree()
+    authoritative_tree = inspect_tree(application=text_application)
+    assert "release authoritative B" in authoritative_tree
+    assert "handler candidate C" not in authoritative_tree
     artifacts = list(
         pathlib.Path(os.environ["XDG_RUNTIME_DIR"]).glob(
             "gui2tui/gui2tui-owned-*/operation-*/artifact-*.txt"
@@ -357,19 +429,33 @@ try:
     child.expect(pexpect.EOF, timeout=5)
     child.close()
     assert child.exitstatus == 0
-    invoke_named_button("Reset release text to A")
-    wait_for_tree("release alpha")
+    child = launch(
+        ["--app", text_application, "--no-mouse"],
+        {"GUI2TUI_VALIDATION_HANDLER_MODE": "reset"},
+    )
+    wait_for(child, "Edit externally")
+    child.send(b"e")
+    wait_for_output(child, "External text update confirmed")
+    child.send(b"q")
+    child.expect(pexpect.EOF, timeout=5)
+    child.close()
+    assert child.exitstatus == 0
+    wait_for_tree("release alpha", application=text_application)
 
     # A non-zero handler exit cannot mutate GUI state or leave the terminal
     # detached, and normal status remains concise.
-    os.environ["GUI2TUI_VALIDATION_HANDLER_MODE"] = "fail"
-    child = launch(["--app", "gui2tui-release-demo", "--no-mouse"])
+    child = launch(
+        ["--app", text_application, "--no-mouse"],
+        {"GUI2TUI_VALIDATION_HANDLER_MODE": "fail"},
+    )
     wait_for(child, "Edit externally")
     time.sleep(1)
     child.send(b"e")
     failed = wait_for_output(child, "handler exited unsuccessfully")
-    assert "release alpha" in inspect_tree()
-    assert "handler candidate C" not in inspect_tree()
+    failure_tree = inspect_tree(application=text_application)
+    assert "release alpha" in failure_tree
+    assert "handler candidate C" not in failure_tree
+    assert backing.read_text(encoding="utf-8") == starting_text
     save("external-text-handler-failure.txt", failed)
     child.send(b"q")
     child.expect(pexpect.EOF, timeout=5)
@@ -386,6 +472,7 @@ try:
     print("PACKAGE_EXTERNAL_TEXT_END_TO_END=PASS authoritative_readback=true")
     print("PACKAGE_EXTERNAL_TEXT_CONFLICT_REFUSAL=PASS candidate_preserved=true")
     print("PACKAGE_EXTERNAL_TEXT_HANDLER_FAILURE=PASS gui_unchanged=true terminal_restored=true")
+    print("PACKAGE_BACKING_FILE_BYPASS=ABSENT")
     print("PACKAGED_FRESH_HOME_SMOKE=PASS no_config=true action_confirmed=true password_absent=true broker_capabilities=true")
 finally:
     if broker is not None:
@@ -396,5 +483,8 @@ finally:
     if value_fixture is not None:
         value_fixture.terminate()
         value_fixture.wait(timeout=5)
+    if text_fixture is not None:
+        text_fixture.terminate()
+        text_fixture.wait(timeout=5)
     if child.isalive():
         child.close(force=True)

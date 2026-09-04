@@ -84,7 +84,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             at-spi2-core binutils dbus-x11 file gir1.2-gtk-4.0 jq \
-            python3-gi python3-pexpect python3-pyqt5 python3-pyte x11-utils xvfb
+            mousepad python3-gi python3-pexpect python3-pyqt5 python3-pyte \
+            x11-utils xvfb
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal
       - name: Build native release bundle
