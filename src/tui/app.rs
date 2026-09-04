@@ -94,6 +94,7 @@ pub struct TuiApplication {
     status: String,
     application_available: bool,
     backend_available: bool,
+    external_text_handler_available: bool,
     edit_session: Option<EditSession>,
     external_text_requested: bool,
     command_palette: Option<CommandPalette>,
@@ -277,6 +278,7 @@ impl TuiApplication {
                 self.viewport_width.saturating_add(2),
                 self.viewport_height.saturating_add(3),
             ),
+            self.external_text_handler_available,
         )
         .await
         {
@@ -629,6 +631,7 @@ impl TuiApplication {
         presentation_mode: PresentationMode,
         spatial_layout: bool,
         initial_terminal_size: (u16, u16),
+        external_text_handler_available: bool,
     ) -> Result<Self, BackendError> {
         let started = Instant::now();
         let applications = backend.applications().await?;
@@ -768,6 +771,7 @@ impl TuiApplication {
             ),
             application_available: true,
             backend_available: true,
+            external_text_handler_available,
             edit_session: None,
             external_text_requested: false,
             command_palette: None,
@@ -1232,6 +1236,7 @@ impl TuiApplication {
                 scroll_offset: self.viewport.offset,
                 status: &self.status,
                 application_available: self.application_available,
+                external_text_handler_available: self.external_text_handler_available,
                 edit_session: self.edit_session.as_ref(),
                 palette,
                 choice,
@@ -3101,6 +3106,7 @@ impl TuiApplication {
                     self.viewport_width.saturating_add(2),
                     self.viewport_height.saturating_add(3),
                 ),
+                self.external_text_handler_available,
             )
             .await
             else {

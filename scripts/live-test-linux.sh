@@ -168,4 +168,13 @@ PY
         "$inspect" --app gui2tui-qt-fixture | grep -q "alice-harness-qt"
         echo "GTK/Qt TUI EditableText checks passed"
     fi
+
+    if [[ "${CAPABILITY_UX_TEST:-0}" == 1 ]]; then
+        python3 -c "import pexpect" 2>/dev/null || {
+            echo "CAPABILITY_UX_TEST requires python3-pexpect" >&2
+            exit 1
+        }
+        GUI2TUI="$TARGET_DIR/debug/gui2tui" INSPECT="$inspect" \
+            python3 "$PROJECT_ROOT/tests/live/v03d_value_ux_probe.py"
+    fi
 '

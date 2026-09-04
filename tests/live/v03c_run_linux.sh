@@ -59,7 +59,12 @@ dbus-run-session -- bash -euo pipefail -c '
             export GUI2TUI_VALIDATION_APP=mousepad
             cp "$PROJECT_ROOT/tests/fixtures/spatial_review.txt" "$runtime_dir/mousepad.txt"
             cp "$runtime_dir/mousepad.txt" "$runtime_dir/mousepad.expected"
-            mousepad "$runtime_dir/mousepad.txt" \
+            mkdir -p "$runtime_dir/app-data" "$runtime_dir/app-config" "$runtime_dir/app-cache"
+            XDG_DATA_HOME="$runtime_dir/app-data" \
+                XDG_CONFIG_HOME="$runtime_dir/app-config" \
+                XDG_CACHE_HOME="$runtime_dir/app-cache" \
+                GSETTINGS_BACKEND=memory \
+                mousepad --disable-server "$runtime_dir/mousepad.txt" \
                 >"/tmp/gui2tui-v03c-${GUI2TUI_VALIDATION_HANDLER_MODE}-mousepad.log" 2>&1 &
             application_pid=$!
             ;;

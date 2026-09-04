@@ -31,6 +31,7 @@ pub struct RenderContext<'a> {
     pub scroll_offset: u16,
     pub status: &'a str,
     pub application_available: bool,
+    pub external_text_handler_available: bool,
     pub edit_session: Option<&'a EditSession>,
     pub palette: Option<PaletteRender<'a>>,
     pub choice: Option<ChoiceRender<'a>>,
@@ -93,6 +94,30 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
             ContentViewMode::Table => "? Help · Arrows Cells · Esc Back",
             ContentViewMode::Outline => "? Help · ↑/↓ Headings · Enter Go · Esc Back",
             ContentViewMode::VirtualCollection => "? Help · ↑/↓ Items · Esc Back",
+        }
+    } else if context
+        .focused
+        .and_then(|id| context.scene.element(id))
+        .is_some_and(|element| element.capability() == InteractionCapability::AdjustValue)
+    {
+        "? Help · ↑/↓ Adjust · Tab Control · F6 Region"
+    } else if context
+        .focused
+        .and_then(|id| context.scene.element(id))
+        .is_some_and(|element| {
+            matches!(
+                element.kind,
+                SceneElementKind::DocumentSummary {
+                    external_edit: true,
+                    ..
+                }
+            )
+        })
+    {
+        if context.external_text_handler_available {
+            "? Help · Enter Read · e Edit externally · Tab Control"
+        } else {
+            "? Help · Enter Read · external edit not configured"
         }
     } else if navigator
         .as_ref()
@@ -970,6 +995,7 @@ fn render_spatial_leaf(
                 context.focused == Some(element.id),
                 context.edit_session,
                 inner.width,
+                context.external_text_handler_available,
             );
             lines.push("  Semantic content preview unavailable; Enter opens Reader.".into());
             frame.render_widget(
@@ -1034,7 +1060,13 @@ fn render_spatial_leaf(
             break;
         }
         let focused = context.focused == Some(element.id);
-        let lines = element_lines_for_width(element, focused, context.edit_session, inner.width);
+        let lines = element_lines_for_width(
+            element,
+            focused,
+            context.edit_session,
+            inner.width,
+            context.external_text_handler_available,
+        );
         for line in lines {
             if rendered >= inner.height {
                 break;
@@ -1068,7 +1100,7 @@ fn render_spatial_leaf(
     if rendered == 0 {
         let text = match region.presentation.kind {
             RegionPresentationKind::CommandBar => "Press : to browse and search commands",
-            RegionPresentationKind::InputSurface => "— unavailable · ro",
+            RegionPresentationKind::InputSurface => "— read only",
             RegionPresentationKind::Navigation
                 if region.kind == crate::transcompile::SpatialRegionKind::TabStrip =>
             {
@@ -1143,7 +1175,7 @@ fn render_compact_surface(
     } else if shown == 0 {
         let label = match region.presentation.kind {
             RegionPresentationKind::CommandBar => ": Commands",
-            RegionPresentationKind::InputSurface => "— unavailable · ro",
+            RegionPresentationKind::InputSurface => "— read only",
             _ => "— empty",
         };
         frame.render_widget(Paragraph::new(label), area);
@@ -1193,7 +1225,13 @@ fn render_elements(
     let mut logical_top = 0_u16;
     for element in &context.scene.elements {
         let focused = context.focused == Some(element.id);
-        let lines = element_lines_for_width(element, focused, context.edit_session, area.width);
+        let lines = element_lines_for_width(
+            element,
+            focused,
+            context.edit_session,
+            area.width,
+            context.external_text_handler_available,
+        );
         let mut first_y = None;
         let mut visible_height = 0_u16;
         for (line_index, line) in lines.into_iter().enumerate() {
@@ -1250,7 +1288,7 @@ fn interaction(element: &SceneElement) -> Option<HitInteraction> {
 }
 
 pub fn element_lines(element: &SceneElement, focused: bool) -> Vec<String> {
-    element_lines_for_width(element, focused, None, u16::MAX)
+    element_lines_for_width(element, focused, None, u16::MAX, false)
 }
 
 fn element_lines_for_width(
@@ -1258,11 +1296,16 @@ fn element_lines_for_width(
     focused: bool,
     edit_session: Option<&EditSession>,
     width: u16,
+    external_text_handler_available: bool,
 ) -> Vec<String> {
     let marker = if focused { "> " } else { "  " };
     let unavailable =
         if element.capability() == InteractionCapability::None && element.is_focusable() {
-            " · ro"
+            match element.kind {
+                SceneElementKind::Field { .. } | SceneElementKind::Value { .. } => " · read only",
+                SceneElementKind::Selector { .. } => " · options unavailable",
+                _ => " · action unavailable",
+            }
         } else {
             ""
         };
@@ -1320,8 +1363,10 @@ fn element_lines_for_width(
             format!("{marker}Document: {title}"),
             format!("    {blocks} blocks | {headings} headings | {links} links | {forms} forms"),
             format!("    completeness: {completeness}"),
-            if *external_edit {
-                "    [ Enter: Read document | e: Edit with configured handler ]".to_owned()
+            if *external_edit && external_text_handler_available {
+                "    [ Enter: Read document | e: Edit externally ]".to_owned()
+            } else if *external_edit {
+                "    [ Enter: Read document | external edit not configured ]".to_owned()
             } else {
                 "    [ Enter: Read document ]".to_owned()
             },
@@ -1339,7 +1384,7 @@ fn element_lines_for_width(
                 |(w, h)| format!("  [fidelity-required content: {w}×{h} GUI pixels]"),
             ),
         ],
-        SceneElementKind::Unsupported { label } => vec![format!("  <Unsupported: {label}>")],
+        SceneElementKind::Unsupported { label } => vec![format!("  Read only · {label}")],
     }
 }
 
@@ -1494,8 +1539,14 @@ mod tests {
             display: "alice".into(),
             input_kind: crate::semantic::TextInputKind::Plain,
         });
-        assert_eq!(element_lines_for_width(&field, false, None, 80).len(), 2);
-        assert_eq!(element_lines_for_width(&field, false, None, 120).len(), 1);
+        assert_eq!(
+            element_lines_for_width(&field, false, None, 80, false).len(),
+            2
+        );
+        assert_eq!(
+            element_lines_for_width(&field, false, None, 120, false).len(),
+            1
+        );
     }
 
     #[test]
@@ -1517,7 +1568,42 @@ mod tests {
         checkbox.binding.as_mut().unwrap().capability = InteractionCapability::None;
         assert_eq!(
             element_lines(&checkbox, false),
-            vec!["  [ ] Enable feature · ro"]
+            vec!["  [ ] Enable feature · action unavailable"]
+        );
+    }
+
+    #[test]
+    fn capability_wording_never_promises_an_unavailable_external_handler() {
+        let document = element(SceneElementKind::DocumentSummary {
+            title: "Notes".into(),
+            blocks: 2,
+            headings: 0,
+            links: 0,
+            forms: 0,
+            completeness: "Complete".into(),
+            external_edit: true,
+        });
+        let missing = element_lines_for_width(&document, true, None, 120, false);
+        assert!(
+            missing
+                .iter()
+                .any(|line| line.contains("external edit not configured"))
+        );
+        assert!(!missing.iter().any(|line| line.contains("e: Edit")));
+
+        let configured = element_lines_for_width(&document, true, None, 120, true);
+        assert!(
+            configured
+                .iter()
+                .any(|line| line.contains("e: Edit externally"))
+        );
+
+        let unavailable = element(SceneElementKind::Unsupported {
+            label: "Tree".into(),
+        });
+        assert_eq!(
+            element_lines(&unavailable, false),
+            vec!["  Read only · Tree"]
         );
     }
 
@@ -1535,7 +1621,7 @@ mod tests {
             "0123456789abcdef".into(),
             1,
         );
-        let lines = element_lines_for_width(&field, true, Some(&session), 14);
+        let lines = element_lines_for_width(&field, true, Some(&session), 14, false);
         assert_eq!(lines.len(), 2);
         assert!(lines[1].contains('|'));
         assert!(lines[1].ends_with("def|"));
@@ -1620,6 +1706,7 @@ mod tests {
                         scroll_offset: 3,
                         status: "ready",
                         application_available: true,
+                        external_text_handler_available: false,
                         edit_session: None,
                         palette: None,
                         choice: None,

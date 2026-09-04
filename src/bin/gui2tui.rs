@@ -646,6 +646,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
         cli.presentation,
         matches!(cli.layout, LayoutMode::Spatial),
         (initial_terminal.width, initial_terminal.height),
+        config.interaction.complex_text.is_some(),
     )
     .await?;
 

@@ -85,11 +85,17 @@ with tempfile.TemporaryDirectory(prefix="gui2tui-v03c-config-") as temp:
         re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", " ", transcript).split()
     )
 
+
+def shown(text: str) -> bool:
+    return text in transcript or text in plain_transcript
+
 if mode == "positive":
-    assert "External text update confirmed" in plain_transcript, transcript[-4000:]
+    assert shown("Edit externally"), transcript[-4000:]
+    assert shown("External text update confirmed"), transcript[-4000:]
     print("EXTERNAL_TEXT_END_TO_END=PASS")
 elif mode == "conflict":
-    assert "External text conflict detected" in plain_transcript, transcript[-4000:]
+    assert shown("Edit externally"), transcript[-4000:]
+    assert shown("External text conflict detected"), transcript[-4000:]
     authoritative = subprocess.check_output(
         [os.environ["INSPECT"], "--app", "gui2tui-live-fixture"],
         env=env,
@@ -109,7 +115,8 @@ elif mode == "conflict":
     assert "handler candidate C" in artifact.read_text(encoding="utf-8")
     print("EXTERNAL_TEXT_CONFLICT_REFUSAL=PASS")
 elif mode == "fail":
-    assert "handler exited unsuccessfully" in plain_transcript, transcript[-4000:]
+    assert shown("Edit externally"), transcript[-4000:]
+    assert shown("handler exited unsuccessfully"), transcript[-4000:]
     authoritative = subprocess.check_output(
         [os.environ["INSPECT"], "--app", "gui2tui-live-fixture"],
         env=env,
@@ -119,8 +126,11 @@ elif mode == "fail":
     assert "handler candidate C" not in authoritative, authoritative
     print("EXTERNAL_TEXT_HANDLER_FAILURE=PASS")
 elif mode == "readonly":
-    assert "Edit with configured handler" not in plain_transcript, transcript[-4000:]
+    assert not shown("Edit externally"), transcript[-4000:]
+    assert not shown("external edit not configured"), transcript[-4000:]
     print("EXTERNAL_TEXT_READ_ONLY=PASS")
 elif mode == "nohandler":
-    assert "Edit handler not configured" in plain_transcript, transcript[-4000:]
+    assert shown("external edit not configured"), transcript[-4000:]
+    assert not shown("Edit externally"), transcript[-4000:]
+    assert shown("Edit handler not configured"), transcript[-4000:]
     print("EXTERNAL_TEXT_NO_HANDLER=PASS")

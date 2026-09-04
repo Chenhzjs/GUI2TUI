@@ -3,7 +3,7 @@
 
 import sys
 
-from PyQt6.QtCore import QCoreApplication
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -15,8 +15,10 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QRadioButton,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -72,6 +74,19 @@ class QtFixture(QMainWindow):
         combo.setAccessibleName("Demo choice")
         combo.addItems(["Alpha", "Beta", "Gamma"])
         layout.addWidget(combo)
+
+        value = QSlider(Qt.Orientation.Horizontal)
+        value.setAccessibleName("Probe value")
+        value.setRange(0, 10)
+        value.setSingleStep(1)
+        value.setValue(4)
+        layout.addWidget(value)
+
+        progress = QProgressBar()
+        progress.setAccessibleName("Probe progress")
+        progress.setRange(0, 10)
+        progress.setValue(4)
+        layout.addWidget(progress)
 
         self.status = QLabel("Status: idle")
         layout.addWidget(self.status)
