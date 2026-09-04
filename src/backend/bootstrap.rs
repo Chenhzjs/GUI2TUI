@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use atspi::Role;
 use clap::ValueEnum;
 use thiserror::Error;
 
@@ -341,6 +342,15 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::EditText);
     }
+    if *role == SemanticRole::Slider
+        && matches!(record.role, Role::Slider | Role::SpinButton)
+        && record.interfaces.contains(atspi::Interface::Value)
+        && record.states.contains(atspi::State::Enabled)
+        && !record.states.contains(atspi::State::ReadOnly)
+        && record.adjustable_value
+    {
+        capabilities.push(SemanticCapability::Value);
+    }
     capabilities
 }
 
@@ -369,6 +379,7 @@ mod tests {
             states: StateSet::empty(),
             actions: Vec::new(),
             value: None,
+            adjustable_value: false,
         }
     }
 

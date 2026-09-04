@@ -56,6 +56,34 @@ pub struct InspectOptions {
     pub max_nodes: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ValueMutation {
+    pub previous: f64,
+    pub requested: f64,
+    pub resulting: f64,
+    pub normalized: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ValueMetadata {
+    current: f64,
+    minimum: f64,
+    maximum: f64,
+    increment: f64,
+}
+
+impl ValueMetadata {
+    fn is_usable(self) -> bool {
+        [self.current, self.minimum, self.maximum, self.increment]
+            .iter()
+            .all(|value| value.is_finite())
+            && self.minimum <= self.maximum
+            && self.increment > 0.0
+            && self.current >= self.minimum
+            && self.current <= self.maximum
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SessionEnvironment {
     pub xdg_session_type: Option<String>,
@@ -149,6 +177,10 @@ pub enum BackendError {
     },
     #[error("application rejected text update for AT-SPI object {0}")]
     TextUpdateRejected(String),
+    #[error("AT-SPI object {0} is not a supported writable Value control")]
+    ValueUnsupported(String),
+    #[error("AT-SPI Value metadata is unavailable or invalid for {0}")]
+    ValueUnavailable(String),
     #[error(
         "no safe convenience action was found on {node_id}\nAvailable actions:\n{available}\nUse --action-name or --action --index for explicit low-level invocation"
     )]
@@ -1862,6 +1894,139 @@ impl AtspiBackend {
         Ok(selected)
     }
 
+    /// Adjust a qualified bounded Value by one advertised increment and
+    /// independently verify the resulting authoritative CurrentValue.
+    pub async fn adjust_value(
+        &self,
+        locator: &BackendLocator,
+        increase: bool,
+    ) -> Result<ValueMutation, BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "read Value role",
+            &encoded_id,
+            proxy.get_role(),
+        )
+        .await?;
+        if !matches!(role, Role::Slider | Role::SpinButton) {
+            return Err(BackendError::ValueUnsupported(encoded_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "read interfaces for Value",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        let states = dbus_operation(
+            self.operation_timeout,
+            "read states for Value",
+            &encoded_id,
+            proxy.get_state(),
+        )
+        .await?;
+        if !interfaces.contains(Interface::Value)
+            || !states.contains(State::Enabled)
+            || states.contains(State::ReadOnly)
+        {
+            return Err(BackendError::ValueUnsupported(encoded_id));
+        }
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for Value",
+            &locator.encode(),
+            proxy.proxies(),
+        )
+        .await?;
+        let value = atspi_operation(
+            self.operation_timeout,
+            "create Value proxy",
+            &locator.encode(),
+            proxies.value(),
+        )
+        .await?;
+        let current = dbus_operation(
+            self.operation_timeout,
+            "read current Value",
+            &locator.encode(),
+            value.current_value(),
+        )
+        .await?;
+        let minimum = dbus_operation(
+            self.operation_timeout,
+            "read minimum Value",
+            &locator.encode(),
+            value.minimum_value(),
+        )
+        .await?;
+        let maximum = dbus_operation(
+            self.operation_timeout,
+            "read maximum Value",
+            &locator.encode(),
+            value.maximum_value(),
+        )
+        .await?;
+        let increment = dbus_operation(
+            self.operation_timeout,
+            "read Value increment",
+            &locator.encode(),
+            value.minimum_increment(),
+        )
+        .await?;
+        let metadata = ValueMetadata {
+            current,
+            minimum,
+            maximum,
+            increment,
+        };
+        if !metadata.is_usable() {
+            return Err(BackendError::ValueUnavailable(encoded_id));
+        }
+        let requested = if increase {
+            current + increment
+        } else {
+            current - increment
+        };
+        if !requested.is_finite() || requested < minimum || requested > maximum {
+            return Ok(ValueMutation {
+                previous: current,
+                requested,
+                resulting: current,
+                normalized: false,
+            });
+        }
+        dbus_operation(
+            self.operation_timeout,
+            "set current Value",
+            &locator.encode(),
+            value.set_current_value(requested),
+        )
+        .await?;
+        let resulting = dbus_operation(
+            self.operation_timeout,
+            "verify current Value",
+            &locator.encode(),
+            value.current_value(),
+        )
+        .await?;
+        if !resulting.is_finite() || resulting < minimum || resulting > maximum {
+            return Err(BackendError::ValueUnavailable(encoded_id));
+        }
+        Ok(ValueMutation {
+            previous: current,
+            requested,
+            resulting,
+            normalized: (resulting - requested).abs() > f64::EPSILON
+                && (resulting - current).abs() > f64::EPSILON,
+        })
+    }
+
     /// Select a direct accessible child through its parent's Selection interface.
     pub async fn select_child(
         &self,
@@ -2052,6 +2217,21 @@ impl AtspiBackend {
                 proxies.as_ref(),
             )
             .await;
+            let adjustable_value = if matches!(role, Role::Slider | Role::SpinButton)
+                && interfaces.contains(Interface::Value)
+                && states.contains(&SemanticState::Enabled)
+                && !states.contains(&SemanticState::ReadOnly)
+            {
+                read_adjustable_value_metadata(
+                    self.operation_timeout,
+                    &encoded_id,
+                    proxies.as_ref(),
+                )
+                .await
+                .is_some()
+            } else {
+                false
+            };
             let geometry = if context.options.verbose && interfaces.contains(Interface::Component) {
                 read_geometry(self.operation_timeout, &encoded_id, &proxy).await
             } else {
@@ -2142,8 +2322,14 @@ impl AtspiBackend {
             }
 
             let (semantic_role, text_input_kind) = semantic_role_and_input_kind(role, interfaces);
-            let capabilities =
-                semantic_capabilities(interfaces, &states, semantic_role.clone(), text_input_kind);
+            let capabilities = semantic_capabilities(
+                interfaces,
+                &states,
+                semantic_role.clone(),
+                text_input_kind,
+                role,
+                adjustable_value,
+            );
 
             Ok(SemanticNode {
                 runtime_id,
@@ -2268,6 +2454,35 @@ async fn enrich_record(
                     text.push('…');
                 }
                 record.value = nonempty(text);
+            }
+        }
+    }
+    if matches!(record.role, Role::Slider | Role::SpinButton)
+        && record.interfaces.contains(Interface::Value)
+        && record.states.contains(State::Enabled)
+        && !record.states.contains(State::ReadOnly)
+        && let Ok(proxy) = ValueProxy::builder(&connection)
+            .destination(record.locator.bus_name())
+            .and_then(|builder| builder.path(record.locator.object_path()))
+        && let Ok(Ok(proxy)) = tokio::time::timeout(timeout, proxy.build()).await
+    {
+        calls += 4;
+        let current = tokio::time::timeout(timeout, proxy.current_value()).await;
+        let minimum = tokio::time::timeout(timeout, proxy.minimum_value()).await;
+        let maximum = tokio::time::timeout(timeout, proxy.maximum_value()).await;
+        let increment = tokio::time::timeout(timeout, proxy.minimum_increment()).await;
+        if let (Ok(Ok(current)), Ok(Ok(minimum)), Ok(Ok(maximum)), Ok(Ok(increment))) =
+            (current, minimum, maximum, increment)
+        {
+            let metadata = ValueMetadata {
+                current,
+                minimum,
+                maximum,
+                increment,
+            };
+            if metadata.is_usable() {
+                record.value = Some(current.to_string());
+                record.adjustable_value = true;
             }
         }
     }
@@ -2642,6 +2857,8 @@ fn semantic_capabilities(
     states: &[SemanticState],
     role: SemanticRole,
     input_kind: Option<TextInputKind>,
+    atspi_role: Role,
+    adjustable_value: bool,
 ) -> Vec<SemanticCapability> {
     let mut capabilities = Vec::new();
     if interfaces.contains(Interface::Selection) {
@@ -2657,7 +2874,61 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::EditText);
     }
+    if role == SemanticRole::Slider
+        && matches!(atspi_role, Role::Slider | Role::SpinButton)
+        && interfaces.contains(Interface::Value)
+        && states.contains(&SemanticState::Enabled)
+        && !states.contains(&SemanticState::ReadOnly)
+        && adjustable_value
+    {
+        capabilities.push(SemanticCapability::Value);
+    }
     capabilities
+}
+
+async fn read_adjustable_value_metadata(
+    timeout: Duration,
+    node_id: &str,
+    proxies: Option<&atspi::proxy::proxy_ext::Proxies<'_>>,
+) -> Option<ValueMetadata> {
+    let value = atspi_operation(timeout, "create Value proxy", node_id, proxies?.value())
+        .await
+        .ok()?;
+    let metadata = ValueMetadata {
+        current: dbus_operation(
+            timeout,
+            "read current Value",
+            node_id,
+            value.current_value(),
+        )
+        .await
+        .ok()?,
+        minimum: dbus_operation(
+            timeout,
+            "read minimum Value",
+            node_id,
+            value.minimum_value(),
+        )
+        .await
+        .ok()?,
+        maximum: dbus_operation(
+            timeout,
+            "read maximum Value",
+            node_id,
+            value.maximum_value(),
+        )
+        .await
+        .ok()?,
+        increment: dbus_operation(
+            timeout,
+            "read Value increment",
+            node_id,
+            value.minimum_increment(),
+        )
+        .await
+        .ok()?,
+    };
+    metadata.is_usable().then_some(metadata)
 }
 
 async fn read_geometry(
@@ -2863,12 +3134,26 @@ mod tests {
     #[test]
     fn selection_interface_maps_to_container_selection_capability() {
         assert_eq!(
-            semantic_capabilities(Interface::Selection.into(), &[], SemanticRole::List, None),
+            semantic_capabilities(
+                Interface::Selection.into(),
+                &[],
+                SemanticRole::List,
+                None,
+                Role::List,
+                false,
+            ),
             vec![SemanticCapability::SelectChildren]
         );
         assert!(
-            semantic_capabilities(Interface::Action.into(), &[], SemanticRole::Button, None)
-                .is_empty()
+            semantic_capabilities(
+                Interface::Action.into(),
+                &[],
+                SemanticRole::Button,
+                None,
+                Role::Button,
+                false,
+            )
+            .is_empty()
         );
     }
 
@@ -2881,7 +3166,9 @@ mod tests {
                 interfaces,
                 &[SemanticState::Editable],
                 SemanticRole::TextInput,
-                Some(TextInputKind::Plain)
+                Some(TextInputKind::Plain),
+                Role::Entry,
+                false,
             ),
             vec![SemanticCapability::EditText]
         );
@@ -2890,7 +3177,9 @@ mod tests {
                 interfaces,
                 &[SemanticState::Editable],
                 SemanticRole::TextInput,
-                Some(TextInputKind::Password)
+                Some(TextInputKind::Password),
+                Role::PasswordText,
+                false,
             )
             .is_empty()
         );
@@ -2899,7 +3188,59 @@ mod tests {
                 interfaces,
                 &[],
                 SemanticRole::TextInput,
-                Some(TextInputKind::Plain)
+                Some(TextInputKind::Plain),
+                Role::Entry,
+                false,
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn value_capability_requires_qualified_adjustable_role_and_metadata() {
+        let interfaces = Interface::Value.into();
+        let states = [SemanticState::Enabled];
+        assert_eq!(
+            semantic_capabilities(
+                interfaces,
+                &states,
+                SemanticRole::Slider,
+                None,
+                Role::Slider,
+                true,
+            ),
+            vec![SemanticCapability::Value]
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &states,
+                SemanticRole::Slider,
+                None,
+                Role::Slider,
+                false,
+            )
+            .is_empty()
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &states,
+                SemanticRole::Slider,
+                None,
+                Role::ScrollBar,
+                true,
+            )
+            .is_empty()
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &states,
+                SemanticRole::ProgressBar,
+                None,
+                Role::ProgressBar,
+                true,
             )
             .is_empty()
         );
@@ -2918,6 +3259,8 @@ mod tests {
                 ],
                 SemanticRole::TextInput,
                 Some(TextInputKind::Plain),
+                Role::Entry,
+                false,
             )
             .is_empty()
         );
@@ -2941,6 +3284,7 @@ mod tests {
             states: Default::default(),
             actions: Vec::new(),
             value: None,
+            adjustable_value: false,
         }];
         repair_root_relationships(&mut records, &root, &[window]);
         assert_eq!(records[0].parent.as_ref(), Some(&root));

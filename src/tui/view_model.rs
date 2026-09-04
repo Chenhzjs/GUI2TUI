@@ -31,6 +31,10 @@ pub enum TuiElementKind {
         display: String,
         input_kind: TextInputKind,
     },
+    Value {
+        label: String,
+        display: String,
+    },
     ComboBox {
         label: String,
     },
@@ -85,6 +89,7 @@ impl TuiElement {
                 | TuiElementKind::ToggleButton { .. }
                 | TuiElementKind::CheckBox { .. }
                 | TuiElementKind::TextInput { .. }
+                | TuiElementKind::Value { .. }
                 | TuiElementKind::ComboBox { .. }
                 | TuiElementKind::ListItem { .. }
                 | TuiElementKind::MenuItem { .. }
@@ -215,7 +220,8 @@ fn map_node(
             | SemanticRole::RadioButton
             | SemanticRole::TextInput
             | SemanticRole::ListItem
-    );
+    ) || (node.role == SemanticRole::Slider
+        && node.capabilities.contains(&SemanticCapability::Value));
     let kind = match &node.role {
         SemanticRole::Application => None,
         SemanticRole::Window => {
@@ -254,6 +260,15 @@ fn map_node(
             },
             input_kind: node.text_input_kind.unwrap_or(TextInputKind::Plain),
         }),
+        SemanticRole::Slider if node.capabilities.contains(&SemanticCapability::Value) => {
+            Some(TuiElementKind::Value {
+                label: node.name.clone().unwrap_or_else(|| "Value".to_owned()),
+                display: node
+                    .value
+                    .clone()
+                    .unwrap_or_else(|| "[unavailable]".to_owned()),
+            })
+        }
         SemanticRole::ComboBox => Some(TuiElementKind::ComboBox {
             label: node.name.clone().unwrap_or_else(|| "Combo box".to_owned()),
         }),

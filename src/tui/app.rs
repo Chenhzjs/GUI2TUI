@@ -1276,9 +1276,12 @@ impl TuiApplication {
                 self.ensure_focus_visible();
                 self.ensure_focused_relations().await;
             }
-            UiIntent::Activate | UiIntent::Toggle | UiIntent::Select | UiIntent::OpenMenu => {
-                self.execute_focused(intent).await
-            }
+            UiIntent::Activate
+            | UiIntent::Toggle
+            | UiIntent::Select
+            | UiIntent::OpenMenu
+            | UiIntent::IncreaseValue
+            | UiIntent::DecreaseValue => self.execute_focused(intent).await,
             UiIntent::BeginChoice => self.begin_choice(),
             UiIntent::ClosePopup => {
                 self.status =
@@ -1536,7 +1539,32 @@ impl TuiApplication {
                 _ => {}
             }
         }
-        if let Some(mut intent) = key_to_intent(key) {
+        let focused_value_intent = match key.code {
+            crossterm::event::KeyCode::Up
+                if self
+                    .focus
+                    .current()
+                    .and_then(|id| self.scene.element(id))
+                    .is_some_and(|element| {
+                        element.capability() == InteractionCapability::AdjustValue
+                    }) =>
+            {
+                Some(UiIntent::IncreaseValue)
+            }
+            crossterm::event::KeyCode::Down
+                if self
+                    .focus
+                    .current()
+                    .and_then(|id| self.scene.element(id))
+                    .is_some_and(|element| {
+                        element.capability() == InteractionCapability::AdjustValue
+                    }) =>
+            {
+                Some(UiIntent::DecreaseValue)
+            }
+            _ => None,
+        };
+        if let Some(mut intent) = focused_value_intent.or_else(|| key_to_intent(key)) {
             if intent == UiIntent::Activate
                 && self
                     .focus
@@ -2009,7 +2037,7 @@ impl TuiApplication {
         }
     }
 
-    async fn execute_focused(&mut self, _requested_intent: UiIntent) {
+    async fn execute_focused(&mut self, requested_intent: UiIntent) {
         let Some(scene_id) = self.focus.current() else {
             self.status = "No focusable control".to_owned();
             return;
@@ -2029,7 +2057,23 @@ impl TuiApplication {
             );
             return;
         }
-        let intent = intent_for_element(&element);
+        if element.capability() == InteractionCapability::AdjustValue
+            && !matches!(
+                requested_intent,
+                UiIntent::IncreaseValue | UiIntent::DecreaseValue
+            )
+        {
+            self.status = format!("Adjust \"{}\" with Up/Down", element_label(&element));
+            return;
+        }
+        let intent = if matches!(
+            requested_intent,
+            UiIntent::IncreaseValue | UiIntent::DecreaseValue
+        ) {
+            requested_intent
+        } else {
+            intent_for_element(&element)
+        };
         if intent == UiIntent::BeginChoice {
             self.begin_choice();
             return;
@@ -2061,6 +2105,79 @@ impl TuiApplication {
         let popup_owner = (intent == UiIntent::Select)
             .then(|| self.active_popup_owner())
             .flatten();
+        if let BackendOperation::AdjustValue { locator, increase } = &backend_operation {
+            let Some(node) = self.cache.node(runtime_id) else {
+                self.status = "Value control became stale; refresh and retry".to_owned();
+                return;
+            };
+            if node.backend_locator != *locator
+                || !node
+                    .capabilities
+                    .contains(&crate::semantic::SemanticCapability::Value)
+            {
+                self.status =
+                    "Value control became stale or unavailable; refresh and retry".to_owned();
+                return;
+            }
+            match self.backend.adjust_value(locator, *increase).await {
+                Ok(mutation) => {
+                    let status = if (mutation.resulting - mutation.previous).abs() <= f64::EPSILON {
+                        format!(
+                            "Value unchanged for \"{}\" (authoritative {})",
+                            element_label(&element),
+                            mutation.resulting
+                        )
+                    } else if mutation.normalized {
+                        format!(
+                            "Value {} \"{}\" → {} (normalized)",
+                            if *increase { "increased" } else { "decreased" },
+                            element_label(&element),
+                            mutation.resulting
+                        )
+                    } else if (mutation.resulting - mutation.requested).abs() <= f64::EPSILON {
+                        format!(
+                            "Value {} \"{}\" → {}",
+                            if *increase { "increased" } else { "decreased" },
+                            element_label(&element),
+                            mutation.resulting
+                        )
+                    } else {
+                        format!(
+                            "Value outcome unverified for \"{}\"; authoritative {}",
+                            element_label(&element),
+                            mutation.resulting
+                        )
+                    };
+                    match self.backend.refresh_node(locator, false).await {
+                        Ok(node) => {
+                            if let Err(error) = self.cache.refresh_node(node) {
+                                self.status =
+                                    format!("Value changed but cache refresh failed: {error}");
+                                return;
+                            }
+                            self.rebuild_view_preserving_focus().await;
+                            self.status = status;
+                        }
+                        Err(error) => {
+                            let (reason, _) = value_operation_error_status(&error);
+                            self.full_reload(Some(format!(
+                                "Value confirmed as {}, but presentation refresh failed ({reason})",
+                                mutation.resulting
+                            )))
+                            .await;
+                        }
+                    }
+                }
+                Err(error) => {
+                    let (status, refresh) = value_operation_error_status(&error);
+                    self.status = status;
+                    if refresh {
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                }
+            }
+            return;
+        }
         let result = match &backend_operation {
             BackendOperation::InvokeAction { locator, action } => self
                 .backend
@@ -2078,6 +2195,7 @@ impl TuiApplication {
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("text commits use commit_edit")
             }
+            BackendOperation::AdjustValue { .. } => unreachable!("Value operations handled above"),
         };
         match result {
             Ok(_) => {
@@ -2138,6 +2256,9 @@ impl TuiApplication {
             }
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("command palette never edits text")
+            }
+            BackendOperation::AdjustValue { .. } => {
+                unreachable!("command palette never adjusts Value controls")
             }
         };
         match result {
@@ -2229,6 +2350,7 @@ impl TuiApplication {
                     .await
             }
             BackendOperation::SetTextContents { .. } => unreachable!("choice never edits text"),
+            BackendOperation::AdjustValue { .. } => unreachable!("choice never adjusts Value"),
         };
         match result {
             Ok(()) => {
@@ -3304,6 +3426,7 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
         InteractionCapability::Choose => UiIntent::BeginChoice,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
         InteractionCapability::EditText => UiIntent::BeginEdit,
+        InteractionCapability::AdjustValue => UiIntent::IncreaseValue,
         InteractionCapability::BrowseContent => UiIntent::BeginRead,
         InteractionCapability::Activate | InteractionCapability::None => UiIntent::Activate,
     }
@@ -3317,6 +3440,8 @@ fn operation_verb(intent: UiIntent) -> &'static str {
         UiIntent::ClosePopup => "Closed popup",
         UiIntent::Toggle => "Toggled",
         UiIntent::BeginEdit | UiIntent::CommitEdit | UiIntent::CancelEdit => "Edited",
+        UiIntent::IncreaseValue => "Increased",
+        UiIntent::DecreaseValue => "Decreased",
         _ => "Activated",
     }
 }
@@ -3329,6 +3454,12 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             format!("parent Selection child {child_index}")
         }
         BackendOperation::SetTextContents { .. } => "EditableText.SetTextContents".to_owned(),
+        BackendOperation::AdjustValue { increase, .. } => if *increase {
+            "Value.increase"
+        } else {
+            "Value.decrease"
+        }
+        .to_owned(),
     }
 }
 
@@ -3342,6 +3473,30 @@ fn operation_error_status(error: &BackendError) -> (String, bool) {
             true,
         ),
         _ => (format!("Action failed: {error}"), false),
+    }
+}
+
+fn value_operation_error_status(error: &BackendError) -> (String, bool) {
+    match error {
+        BackendError::ObjectUnavailable(_, _) => (
+            "Value operation failed: control became stale. Refreshing...".to_owned(),
+            true,
+        ),
+        BackendError::OperationTimeout { .. } | BackendError::DbusCall { .. } => (
+            "Value outcome could not be verified; refreshing authoritative GUI state".to_owned(),
+            true,
+        ),
+        BackendError::PermissionDenied { .. } => {
+            ("Application rejected the Value operation".to_owned(), false)
+        }
+        BackendError::ValueUnsupported(_) | BackendError::ValueUnavailable(_) => (
+            "Value control is no longer safely adjustable; showing it read-only".to_owned(),
+            true,
+        ),
+        _ => (
+            "Value operation was rejected by the application".to_owned(),
+            false,
+        ),
     }
 }
 

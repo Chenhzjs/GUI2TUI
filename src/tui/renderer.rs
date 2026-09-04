@@ -1243,6 +1243,7 @@ fn interaction(element: &SceneElement) -> Option<HitInteraction> {
         SceneElementKind::Field { .. } | SceneElementKind::Selector { .. } => {
             Some(HitInteraction::Focus)
         }
+        SceneElementKind::Value { .. } => Some(HitInteraction::Focus),
         SceneElementKind::DocumentSummary { .. } => Some(HitInteraction::Activate),
         _ => None,
     }
@@ -1304,6 +1305,9 @@ fn element_lines_for_width(
             }
         }
         SceneElementKind::Selector { label } => vec![format!("{marker}[{label} ▾]{unavailable}")],
+        SceneElementKind::Value { label, display } => vec![format!(
+            "{marker}{label}: {display}  [↑ increase / ↓ decrease]{unavailable}"
+        )],
         SceneElementKind::DocumentSummary {
             title,
             blocks,

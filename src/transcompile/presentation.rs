@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use clap::ValueEnum;
 
 use crate::{
-    semantic::{RuntimeNodeId, SemanticNode, SemanticRole, SemanticState, TextInputKind},
+    semantic::{
+        RuntimeNodeId, SemanticCapability, SemanticNode, SemanticRole, SemanticState, TextInputKind,
+    },
     tui::{
         action::{InteractionCapability, UiIntent},
         view_model::{TuiElementKind, TuiViewModel},
@@ -75,6 +77,9 @@ pub fn compile_legacy_scene(root: &SemanticNode) -> TuiScene {
                     display,
                     input_kind,
                 },
+                TuiElementKind::Value { label, display } => {
+                    SceneElementKind::Value { label, display }
+                }
                 TuiElementKind::ComboBox { label } => SceneElementKind::Selector { label },
                 TuiElementKind::List { label } => SceneElementKind::Group { label },
                 TuiElementKind::ListItem { label, selected } => {
@@ -383,6 +388,23 @@ impl SceneCompiler<'_> {
             );
             return;
         }
+        if node.role == SemanticRole::Slider
+            && node.capabilities.contains(&SemanticCapability::Value)
+        {
+            self.push(
+                SceneElementKind::Value {
+                    label: node.name.clone().unwrap_or_else(|| "Value".to_owned()),
+                    display: node
+                        .value
+                        .clone()
+                        .unwrap_or_else(|| "[unavailable]".to_owned()),
+                },
+                region.source_nodes.clone(),
+                self.binding(node, region),
+                PresentationStrategy::DirectWidget,
+            );
+            return;
+        }
         let label = node_label(node).unwrap_or_else(|| node.role.to_string());
         let kind = match node.role {
             SemanticRole::Button => SceneElementKind::Button { label },
@@ -508,6 +530,7 @@ fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> 
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),
+        InteractionCapability::AdjustValue => Some(UiIntent::IncreaseValue),
         InteractionCapability::BrowseContent => Some(UiIntent::BeginRead),
     }
 }
@@ -534,6 +557,7 @@ fn capability_for_intent(intent: UiIntent) -> InteractionCapability {
         UiIntent::BeginChoice => InteractionCapability::Choose,
         UiIntent::OpenMenu => InteractionCapability::OpenMenu,
         UiIntent::BeginEdit => InteractionCapability::EditText,
+        UiIntent::IncreaseValue | UiIntent::DecreaseValue => InteractionCapability::AdjustValue,
         _ => InteractionCapability::None,
     }
 }

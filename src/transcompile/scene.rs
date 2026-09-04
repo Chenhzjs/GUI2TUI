@@ -52,6 +52,10 @@ pub enum SceneElementKind {
         display: String,
         input_kind: TextInputKind,
     },
+    Value {
+        label: String,
+        display: String,
+    },
     Button {
         label: String,
     },
@@ -121,6 +125,7 @@ impl SceneElement {
                     | SceneElementKind::Toggle { .. }
                     | SceneElementKind::Checkbox { .. }
                     | SceneElementKind::Selector { .. }
+                    | SceneElementKind::Value { .. }
                     | SceneElementKind::DocumentSummary { .. }
                     | SceneElementKind::SelectionItem { .. }
                     | SceneElementKind::Command { .. }
@@ -145,6 +150,7 @@ impl SceneElement {
             | SceneElementKind::Toggle { label, .. }
             | SceneElementKind::Checkbox { label, .. }
             | SceneElementKind::Selector { label }
+            | SceneElementKind::Value { label, .. }
             | SceneElementKind::SelectionItem { label, .. }
             | SceneElementKind::CommandHeader { label }
             | SceneElementKind::OpaqueContent { label, .. }

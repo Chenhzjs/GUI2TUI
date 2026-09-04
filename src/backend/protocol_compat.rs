@@ -67,6 +67,10 @@ pub struct BulkAccessibleRecord {
     pub states: StateSet,
     pub actions: Vec<SemanticAction>,
     pub value: Option<String>,
+    /// Selective live enrichment proved a finite bounded Value with a
+    /// positive advertised increment. Cache interface exposure alone is not
+    /// sufficient to set this flag.
+    pub adjustable_value: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +114,7 @@ impl TryFrom<CacheItem> for BulkAccessibleRecord {
             states: item.states,
             actions: Vec::new(),
             value: None,
+            adjustable_value: false,
         })
     }
 }
@@ -145,6 +150,7 @@ impl TryFrom<LegacyCacheItem> for BulkAccessibleRecord {
             states: item.states,
             actions: Vec::new(),
             value: None,
+            adjustable_value: false,
         })
     }
 }

@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    semantic::{RelationalSemanticGraph, RuntimeNodeId, SemanticNode, SemanticRole},
+    semantic::{
+        RelationalSemanticGraph, RuntimeNodeId, SemanticCapability, SemanticNode, SemanticRole,
+    },
     tui::action::{InteractionCapability, UiIntent, interaction_capability},
 };
 
@@ -624,7 +626,8 @@ fn is_direct_control(node: &SemanticNode) -> bool {
             | SemanticRole::ComboBox
             | SemanticRole::ListItem
             | SemanticRole::MenuItem
-    )
+    ) || (node.role == SemanticRole::Slider
+        && node.capabilities.contains(&SemanticCapability::Value))
 }
 
 fn is_command_container(node: &SemanticNode) -> bool {
@@ -673,6 +676,7 @@ fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> 
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),
+        InteractionCapability::AdjustValue => Some(UiIntent::IncreaseValue),
         InteractionCapability::BrowseContent => Some(UiIntent::BeginRead),
     }
 }

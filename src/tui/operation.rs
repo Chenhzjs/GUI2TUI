@@ -14,7 +14,14 @@ pub enum SemanticOperation {
     SelectNode(RuntimeNodeId),
     OpenMenu(RuntimeNodeId),
     ClosePopup(RuntimeNodeId),
-    ReplaceText { target: RuntimeNodeId, text: String },
+    ReplaceText {
+        target: RuntimeNodeId,
+        text: String,
+    },
+    AdjustValue {
+        target: RuntimeNodeId,
+        increase: bool,
+    },
 }
 
 impl SemanticOperation {
@@ -25,6 +32,14 @@ impl SemanticOperation {
             UiIntent::Select => Some(Self::SelectNode(runtime_id)),
             UiIntent::OpenMenu => Some(Self::OpenMenu(runtime_id)),
             UiIntent::ClosePopup => Some(Self::ClosePopup(runtime_id)),
+            UiIntent::IncreaseValue => Some(Self::AdjustValue {
+                target: runtime_id,
+                increase: true,
+            }),
+            UiIntent::DecreaseValue => Some(Self::AdjustValue {
+                target: runtime_id,
+                increase: false,
+            }),
             _ => None,
         }
     }
@@ -36,7 +51,7 @@ impl SemanticOperation {
             | Self::SelectNode(id)
             | Self::OpenMenu(id)
             | Self::ClosePopup(id) => *id,
-            Self::ReplaceText { target, .. } => *target,
+            Self::ReplaceText { target, .. } | Self::AdjustValue { target, .. } => *target,
         }
     }
 
@@ -48,6 +63,13 @@ impl SemanticOperation {
             Self::OpenMenu(_) => UiIntent::OpenMenu,
             Self::ClosePopup(_) => UiIntent::ClosePopup,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
+            Self::AdjustValue { increase, .. } => {
+                if *increase {
+                    UiIntent::IncreaseValue
+                } else {
+                    UiIntent::DecreaseValue
+                }
+            }
         }
     }
 }
@@ -94,6 +116,10 @@ pub enum BackendOperation {
     SetTextContents {
         locator: BackendLocator,
         text: String,
+    },
+    AdjustValue {
+        locator: BackendLocator,
+        increase: bool,
     },
 }
 
@@ -186,6 +212,18 @@ pub fn resolve_backend_operation(
         return Ok(BackendOperation::SetTextContents {
             locator: binding.backend_locator.clone(),
             text: text.clone(),
+        });
+    }
+
+    if let SemanticOperation::AdjustValue { increase, .. } = operation {
+        if binding.capability != super::action::InteractionCapability::AdjustValue {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "the focused control is not a qualified bounded Value".to_owned(),
+            ));
+        }
+        return Ok(BackendOperation::AdjustValue {
+            locator: binding.backend_locator.clone(),
+            increase,
         });
     }
 
@@ -375,6 +413,30 @@ mod tests {
             Ok(BackendOperation::SetTextContents {
                 locator: BackendLocator::new(":1.2", "/node/1"),
                 text: "updated".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn qualified_value_maps_to_increment_operation_without_an_action() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut slider = node(1, SemanticRole::Slider, "Probe value");
+        slider.value = Some("4".to_owned());
+        slider.capabilities.push(SemanticCapability::Value);
+        root.children.push(slider);
+        let scene = compile_legacy_scene(&root);
+
+        assert_eq!(
+            resolve_backend_operation(
+                &scene,
+                SemanticOperation::AdjustValue {
+                    target: RuntimeNodeId::new(1),
+                    increase: true,
+                },
+            ),
+            Ok(BackendOperation::AdjustValue {
+                locator: BackendLocator::new(":1.2", "/node/1"),
+                increase: true,
             })
         );
     }

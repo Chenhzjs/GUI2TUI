@@ -337,6 +337,8 @@ pub enum SemanticCapability {
     SelectChildren,
     /// A plain text input supports atomic replacement through AT-SPI.
     EditText,
+    /// A finite bounded AT-SPI Value with a positive advertised increment.
+    Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

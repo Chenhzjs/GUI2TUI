@@ -23,6 +23,8 @@ pub enum UiIntent {
     BeginEdit,
     CommitEdit,
     CancelEdit,
+    IncreaseValue,
+    DecreaseValue,
     Refresh,
     ScrollLines(i16),
     ScrollPages(i16),
@@ -38,6 +40,7 @@ pub enum InteractionCapability {
     Choose,
     OpenMenu,
     EditText,
+    AdjustValue,
     BrowseContent,
 }
 
@@ -84,6 +87,9 @@ pub fn interaction_capability(
 ) -> InteractionCapability {
     if *role == SemanticRole::TextInput && capabilities.contains(&SemanticCapability::EditText) {
         return InteractionCapability::EditText;
+    }
+    if *role == SemanticRole::Slider && capabilities.contains(&SemanticCapability::Value) {
+        return InteractionCapability::AdjustValue;
     }
     let intent = match role {
         SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
