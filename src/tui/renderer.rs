@@ -1315,11 +1315,16 @@ fn element_lines_for_width(
             links,
             forms,
             completeness,
+            external_edit,
         } => vec![
             format!("{marker}Document: {title}"),
             format!("    {blocks} blocks | {headings} headings | {links} links | {forms} forms"),
             format!("    completeness: {completeness}"),
-            "    [ Enter: Read document ]".to_owned(),
+            if *external_edit {
+                "    [ Enter: Read document | e: Edit with configured handler ]".to_owned()
+            } else {
+                "    [ Enter: Read document ]".to_owned()
+            },
             "    o Outline | / Content search".to_owned(),
         ],
         SceneElementKind::SelectionItem { label, selected } => vec![format!(

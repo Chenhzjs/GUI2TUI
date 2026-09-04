@@ -18,6 +18,11 @@ pub enum SemanticOperation {
         target: RuntimeNodeId,
         text: String,
     },
+    ReplaceComplexText {
+        target: RuntimeNodeId,
+        expected: String,
+        text: String,
+    },
     AdjustValue {
         target: RuntimeNodeId,
         increase: bool,
@@ -51,7 +56,9 @@ impl SemanticOperation {
             | Self::SelectNode(id)
             | Self::OpenMenu(id)
             | Self::ClosePopup(id) => *id,
-            Self::ReplaceText { target, .. } | Self::AdjustValue { target, .. } => *target,
+            Self::ReplaceText { target, .. }
+            | Self::ReplaceComplexText { target, .. }
+            | Self::AdjustValue { target, .. } => *target,
         }
     }
 
@@ -63,6 +70,7 @@ impl SemanticOperation {
             Self::OpenMenu(_) => UiIntent::OpenMenu,
             Self::ClosePopup(_) => UiIntent::ClosePopup,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
+            Self::ReplaceComplexText { .. } => UiIntent::BeginExternalEdit,
             Self::AdjustValue { increase, .. } => {
                 if *increase {
                     UiIntent::IncreaseValue
@@ -88,7 +96,9 @@ pub fn resolve_cached_node_operation(
         .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
     if matches!(
         operation,
-        SemanticOperation::SelectNode(_) | SemanticOperation::ReplaceText { .. }
+        SemanticOperation::SelectNode(_)
+            | SemanticOperation::ReplaceText { .. }
+            | SemanticOperation::ReplaceComplexText { .. }
     ) {
         return Err(OperationResolutionError::NoCompatibleOperation(
             "operation requires scene relationship context".to_owned(),
@@ -115,6 +125,11 @@ pub enum BackendOperation {
     },
     SetTextContents {
         locator: BackendLocator,
+        text: String,
+    },
+    SetComplexTextContents {
+        locator: BackendLocator,
+        expected: String,
         text: String,
     },
     AdjustValue {
@@ -211,6 +226,25 @@ pub fn resolve_backend_operation(
         }
         return Ok(BackendOperation::SetTextContents {
             locator: binding.backend_locator.clone(),
+            text: text.clone(),
+        });
+    }
+
+    if let SemanticOperation::ReplaceComplexText { expected, text, .. } = &operation {
+        let metadata = scene
+            .node_metadata(runtime_id)
+            .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+        if !metadata
+            .capabilities
+            .contains(&SemanticCapability::EditComplexText)
+        {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "the text target is no longer qualified as complete writable plain text".to_owned(),
+            ));
+        }
+        return Ok(BackendOperation::SetComplexTextContents {
+            locator: binding.backend_locator.clone(),
+            expected: expected.clone(),
             text: text.clone(),
         });
     }

@@ -13,13 +13,13 @@ use crate::{
     },
     content::{
         ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget,
-        SearchBudget, SearchState,
+        SearchBudget, SearchState, TextCapabilityStatus,
     },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::{
         BackendLocator, LARGE_TREE_RELATION_CANDIDATE_LIMIT, RelationPriorityContext,
-        RuntimeNodeId, SemanticCache, SemanticRole, SemanticState, schedule_on_demand_relations,
-        schedule_relation_candidates,
+        RuntimeNodeId, SemanticCache, SemanticCapability, SemanticRole, SemanticState,
+        schedule_on_demand_relations, schedule_relation_candidates,
     },
     transcompile::{
         ChoiceCatalog, ChoiceOptions, CommandHierarchy, InteractionScopeId, InteractionScopes,
@@ -36,6 +36,7 @@ use super::{
     choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
     content_view::{ContentViewCommand, ContentViewMode, ContentViewState, move_index},
     edit::{EditCommand, EditSession, key_to_edit_command},
+    external_text::{ExternalTextSession, HandlerOutcome},
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
@@ -94,6 +95,7 @@ pub struct TuiApplication {
     application_available: bool,
     backend_available: bool,
     edit_session: Option<EditSession>,
+    external_text_requested: bool,
     command_palette: Option<CommandPalette>,
     choice_overlay: Option<ChoiceOverlay>,
     content: ContentRuntime,
@@ -212,6 +214,10 @@ impl TuiApplication {
         self.status = message.into();
     }
 
+    pub fn take_external_text_request(&mut self) -> bool {
+        std::mem::take(&mut self.external_text_requested)
+    }
+
     pub fn set_terminal_attached(&mut self, attached: bool) {
         self.runtime.set_terminal_attached(attached);
         // Preserve semantic focus/Reader offsets; the next draw recomputes
@@ -238,6 +244,7 @@ impl TuiApplication {
             task.abort();
         }
         self.edit_session = None;
+        self.external_text_requested = false;
         self.content_view = None;
         self.content_return = None;
         self.modality_view = None;
@@ -674,6 +681,7 @@ impl TuiApplication {
                     .await;
             }
         }
+        qualify_complex_text_capabilities(&backend, &mut cache, &content).await;
         let content_elapsed = started.elapsed();
         let (scene, scopes, commands, choices) =
             build_contextual_view(&cache, presentation_mode, content.catalog())?;
@@ -761,6 +769,7 @@ impl TuiApplication {
             application_available: true,
             backend_available: true,
             edit_session: None,
+            external_text_requested: false,
             command_palette: None,
             choice_overlay: None,
             content,
@@ -1288,6 +1297,7 @@ impl TuiApplication {
                     "Popup closing is resolved from its active interaction scope".to_owned()
             }
             UiIntent::BeginEdit => self.begin_edit().await,
+            UiIntent::BeginExternalEdit => self.external_text_requested = true,
             UiIntent::CommitEdit => self.commit_edit().await,
             UiIntent::CancelEdit => self.cancel_edit(),
             UiIntent::OpenCommandPalette => {
@@ -1526,6 +1536,24 @@ impl TuiApplication {
             });
         if focused_document {
             match key.code {
+                crossterm::event::KeyCode::Char('e')
+                    if self
+                        .focus
+                        .current()
+                        .and_then(|id| self.scene.element(id))
+                        .is_some_and(|element| {
+                            matches!(
+                                element.kind,
+                                SceneElementKind::DocumentSummary {
+                                    external_edit: true,
+                                    ..
+                                }
+                            )
+                        }) =>
+                {
+                    self.handle_intent(UiIntent::BeginExternalEdit).await;
+                    return false;
+                }
                 crossterm::event::KeyCode::Char('o') => {
                     self.begin_read().await;
                     self.open_outline();
@@ -2195,6 +2223,9 @@ impl TuiApplication {
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("text commits use commit_edit")
             }
+            BackendOperation::SetComplexTextContents { .. } => {
+                unreachable!("complex text commits use the external text session")
+            }
             BackendOperation::AdjustValue { .. } => unreachable!("Value operations handled above"),
         };
         match result {
@@ -2256,6 +2287,9 @@ impl TuiApplication {
             }
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("command palette never edits text")
+            }
+            BackendOperation::SetComplexTextContents { .. } => {
+                unreachable!("command palette never edits complex text")
             }
             BackendOperation::AdjustValue { .. } => {
                 unreachable!("command palette never adjusts Value controls")
@@ -2350,6 +2384,9 @@ impl TuiApplication {
                     .await
             }
             BackendOperation::SetTextContents { .. } => unreachable!("choice never edits text"),
+            BackendOperation::SetComplexTextContents { .. } => {
+                unreachable!("choice never edits complex text")
+            }
             BackendOperation::AdjustValue { .. } => unreachable!("choice never adjusts Value"),
         };
         match result {
@@ -2494,6 +2531,234 @@ impl TuiApplication {
     fn cancel_edit(&mut self) {
         if self.edit_session.take().is_some() {
             self.status = "Edit cancelled; GUI value unchanged".to_owned();
+        }
+    }
+
+    pub async fn begin_external_text_interaction(&mut self) -> Result<ExternalTextSession, String> {
+        let scene_id = self
+            .focus
+            .current()
+            .ok_or_else(|| "No focused document text target".to_owned())?;
+        let element = self
+            .scene
+            .element(scene_id)
+            .ok_or_else(|| "Focused text target disappeared".to_owned())?;
+        if !matches!(
+            element.kind,
+            SceneElementKind::DocumentSummary {
+                external_edit: true,
+                ..
+            }
+        ) {
+            return Err("Focused document is not qualified for external text editing".into());
+        }
+        let binding = element
+            .binding
+            .as_ref()
+            .ok_or_else(|| "Focused text target has no semantic binding".to_owned())?;
+        let target = binding.runtime_id;
+        let locator = binding.backend_locator.clone();
+        let label = element_label(element).to_owned();
+        let node = self
+            .cache
+            .node(target)
+            .ok_or_else(|| "Focused text target disappeared".to_owned())?;
+        if node.backend_locator != locator
+            || !node
+                .capabilities
+                .contains(&SemanticCapability::EditComplexText)
+            || !self.scopes.allows_node(target)
+        {
+            return Err("Focused text target is no longer safely editable".into());
+        }
+        let scope = self
+            .scopes
+            .scope_for_node(target)
+            .ok_or_else(|| "Focused text target has no active interaction scope".to_owned())?;
+        let generation = self
+            .runtime
+            .generation()
+            .ok_or_else(|| "Application generation is unavailable".to_owned())?;
+        let original = self
+            .backend
+            .read_complete_plain_multiline_text(&locator)
+            .await
+            .map_err(|error| format!("Cannot acquire complete plain text: {error}"))?;
+        let ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::TextInteraction,
+                crate::modality::CancellationToken::default(),
+            )
+            .map_err(|error| error.to_string())?;
+        match ExternalTextSession::new(
+            target,
+            locator,
+            generation,
+            scope,
+            original,
+            ticket.clone(),
+            label,
+        ) {
+            Ok(session) => Ok(session),
+            Err(error) => {
+                let _ = self.runtime.complete(&ticket);
+                Err(error)
+            }
+        }
+    }
+
+    pub async fn finish_external_text_interaction(
+        &mut self,
+        mut session: ExternalTextSession,
+        handler: HandlerOutcome,
+    ) {
+        self.synchronize_after_external_handler().await;
+        match handler {
+            HandlerOutcome::Unchanged => {
+                let _ = self.runtime.complete(&session.ticket);
+                self.status = "External text unchanged; GUI was not mutated".to_owned();
+            }
+            HandlerOutcome::Failed { reason, modified } => {
+                let _ = self.runtime.complete(&session.ticket);
+                self.status = if modified {
+                    preserved_status(&mut session, &format!("{reason}; GUI was not mutated"))
+                } else {
+                    format!("{reason}; GUI was not mutated")
+                };
+            }
+            HandlerOutcome::Modified(candidate) => {
+                if self.runtime.generation() != Some(session.generation)
+                    || self.cache.node(session.target).is_none_or(|node| {
+                        node.backend_locator != session.locator
+                            || !node
+                                .capabilities
+                                .contains(&SemanticCapability::EditComplexText)
+                    })
+                    || self.scopes.scope_for_node(session.target) != Some(session.scope)
+                    || !self.scopes.allows_node(session.target)
+                {
+                    let _ = self.runtime.complete(&session.ticket);
+                    self.status = preserved_status(
+                        &mut session,
+                        "External text target became stale; GUI was not mutated",
+                    );
+                    return;
+                }
+
+                let current = match self
+                    .backend
+                    .read_complete_plain_multiline_text(&session.locator)
+                    .await
+                {
+                    Ok(current) => current,
+                    Err(_) => {
+                        let _ = self.runtime.complete(&session.ticket);
+                        self.status = preserved_status(
+                            &mut session,
+                            "External text target is unavailable or unverified; GUI was not mutated",
+                        );
+                        return;
+                    }
+                };
+                if current != session.original {
+                    let _ = self.runtime.complete(&session.ticket);
+                    self.status = preserved_status(
+                        &mut session,
+                        "External text conflict detected; GUI was not overwritten",
+                    );
+                    return;
+                }
+
+                let operation = SemanticOperation::ReplaceComplexText {
+                    target: session.target,
+                    expected: session.original.clone(),
+                    text: candidate.clone(),
+                };
+                let operation = match resolve_backend_operation(&self.scene, operation) {
+                    Ok(operation) => operation,
+                    Err(error) => {
+                        let _ = self.runtime.complete(&session.ticket);
+                        self.status = preserved_status(
+                            &mut session,
+                            &format!("External text write became unavailable: {error}"),
+                        );
+                        return;
+                    }
+                };
+                let BackendOperation::SetComplexTextContents {
+                    locator,
+                    expected,
+                    text,
+                } = operation
+                else {
+                    unreachable!("complex text operation must resolve to complete text write")
+                };
+                let result = self
+                    .backend
+                    .replace_complete_plain_multiline_text(&locator, &expected, &text)
+                    .await;
+                let _ = self.runtime.complete(&session.ticket);
+                match result {
+                    Ok(mutation) if mutation.resulting == mutation.requested => {
+                        self.full_reload(Some(format!(
+                            "External text update confirmed — chars={}",
+                            mutation.resulting.chars().count()
+                        )))
+                        .await;
+                    }
+                    Ok(_) => {
+                        self.status = preserved_status(
+                            &mut session,
+                            "External text write was not authoritatively confirmed",
+                        );
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                    Err(BackendError::ComplexTextConflict(_)) => {
+                        self.status = preserved_status(
+                            &mut session,
+                            "External text conflict detected immediately before write; GUI was not overwritten",
+                        );
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                    Err(BackendError::TextUpdateRejected(_))
+                    | Err(BackendError::PermissionDenied { .. }) => {
+                        self.status = preserved_status(
+                            &mut session,
+                            "Application rejected external text write",
+                        );
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                    Err(_) => {
+                        self.status = preserved_status(
+                            &mut session,
+                            "External text write could not be authoritatively verified",
+                        );
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn synchronize_after_external_handler(&mut self) {
+        self.check_application_available().await;
+        if !self.application_available {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let mut events = Vec::new();
+        while let Ok(event) = self.event_subscription.try_recv() {
+            events.push(event);
+        }
+        if let Some(EventDelivery::ResyncRequired { dropped }) =
+            self.event_subscription.take_resync()
+        {
+            self.resynchronize_after_overflow(dropped).await;
+            return;
+        }
+        if !events.is_empty() {
+            self.apply_event_batch(events, None).await;
         }
     }
 
@@ -2701,6 +2966,8 @@ impl TuiApplication {
                     return;
                 }
                 self.content.rebuild_semantics(&self.cache);
+                qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content)
+                    .await;
                 let Ok((scene, scopes, commands, choices)) = build_contextual_view(
                     &self.cache,
                     self.presentation_mode,
@@ -3120,6 +3387,7 @@ impl TuiApplication {
             return;
         }
         self.content.rebuild_semantics(&self.cache);
+        qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content).await;
         let (scene, scopes, commands, choices) = match build_contextual_view(
             &self.cache,
             self.presentation_mode,
@@ -3439,7 +3707,10 @@ fn operation_verb(intent: UiIntent) -> &'static str {
         UiIntent::OpenMenu => "Opened menu",
         UiIntent::ClosePopup => "Closed popup",
         UiIntent::Toggle => "Toggled",
-        UiIntent::BeginEdit | UiIntent::CommitEdit | UiIntent::CancelEdit => "Edited",
+        UiIntent::BeginEdit
+        | UiIntent::BeginExternalEdit
+        | UiIntent::CommitEdit
+        | UiIntent::CancelEdit => "Edited",
         UiIntent::IncreaseValue => "Increased",
         UiIntent::DecreaseValue => "Decreased",
         _ => "Activated",
@@ -3454,6 +3725,9 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             format!("parent Selection child {child_index}")
         }
         BackendOperation::SetTextContents { .. } => "EditableText.SetTextContents".to_owned(),
+        BackendOperation::SetComplexTextContents { .. } => {
+            "EditableText.SetTextContents + complete Text read-back".to_owned()
+        }
         BackendOperation::AdjustValue { increase, .. } => if *increase {
             "Value.increase"
         } else {
@@ -3504,6 +3778,18 @@ fn element_label(element: &SceneElement) -> &str {
     element.label()
 }
 
+fn preserved_status(session: &mut ExternalTextSession, reason: &str) -> String {
+    session.preserve().map_or_else(
+        || format!("{reason}; candidate recovery artifact could not be retained"),
+        |path| {
+            format!(
+                "{reason}; candidate preserved privately at {}",
+                path.display()
+            )
+        },
+    )
+}
+
 fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> TuiScene {
     match mode {
         PresentationMode::Legacy => compile_legacy_scene(root),
@@ -3511,6 +3797,60 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
             let analysis = analyze_regions(root);
             compile_scene(root, &analysis)
         }
+    }
+}
+
+async fn qualify_complex_text_capabilities(
+    backend: &AtspiBackend,
+    cache: &mut SemanticCache,
+    content: &ContentRuntime,
+) {
+    let mut candidates = content
+        .catalog()
+        .visible_models()
+        .filter(|model| model.completeness == ContentCompleteness::Complete)
+        .map(|model| model.root)
+        .filter(|root| content.text_capability(*root) == TextCapabilityStatus::Verified)
+        .filter(|root| {
+            cache.node(*root).is_some_and(|node| {
+                node.role == SemanticRole::TextInput
+                    && node.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
+                    && node.states.contains(&SemanticState::Editable)
+                    && node.states.iter().any(|state| {
+                        matches!(state, SemanticState::Other(value) if value == "multi-line")
+                    })
+                    && node.debug.interfaces.iter().any(|item| item == "Text")
+                    && node.debug.interfaces.iter().any(|item| item == "EditableText")
+                    && node.children.is_empty()
+            })
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    candidates.truncate(8);
+    for runtime_id in candidates {
+        let Some(locator) = cache
+            .node(runtime_id)
+            .map(|node| node.backend_locator.clone())
+        else {
+            continue;
+        };
+        if backend
+            .read_complete_plain_multiline_text(&locator)
+            .await
+            .is_err()
+        {
+            continue;
+        }
+        let Ok(mut node) = backend.refresh_node(&locator, false).await else {
+            continue;
+        };
+        if !node
+            .capabilities
+            .contains(&SemanticCapability::EditComplexText)
+        {
+            node.capabilities.push(SemanticCapability::EditComplexText);
+        }
+        let _ = cache.refresh_node(node);
     }
 }
 

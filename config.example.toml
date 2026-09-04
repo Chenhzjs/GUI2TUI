@@ -9,3 +9,10 @@ event_queue_capacity = 2048
 
 [terminal]
 mouse = true
+
+# Optional shell-free handler for runtime-qualified complete multiline plain text.
+# No handler is assumed by default. {file} is a private GUI2TUI representation,
+# not an application's backing file.
+# [interaction.complex_text]
+# program = "custom-editor-command"
+# args = ["--wait", "{file}"]

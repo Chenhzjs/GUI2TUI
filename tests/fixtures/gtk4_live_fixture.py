@@ -147,6 +147,21 @@ class LiveFixture(Gtk.Application):
         storm.connect("clicked", run_storm)
         content.append(storm)
 
+        external_text = Gtk.TextView()
+        external_text.set_editable(True)
+        external_text.get_buffer().set_text("alpha line\nbeta line\n")
+        external_text.update_property(
+            [Gtk.AccessibleProperty.LABEL], ["External text probe"]
+        )
+        content.append(external_text)
+
+        external_change = Gtk.Button(label="Change external text independently")
+        external_change.connect(
+            "clicked",
+            lambda _button: external_text.get_buffer().set_text("GUI concurrent B\n"),
+        )
+        content.append(external_change)
+
         rich_text = Gtk.TextView()
         rich_text.set_editable(False)
         rich_text.get_buffer().set_text(

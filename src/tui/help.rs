@@ -17,7 +17,7 @@ impl HelpContext {
     pub fn text(self) -> &'static str {
         match self {
             Self::Scene => {
-                "Scene\nF6 / Shift-F6: next/previous major region\nCtrl-Tab / Ctrl-Shift-Tab: next/previous pane in the active region group\nTab / Shift-Tab: focus controls in the active pane\nEnter: use the focused control, edit a plain field, choose a value, or read a document\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll the active pane\n: open commands in the current scope\nr: force refresh\nF4: resources and visual tasks\nq / Esc: quit\n\nro means no safe operation is available. Password editing is disabled."
+                "Scene\nF6 / Shift-F6: next/previous major region\nCtrl-Tab / Ctrl-Shift-Tab: next/previous pane in the active region group\nTab / Shift-Tab: focus controls in the active pane\nEnter: use the focused control, edit a plain field, choose a value, or read a document\ne: configured external edit on a qualified complete plain-text document\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll the active pane\n: open commands in the current scope\nr: force refresh\nF4: resources and visual tasks\nq / Esc: quit\n\nro means no safe operation is available. Password editing is disabled."
             }
             Self::Reader => {
                 "Reader\nj/k or Down/Up: move semantic blocks\nPageDown/PageUp: move ten blocks\no: outline\n/: search loaded content; Ctrl-F there searches progressively\nEnter: open a table or collection at this block\nF4: resources\nEsc: return to Scene"

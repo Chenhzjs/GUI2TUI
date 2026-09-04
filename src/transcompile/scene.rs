@@ -77,6 +77,7 @@ pub enum SceneElementKind {
         links: usize,
         forms: usize,
         completeness: String,
+        external_edit: bool,
     },
     SelectionItem {
         label: String,

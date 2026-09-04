@@ -64,6 +64,15 @@ pub struct ValueMutation {
     pub normalized: bool,
 }
 
+pub const MAX_EXTERNAL_TEXT_BYTES: usize = 256 * 1024;
+pub const MAX_EXTERNAL_TEXT_CHARACTERS: i32 = 256 * 1024;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComplexTextMutation {
+    pub requested: String,
+    pub resulting: String,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ValueMetadata {
     current: f64,
@@ -177,6 +186,14 @@ pub enum BackendError {
     },
     #[error("application rejected text update for AT-SPI object {0}")]
     TextUpdateRejected(String),
+    #[error("AT-SPI object {0} is not a complete writable multiline plain-text target")]
+    ComplexTextUnsupported(String),
+    #[error("AT-SPI text target {0} is incomplete or exceeds the external-edit bound")]
+    ComplexTextIncomplete(String),
+    #[error("AT-SPI text target {0} exposes non-default formatting and is not plain text")]
+    ComplexTextRich(String),
+    #[error("AT-SPI text target {0} changed while external editing was active")]
+    ComplexTextConflict(String),
     #[error("AT-SPI object {0} is not a supported writable Value control")]
     ValueUnsupported(String),
     #[error("AT-SPI Value metadata is unavailable or invalid for {0}")]
@@ -1052,6 +1069,175 @@ impl AtspiBackend {
             text.get_text(0, count.max(0)),
         )
         .await
+    }
+
+    /// Read one complete, bounded, leaf multiline target that exposes no
+    /// non-default Text attributes. Passwords are rejected before Text access.
+    pub async fn read_complete_plain_multiline_text(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<String, BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "validate multiline role",
+            &encoded_id,
+            proxy.get_role(),
+        )
+        .await?;
+        if role == Role::PasswordText {
+            return Err(BackendError::SecretContentDisabled(encoded_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "validate multiline interfaces",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        let states = dbus_operation(
+            self.operation_timeout,
+            "validate multiline state",
+            &encoded_id,
+            proxy.get_state(),
+        )
+        .await?;
+        let child_count = dbus_operation(
+            self.operation_timeout,
+            "validate multiline leaf target",
+            &encoded_id,
+            proxy.child_count(),
+        )
+        .await?;
+        if role != Role::Text
+            || interfaces.contains(Interface::Document)
+            || !interfaces.contains(Interface::Text)
+            || !interfaces.contains(Interface::EditableText)
+            || !states.contains(State::Editable)
+            || !states.contains(State::MultiLine)
+            || states.contains(State::ReadOnly)
+            || states.contains(State::ManagesDescendants)
+            || child_count != 0
+        {
+            return Err(BackendError::ComplexTextUnsupported(encoded_id));
+        }
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create multiline interface proxies",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let text = atspi_operation(
+            self.operation_timeout,
+            "create multiline Text proxy",
+            &encoded_id,
+            proxies.text(),
+        )
+        .await?;
+        let count = dbus_operation(
+            self.operation_timeout,
+            "read complete multiline character count",
+            &encoded_id,
+            text.character_count(),
+        )
+        .await?;
+        if !(0..=MAX_EXTERNAL_TEXT_CHARACTERS).contains(&count) {
+            return Err(BackendError::ComplexTextIncomplete(encoded_id));
+        }
+        let value = dbus_operation(
+            self.operation_timeout,
+            "read complete multiline text",
+            &encoded_id,
+            text.get_text(0, count),
+        )
+        .await?;
+        if value.len() > MAX_EXTERNAL_TEXT_BYTES || value.chars().count() != count as usize {
+            return Err(BackendError::ComplexTextIncomplete(encoded_id));
+        }
+        let mut offset = 0;
+        let mut runs = 0_usize;
+        while offset < count {
+            let (attributes, start, end) = dbus_operation(
+                self.operation_timeout,
+                "read multiline attribute run",
+                &encoded_id,
+                text.get_attributes(offset),
+            )
+            .await?;
+            if start > offset || end <= offset || runs >= 512 {
+                return Err(BackendError::NonAdvancingTextRange {
+                    node_id: encoded_id.clone(),
+                    start,
+                    end,
+                });
+            }
+            if !attributes.is_empty() {
+                return Err(BackendError::ComplexTextRich(encoded_id));
+            }
+            offset = end.min(count);
+            runs += 1;
+        }
+        Ok(value)
+    }
+
+    /// Compare immediately before write, mutate through public EditableText,
+    /// then independently read the complete authoritative result.
+    pub async fn replace_complete_plain_multiline_text(
+        &self,
+        locator: &BackendLocator,
+        expected: &str,
+        candidate: &str,
+    ) -> Result<ComplexTextMutation, BackendError> {
+        let encoded_id = locator.encode();
+        if candidate.len() > MAX_EXTERNAL_TEXT_BYTES
+            || candidate.chars().count() > MAX_EXTERNAL_TEXT_CHARACTERS as usize
+        {
+            return Err(BackendError::ComplexTextIncomplete(encoded_id));
+        }
+        let current = self.read_complete_plain_multiline_text(locator).await?;
+        if current != expected {
+            return Err(BackendError::ComplexTextConflict(encoded_id));
+        }
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create multiline write proxies",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let editable = atspi_operation(
+            self.operation_timeout,
+            "create multiline EditableText proxy",
+            &encoded_id,
+            proxies.editable_text(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "replace complete multiline text",
+            &encoded_id,
+            editable.set_text_contents(candidate),
+        )
+        .await?;
+        if !accepted {
+            return Err(BackendError::TextUpdateRejected(encoded_id));
+        }
+        let resulting = self.read_complete_plain_multiline_text(locator).await?;
+        Ok(ComplexTextMutation {
+            requested: candidate.to_owned(),
+            resulting,
+        })
     }
 
     /// Read document metadata without making it a tree-membership or toolkit contract.

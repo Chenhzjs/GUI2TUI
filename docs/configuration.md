@@ -24,6 +24,11 @@ event_queue_capacity = 2048
 [terminal]
 mouse = true
 
+# Optional. GUI2TUI never selects a default editor.
+[interaction.complex_text]
+program = "custom-editor-command"
+args = ["--wait", "{file}"]
+
 [launchers.chromium]
 program = "chromium"
 args = ["--force-renderer-accessibility=complete", "about:blank"]
@@ -35,6 +40,17 @@ verified = false # managed by GUI2TUI; true only after a real AT-SPI launch
 `backend_timeout_ms`: 50–30000 inclusive, existing per-backend operation deadline.
 `event_queue_capacity`: 4–65536 inclusive, bounded event buffer. Small queues may deliberately
 cause overflow/full resync; 2048 remains the tested default. `mouse` enables terminal mouse capture.
+
+`interaction.complex_text` configures an optional local process for targets
+that GUI2TUI has independently qualified as complete, bounded, non-secret,
+multiline plain text. `program` is executed directly with the listed argv; no
+shell parses the values. `args` must contain exactly one standalone `{file}`
+entry. GUI2TUI substitutes a private 0600 temporary representation inside a
+0700 owned directory, waits for the process, checks conflicts, and writes the
+candidate back only through public AT-SPI followed by a complete authoritative
+read-back. The placeholder is never an application backing-file path. If this
+section is absent, eligible content remains readable and external editing is
+reported as not configured.
 
 Precedence: built-in defaults < config file < explicit CLI.
 `--timeout-ms`, `--event-buffer-capacity` are retained developer overrides but hidden from brief help;

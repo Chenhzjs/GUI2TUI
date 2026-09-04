@@ -98,6 +98,7 @@ pub enum OperationKind {
     SnapshotAcquisition,
     ArtifactTransfer,
     ReferenceHandoff,
+    TextInteraction,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

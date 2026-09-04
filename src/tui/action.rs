@@ -21,6 +21,7 @@ pub enum UiIntent {
     OpenOutline,
     OpenContentSearch,
     BeginEdit,
+    BeginExternalEdit,
     CommitEdit,
     CancelEdit,
     IncreaseValue,

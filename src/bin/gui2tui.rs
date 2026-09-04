@@ -651,9 +651,9 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
 
     app.configure_modality_client(cli.modality_socket);
 
-    // Keep one Crossterm reader for the lifetime of this terminal. Recreating
-    // EventStream while its old poll worker retires can contend on Crossterm's
-    // process-global reader lock and block reattachment.
+    // Keep one Crossterm reader during normal attached operation. The complex
+    // text path explicitly retires it before giving the real terminal to the
+    // configured handler, then creates exactly one replacement on return.
     let mut input_available = true;
     let mut liveness =
         tokio::time::interval(gui2tui::runtime::RuntimeLimits::default().lifecycle_probe);
@@ -752,6 +752,43 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                 redraw |= app.has_pending_work();
                 app.progress_content_operations().await;
             }
+        }
+        if app.take_external_text_request() {
+            let Some(handler) = config.interaction.complex_text.clone() else {
+                app.set_shell_status("Edit handler not configured; target remains read-only");
+                redraw = true;
+                continue;
+            };
+            let mut session = match app.begin_external_text_interaction().await {
+                Ok(session) => session,
+                Err(error) => {
+                    app.set_shell_status(error);
+                    redraw = true;
+                    continue;
+                }
+            };
+            app.set_shell_status(format!(
+                "Opening configured handler for \"{}\"",
+                session.label()
+            ));
+            if guard.attached {
+                terminal.draw(|frame| app.render(frame))?;
+            }
+            // The handler owns the real terminal. Retire Crossterm's reader so
+            // it cannot consume handler input, then recreate it after return.
+            drop(terminal_events);
+            guard.detach();
+            app.set_terminal_attached(false);
+            let outcome = tokio::task::block_in_place(|| session.run_handler(&handler));
+            app.begin_terminal_reattach();
+            guard = TerminalGuard::attach(config.terminal.mouse)?;
+            terminal_events = EventStream::new();
+            input_available = true;
+            let (width, height) = crossterm::terminal::size()?;
+            terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+            app.set_terminal_attached(true);
+            app.finish_external_text_interaction(session, outcome).await;
+            redraw = true;
         }
     }
     Ok(())

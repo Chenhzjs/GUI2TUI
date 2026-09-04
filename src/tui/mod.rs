@@ -3,6 +3,7 @@ pub mod app;
 pub mod choice_overlay;
 pub mod content_view;
 pub mod edit;
+pub mod external_text;
 pub mod focus;
 pub mod help;
 pub mod hit_test;

@@ -6,7 +6,7 @@ pub mod static_visual;
 pub use atspi::{
     ApplicationRef, AtspiBackend, BackendError, CollectionProbe, CollectionQueryProbe,
     DEFAULT_EVENT_BUFFER_CAPACITY, DocumentProbe, EventDelivery, EventSubscription, InspectOptions,
-    RelationEnrichmentMetrics, SessionEnvironment, TextRangeRead,
+    MAX_EXTERNAL_TEXT_BYTES, RelationEnrichmentMetrics, SessionEnvironment, TextRangeRead,
 };
 pub use bootstrap::{BootstrapMetrics, BootstrapResult, BootstrapStrategy, BootstrapUsed};
 pub use protocol_compat::{BulkAccessibleRecord, CacheWireFormat};

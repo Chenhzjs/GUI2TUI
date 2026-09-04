@@ -139,6 +139,9 @@ pub fn compress_content_scene(
                 links: summary.links,
                 forms: summary.forms,
                 completeness: format!("{:?}", model.completeness),
+                external_edit: root
+                    .capabilities
+                    .contains(&crate::semantic::SemanticCapability::EditComplexText),
             },
             sources: vec![model.root],
             binding: Some(SceneBinding {

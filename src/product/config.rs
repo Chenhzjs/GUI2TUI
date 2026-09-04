@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-pub const EXAMPLE: &str = "# GUI2TUI v0.1: all settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n\n# Save launchers with `gui2tui app add`; do not hand-write shell commands.\n";
+pub const EXAMPLE: &str = "# GUI2TUI settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n\n# Optional shell-free handler for qualified complete multiline plain text.\n# The {file} argument is a GUI2TUI-owned private representation, never the app file.\n# [interaction.complex_text]\n# program = \"custom-editor-command\"\n# args = [\"--wait\", \"{file}\"]\n\n# Save launchers with `gui2tui app add`; do not hand-write shell commands.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -15,7 +15,19 @@ pub struct Config {
     pub version: u32,
     pub runtime: RuntimeConfig,
     pub terminal: TerminalConfig,
+    pub interaction: InteractionConfig,
     pub launchers: BTreeMap<String, LauncherConfig>,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct InteractionConfig {
+    pub complex_text: Option<TextInteractionHandlerConfig>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct TextInteractionHandlerConfig {
+    pub program: String,
+    pub args: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
@@ -43,6 +55,7 @@ impl Default for Config {
             version: 1,
             runtime: RuntimeConfig::default(),
             terminal: TerminalConfig::default(),
+            interaction: InteractionConfig::default(),
             launchers: BTreeMap::new(),
         }
     }
@@ -63,6 +76,14 @@ impl Default for RuntimeConfig {
         Self {
             backend_timeout_ms: 5000,
             event_queue_capacity: 2048,
+        }
+    }
+}
+impl Default for TextInteractionHandlerConfig {
+    fn default() -> Self {
+        Self {
+            program: String::new(),
+            args: vec!["{file}".to_owned()],
         }
     }
 }
@@ -92,6 +113,39 @@ impl Config {
         }
         if !(4..=65_536).contains(&self.runtime.event_queue_capacity) {
             return Err("runtime.event_queue_capacity must be 4..=65536".into());
+        }
+        if let Some(handler) = &self.interaction.complex_text {
+            if handler.program.is_empty() || handler.program.len() > 4096 {
+                return Err("interaction.complex_text.program must be 1..=4096 bytes".into());
+            }
+            if handler.args.len() > 128 || handler.args.iter().any(|arg| arg.len() > 4096) {
+                return Err("interaction.complex_text.args exceeds the safe limit".into());
+            }
+            if handler
+                .args
+                .iter()
+                .filter(|arg| arg.as_str() == "{file}")
+                .count()
+                != 1
+                || handler
+                    .args
+                    .iter()
+                    .any(|arg| arg.contains("{file}") && arg != "{file}")
+            {
+                return Err(
+                    "interaction.complex_text.args must contain exactly one standalone {file} argument"
+                        .into(),
+                );
+            }
+            let executable = Path::new(&handler.program)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if matches!(executable, "sh" | "bash" | "dash" | "zsh" | "ksh" | "fish")
+                && handler.args.iter().any(|arg| arg == "-c")
+            {
+                return Err("interaction.complex_text does not permit shell -c evaluation".into());
+            }
         }
         for (id, launcher) in &self.launchers {
             if id.is_empty()
@@ -287,5 +341,24 @@ mod tests {
         symlink(&target, &link).unwrap();
         assert!(Config::default().save(&link).is_err());
         assert_eq!(fs::read_to_string(target).unwrap(), "untouched");
+    }
+
+    #[test]
+    fn complex_text_handler_is_shell_free_and_requires_one_file_argument() {
+        let parsed = Config::parse(
+            "[interaction.complex_text]\nprogram='custom-editor-command'\nargs=['--wait','{file}']",
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.interaction.complex_text.unwrap().args,
+            vec!["--wait", "{file}"]
+        );
+        for text in [
+            "[interaction.complex_text]\nprogram='custom-editor-command'\nargs=[]",
+            "[interaction.complex_text]\nprogram='custom-editor-command'\nargs=['--path={file}']",
+            "[interaction.complex_text]\nprogram='sh'\nargs=['-c','edit {file}','{file}']",
+        ] {
+            assert!(Config::parse(text).is_err());
+        }
     }
 }

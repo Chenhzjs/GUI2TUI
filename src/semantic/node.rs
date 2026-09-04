@@ -339,6 +339,8 @@ pub enum SemanticCapability {
     EditText,
     /// A finite bounded AT-SPI Value with a positive advertised increment.
     Value,
+    /// A runtime-qualified complete, leaf, multiline plain-text target.
+    EditComplexText,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
