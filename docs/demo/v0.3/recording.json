@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-05T00:14:23+08:00",
+  "runtime_source_commit": "571bc906705ce4792921cdc1e75cc67c780abd60",
+  "environment": {
+    "distribution": "Ubuntu 24.04 arm64",
+    "display": "isolated Xvfb X11 1440x900",
+    "accessibility": "AT-SPI 2.52 over private D-Bus session",
+    "terminal": "xterm 92x39",
+    "capture": "ffmpeg x11grab 20 fps"
+  },
+  "handler": {
+    "kind": "vim",
+    "command": "vim -n -u NONE -i NONE --cmd 'set backupcopy=yes noswapfile nobackup nowritebackup shortmess+=F laststatus=0 noruler noshowcmd' {file}",
+    "generic_configuration_only": true,
+    "production_special_case": false,
+    "private_artifact_inode_preserved": true
+  },
+  "results": {
+    "VALUE_DEMO_END_TO_END": "PASS",
+    "EXTERNAL_TEXT_DEMO_END_TO_END": "PASS",
+    "EXTERNAL_TEXT_BACKING_FILE_BYPASS": "ABSENT",
+    "EXTERNAL_TEXT_CONFLICT_REFUSAL": "PASS",
+    "READ_ONLY_DEGRADATION_DEMO": "PASS",
+    "REAL_EDITOR_HANDLER_SMOKE": "PASS"
+  },
+  "backing_file": {
+    "sha256_before": "657c4b9ce219cd2259fcf312527ee23b45c20c97f9cbeef33cd85076e226138b",
+    "sha256_after": "657c4b9ce219cd2259fcf312527ee23b45c20c97f9cbeef33cd85076e226138b",
+    "handler_received_backing_file": false,
+    "result": "ABSENT"
+  },
+  "privacy": {
+    "synthetic_content_only": true,
+    "developer_checkout_path_visible": false,
+    "credentials_visible": false,
+    "network_operations": false,
+    "destructive_actions": false
+  },
+  "assets": [
+    {
+      "name": "hero-v0.3.mp4",
+      "type": "mp4",
+      "duration_seconds": 32.0,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 279617,
+      "sha256": "0f2209aa6085afb8075e294b7c7f49478822de9859fa0533acbcd47641e3b8d7"
+    },
+    {
+      "name": "demo-v0.3.mp4",
+      "type": "mp4",
+      "duration_seconds": 62.0,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 636284,
+      "sha256": "e0137003fa4986dc55de5fecea9a74cb4978cc0d506108fb6a89d242663c8b5e"
+    },
+    {
+      "name": "value.png",
+      "type": "png",
+      "duration_seconds": null,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 206190,
+      "sha256": "d2bb85c95d77e6254501014115ce0c2d9514674a08cf529cda4830d89ebfbf3c"
+    },
+    {
+      "name": "external-edit.png",
+      "type": "png",
+      "duration_seconds": null,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 133219,
+      "sha256": "b7337488b48aa6d549945eb9d25421218918ade9e8b6aff5eaa189bc9671d3f5"
+    },
+    {
+      "name": "conflict.png",
+      "type": "png",
+      "duration_seconds": null,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 173636,
+      "sha256": "10df1ef4509857e67ba5badac7ed04d22c0c10f009f75460b1c215280720a544"
+    },
+    {
+      "name": "safe-readonly.png",
+      "type": "png",
+      "duration_seconds": null,
+      "width": 1440,
+      "height": 900,
+      "size_bytes": 396457,
+      "sha256": "b0d47787c82a4a0c7b88b971708a3269e60d9f63b37360b507285a173dd9cc7b"
+    }
+  ]
+}

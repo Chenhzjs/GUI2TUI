@@ -1,5 +1,12 @@
 # GUI2TUI demo assets
 
+## v0.3 verified capability recovery
+
+The reproducible v0.3 demonstration shows native Value adjustment, configured
+external interaction with complete plain text, conflict refusal, and honest
+read-only degradation. See [`v0.3/README.md`](v0.3/README.md) for the two real
+videos, representative frames, evidence results, and the recording command.
+
 The repository contains a real split-screen recording of the GTK demo fixture
 and GUI2TUI terminal runtime, plus v0.2 spatial scene captures. The recording
 is retained as a semantic-operation walkthrough; the README hero now uses a
