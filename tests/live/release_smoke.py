@@ -310,38 +310,31 @@ try:
     )
     config.chmod(0o600)
 
-    # Mousepad is release-validation corpus, never a production dispatch key.
-    # It gives Jammy a real complete plain-text target while also proving that
-    # the configured handler never receives or changes the backing file.
+    # This controlled GTK3 application owns a complete plain-text GUI buffer
+    # initialized from a synthetic backing file.  It never saves that file, so
+    # the smoke independently proves that the configured handler receives only
+    # GUI2TUI's private candidate and cannot bypass application authority.
     backing = result / "release-text.txt"
     starting_text = "release alpha\nrelease beta\n"
     backing.write_text(starting_text, encoding="utf-8")
-    application_environment = os.environ.copy()
-    for name in ("data", "app-config", "app-cache"):
-        (result / name).mkdir(mode=0o700)
-    application_environment.update(
-        {
-            "XDG_DATA_HOME": str(result / "data"),
-            "XDG_CONFIG_HOME": str(result / "app-config"),
-            "XDG_CACHE_HOME": str(result / "app-cache"),
-            "GSETTINGS_BACKEND": "memory",
-        }
-    )
     text_fixture = subprocess.Popen(
-        ["mousepad", "--disable-server", str(backing)],
+        [
+            "python3",
+            str(bundle / "smoke/release_smoke_text_gtk3.py"),
+            str(backing),
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env=application_environment,
     )
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         apps = run(["inspect", "--list"])
-        if "mousepad" in apps.stdout.lower():
+        if "gui2tui-release-text-demo" in apps.stdout:
             break
         time.sleep(.15)
     else:
-        raise AssertionError("Mousepad did not register with AT-SPI")
-    text_application = "mousepad"
+        raise AssertionError("GTK3 text fixture did not register with AT-SPI")
+    text_application = "gui2tui-release-text-demo"
 
     # Positive complete-text interaction from the extracted package.
     child = launch(

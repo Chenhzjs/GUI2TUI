@@ -33,6 +33,7 @@ cp -R docs "$stage/$name/docs"
 install -m 755 scripts/release-smoke.sh "$stage/$name/smoke/run.sh"
 cp tests/live/release_smoke.py tests/fixtures/release_smoke_gtk.py \
     tests/fixtures/release_smoke_qt.py \
+    tests/fixtures/release_smoke_text_gtk3.py \
     tests/fixtures/v03c_text_handler.py "$stage/$name/smoke/"
 commit=${RELEASE_COMMIT:-$(git rev-parse HEAD)}
 baseline=${RELEASE_RUNNER_BASELINE:-$(. /etc/os-release; printf '%s %s' "$ID" "$VERSION_ID")}
