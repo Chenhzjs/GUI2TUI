@@ -242,24 +242,22 @@ layout reconstruction.
 - Public release: **v0.2.0**
 - Project state: **POST-v0.2 MAINTENANCE**
 - v0.2.0 source tag: immutable and already published
-- v0.3 implementation: **NOT STARTED**
-- v0.3 capability-recovery discovery: **PLANNED**
+- v0.3 functional development: **COMPLETE; RC NOT AUTHORIZED**
 
 Release and validation details live in [v0.2.0 release notes](release-notes-v0.2.0.md)
-and [public release verification](release-v0.2.0-validation.md).
+and [public release verification](release-v0.2.0-validation.md). The reviewed
+v0.3 state and next authorization gate live in the
+[v0.3 roadmap](planning/v0.3-roadmap.md).
 
-## 20. v0.3 Discovery Direction
+## 20. v0.3 Capability Recovery
 
-The next authorized activity is discovery, not implementation: how to recover
-useful capabilities currently exposed as read-only, unsupported, or
-unavailable while preserving semantic correctness. Discovery may survey
-capability gaps, native TUI versus configurable external interaction modality,
-text writing, structured values/selections, operation verification,
-trust/quarantine, stale/conflict handling, and compound operations.
-
-These are questions, not finalized architecture or APIs. v0.3 architecture
-must follow discovery evidence and explicit review. Do not implement v0.3 in a
-maintenance or documentation task.
+The completed functional line adds verified native Value interaction and a
+configured complex plain-text interaction modality while preserving public
+Accessibility mutation, stale/conflict checks, and authoritative read-back.
+Compound interaction evidence did not justify speculative orchestration.
+Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
+handoff before any further work; RC and release activity require explicit
+authorization.
 
 ## 21. Glossary
 
