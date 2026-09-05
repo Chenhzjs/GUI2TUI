@@ -66,7 +66,8 @@ AT-SPI backend
   → TuiScene and SceneBinding
   → UiIntent / SemanticOperation
   → BackendOperation / AT-SPI
-  → authoritative GUI state and events/readback
+  → bounded transition observation where needed
+  → authoritative GUI state/readback; events only wake observation
 ```
 
 The semantic and runtime contracts are shared by flat and spatial
@@ -81,9 +82,13 @@ scene compilation creates a focusable `SceneElement` whose `SceneBinding`
 retains that runtime identity and a safe default `UiIntent`. Input resolves the
 intent to a `SemanticOperation`; the operation resolver checks the current
 scene/cache and advertised action or selection capability, producing a
-`BackendOperation`. The AT-SPI backend performs it. GUI events or an explicit
-readback rebuild/update the presentation; local optimistic state is never the
-authority.
+`BackendOperation`. The AT-SPI backend performs it. Dynamic actions with an
+explicit supported postcondition capture exact session, generation, locator,
+and scope authority, then observe that condition within a deadline. Events
+only wake/coalesce a new backend read; an event, invocation return, or elapsed
+time never establishes semantic success. The ordinary cache, scopes, scene,
+and focus are rebuilt from the authoritative read, and local optimistic state
+is never the authority.
 
 ## 7. Repository / Module Map
 
@@ -119,7 +124,11 @@ it is not an AT-SPI locator. `BackendLocator` identifies the AT-SPI bus/object
 pair. `ApplicationGenerationId` changes whenever `RuntimeSession` opens a new
 application cache. Operation tickets carry session and generation ownership;
 stale, late, or cancelled results must be rejected rather than applied to a
-new process or snapshot.
+new process or snapshot. Cache reconciliation may retain a `RuntimeNodeId`
+across an exact, unique structural replacement to reduce presentation churn,
+but that continuity is never operation authority: authority captured for
+locator L1 cannot act on or confirm locator L2. A newly current binding may
+capture fresh authority for L2 normally.
 
 ## 9. Semantic Operations
 
@@ -129,6 +138,10 @@ over a runtime node. Action resolution is role-aware and matches advertised
 AT-SPI action names; an empty or incompatible action list is unsupported.
 Choices use explicit node-action or parent-selection strategies. Anonymous
 actions, guessed indexes, and keyboard sequences are not semantic operations.
+For qualified dynamic actions, the short-lived transition observer is adjacent
+to the operation rather than a workflow engine: it checks a small internal
+semantic condition, returns to the normal `TuiScene`, and leaves the next
+operation to the user.
 
 ## 10. Content Architecture
 
@@ -240,7 +253,7 @@ layout reconstruction.
 ## 19. Current Project State
 
 - Public release: **v0.3.0**
-- Project state: **POST-v0.3 MAINTENANCE**
+- Project state: **v0.4 DEVELOPMENT**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -248,8 +261,9 @@ layout reconstruction.
   `efc704adf8a3ded3463ed8bb81670eddd08296c3`
 - v0.4 Semantic Workflow Reconstruction Discovery: **COMPLETE**; conclusion
   **B — NARROWER CONTINUATION MODEL SUFFICIENT**
-- Recommended next work: **0.4A Exact Authority and Bounded Transition
-  Observation**, awaiting explicit user authorization
+- v0.4A Exact Authority and Bounded Transition Observation: **VALIDATED**
+- Recommended next work: **0.4B Dynamic Surface and Scope Continuation**,
+  awaiting explicit user authorization
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -260,8 +274,9 @@ does not authorize it.
 
 The evidence and bounded phase plan for v0.4 are recorded in the
 [v0.4 Discovery](planning/v0.4-workflow-reconstruction.md) and
-[v0.4 roadmap](planning/v0.4-roadmap.md). Discovery does not authorize 0.4A or
-later implementation.
+[v0.4 roadmap](planning/v0.4-roadmap.md). The completed 0.4A evidence is in the
+[transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md).
+Completion of 0.4A does not authorize 0.4B or later implementation.
 
 ## 20. v0.3 Capability Recovery
 
@@ -283,6 +298,8 @@ authorization.
 - **InteractionScope:** application/window/dialog/popup boundary that confines
   operations and navigation.
 - **SemanticOperation:** explicit safe operation resolved from a `UiIntent`.
+- **Transition observation:** short-lived, operation-adjacent bounded checking
+  of an explicit postcondition through fresh authoritative semantics.
 - **SemanticContentModel / ContentBlockId:** bounded document/content model and
   its block identity.
 - **SpatialEvidence / SpatialTopology:** trusted geometry evidence and the
