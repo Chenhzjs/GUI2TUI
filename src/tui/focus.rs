@@ -36,10 +36,15 @@ impl FocusModel {
         preferred_locator: Option<&BackendLocator>,
     ) {
         let focusable = scene.focusable_ids();
-        self.current = preferred_runtime
-            .and_then(|id| scene.scene_id_for_runtime(id))
-            .filter(|id| scene.element(*id).is_some_and(SceneElement::is_focusable))
-            .or_else(|| preferred_locator.and_then(|locator| scene.scene_id_for_locator(locator)))
+        let exact_locator =
+            preferred_locator.and_then(|locator| scene.scene_id_for_locator(locator));
+        let presentation_runtime = preferred_locator.is_none().then(|| {
+            preferred_runtime
+                .and_then(|id| scene.scene_id_for_runtime(id))
+                .filter(|id| scene.element(*id).is_some_and(SceneElement::is_focusable))
+        });
+        self.current = exact_locator
+            .or(presentation_runtime.flatten())
             .or_else(|| focusable.first().copied());
     }
 
@@ -165,40 +170,69 @@ mod tests {
     }
 
     #[test]
-    fn runtime_identity_restores_focus_when_scene_id_or_locator_changes() {
+    fn exact_locator_restores_focus_but_stale_locator_does_not_follow_runtime_id() {
         use crate::transcompile::{
             PresentationStrategy, SceneBinding, SceneElement, SceneElementKind,
         };
         use crate::tui::action::{InteractionCapability, UiIntent};
 
         let root = node(0, SemanticRole::Window);
-        let runtime_id = RuntimeNodeId::new(77);
+        let fallback_runtime = RuntimeNodeId::new(66);
+        let replacement_runtime = RuntimeNodeId::new(77);
         let scene = TuiScene::new(
             "regenerated".to_owned(),
             &root,
-            vec![SceneElement {
-                id: SceneElementId::new(900),
-                kind: SceneElementKind::Button {
-                    label: "Restore".to_owned(),
+            vec![
+                SceneElement {
+                    id: SceneElementId::new(800),
+                    kind: SceneElementKind::Button {
+                        label: "Safe fallback".to_owned(),
+                    },
+                    sources: vec![fallback_runtime],
+                    binding: Some(SceneBinding {
+                        runtime_id: fallback_runtime,
+                        backend_locator: BackendLocator::new(":1.new", "/fallback"),
+                        semantic_role: SemanticRole::Button,
+                        actions: Vec::new(),
+                        capability: InteractionCapability::Activate,
+                        default_intent: UiIntent::Activate,
+                    }),
+                    strategy: PresentationStrategy::DirectWidget,
                 },
-                sources: vec![runtime_id],
-                binding: Some(SceneBinding {
-                    runtime_id,
-                    backend_locator: BackendLocator::new(":1.new", "/replacement"),
-                    semantic_role: SemanticRole::Button,
-                    actions: Vec::new(),
-                    capability: InteractionCapability::Activate,
-                    default_intent: UiIntent::Activate,
-                }),
-                strategy: PresentationStrategy::DirectWidget,
-            }],
+                SceneElement {
+                    id: SceneElementId::new(900),
+                    kind: SceneElementKind::Button {
+                        label: "Replacement".to_owned(),
+                    },
+                    sources: vec![replacement_runtime],
+                    binding: Some(SceneBinding {
+                        runtime_id: replacement_runtime,
+                        backend_locator: BackendLocator::new(":1.new", "/replacement"),
+                        semantic_role: SemanticRole::Button,
+                        actions: Vec::new(),
+                        capability: InteractionCapability::Activate,
+                        default_intent: UiIntent::Activate,
+                    }),
+                    strategy: PresentationStrategy::DirectWidget,
+                },
+            ],
         );
         let mut focus = FocusModel::default();
         focus.reconcile_identity(
             &scene,
-            Some(runtime_id),
+            Some(replacement_runtime),
             Some(&BackendLocator::new(":1.old", "/stale")),
         );
+        assert_eq!(focus.current(), Some(SceneElementId::new(800)));
+
+        focus.reconcile_identity(
+            &scene,
+            Some(replacement_runtime),
+            Some(&BackendLocator::new(":1.new", "/replacement")),
+        );
+        assert_eq!(focus.current(), Some(SceneElementId::new(900)));
+
+        focus.reconcile_identity(&scene, Some(replacement_runtime), None);
         assert_eq!(focus.current(), Some(SceneElementId::new(900)));
     }
 }

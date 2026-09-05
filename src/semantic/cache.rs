@@ -426,20 +426,18 @@ impl SemanticCache {
 
     fn resolve_relation_targets(&mut self) {
         let by_locator = &self.by_locator;
-        let nodes = &self.nodes;
         for state in self.relations.values_mut() {
             if let RelationState::Known(relations) = state {
                 for relation in relations {
                     for target in &mut relation.targets {
-                        target.runtime_id = by_locator
-                            .get(&target.locator)
-                            .copied()
-                            .or_else(|| target.runtime_id.filter(|id| nodes.contains_key(id)));
-                        if let Some(id) = target.runtime_id
-                            && let Some(node) = nodes.get(&id)
-                        {
-                            target.locator = node.backend_locator.clone();
-                        }
+                        // A relation is authoritative only for the exact public
+                        // locator that exposed it. RuntimeNodeId reconciliation
+                        // may preserve presentation continuity across locator
+                        // replacement, but it must not migrate historical
+                        // structural/ownership evidence onto that replacement.
+                        // A later fresh relation read can qualify the new
+                        // locator normally.
+                        target.runtime_id = by_locator.get(&target.locator).copied();
                     }
                 }
             }
@@ -811,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    fn external_relation_target_follows_unique_but_not_ambiguous_churn() {
+    fn historical_relation_target_never_follows_locator_replacement() {
         let mut root = node("/root", SemanticRole::Application, "App");
         let controller = node("/controller", SemanticRole::Button, "Controller");
         let mut group = node("/group", SemanticRole::Container, "Group");
@@ -845,6 +843,21 @@ mod tests {
         let RelationState::Known(relations) = cache.relation_state(controller_id).unwrap() else {
             panic!("outside relation should remain known")
         };
+        assert_eq!(relations[0].targets[0].runtime_id, None);
+        assert_eq!(relations[0].targets[0].locator.object_path(), "/old");
+
+        cache
+            .set_relations(
+                controller_id,
+                vec![BackendRelation {
+                    kind: crate::semantic::SemanticRelationKind::ControllerFor,
+                    targets: vec![BackendLocator::new(":1.2", "/new")],
+                }],
+            )
+            .unwrap();
+        let RelationState::Known(relations) = cache.relation_state(controller_id).unwrap() else {
+            panic!("fresh relation should be known")
+        };
         assert_eq!(relations[0].targets[0].runtime_id, Some(target_id));
         assert_eq!(relations[0].targets[0].locator.object_path(), "/new");
 
@@ -860,5 +873,6 @@ mod tests {
             panic!("outside relation should remain known")
         };
         assert_eq!(relations[0].targets[0].runtime_id, None);
+        assert_eq!(relations[0].targets[0].locator.object_path(), "/new");
     }
 }
