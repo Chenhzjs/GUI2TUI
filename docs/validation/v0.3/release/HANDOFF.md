@@ -4,7 +4,8 @@
 
 **GUI2TUI v0.3.0 PUBLICLY RELEASED**
 
-**PRODUCTION RELEASE VALIDATED**
+**STRICT PRODUCTION VALIDATION PENDING — P2 x86_64 PUBLIC-DOWNLOAD NATIVE
+SMOKE**
 
 - Version: `0.3.0`.
 - Release source: `efc704adf8a3ded3463ed8bb81670eddd08296c3`.
@@ -214,9 +215,12 @@ not identify a developer or expose candidate content.
 
 Public release status: **GUI2TUI v0.3.0 PUBLICLY RELEASED**.
 
-Strict production validation status: **PRODUCTION RELEASE VALIDATED** under the
-same native-workflow plus one naturally available independent public-download
-smoke policy used for v0.2.0.
+Strict production validation status: **NOT YET FULLY VALIDATED — P2
+VERIFICATION GAP**. The only missing check is an additional independent native
+x86_64 execution using freshly downloaded public release bytes. This is not a
+release blocker: the public release remains valid, and the production
+workflow's native x86_64 package smoke plus public checksum, manifest,
+architecture, ABI, and attestation checks all passed.
 
 - P0: none.
 - P1: none.
