@@ -249,7 +249,10 @@ layout reconstruction.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
-[v0.3 roadmap](planning/v0.3-roadmap.md).
+[v0.3 roadmap](planning/v0.3-roadmap.md). The architecture-level trajectory
+from the completed v0.3 release to 1.0 is recorded separately in the
+[roadmap to 1.0](planning/roadmap-to-1.0.md); listing a future milestone there
+does not authorize it.
 
 ## 20. v0.3 Capability Recovery
 
