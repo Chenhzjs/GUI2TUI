@@ -112,9 +112,10 @@ class QtFixture(QMainWindow):
         items.addItems(["Alpha", "Beta", "Gamma"])
         layout.addWidget(items)
 
-        tools = self.menuBar().addMenu("Tools")
-        demo = tools.addAction("Activate Demo")
-        demo.triggered.connect(lambda: self.status.setText("Status: menu activated"))
+        self.tools = self.menuBar().addMenu("Tools")
+        demo = self.tools.addAction("Activate Demo")
+        self.menu_activation_count = 0
+        demo.triggered.connect(self.activate_menu_item)
 
         self.setCentralWidget(content)
 
@@ -140,6 +141,11 @@ class QtFixture(QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         dialog.exec()
+
+    def activate_menu_item(self) -> None:
+        self.menu_activation_count += 1
+        self.status.setText(f"Status: menu activated {self.menu_activation_count}")
+        self.tools.close()
 
 
 def main() -> int:

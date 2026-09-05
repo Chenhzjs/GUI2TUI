@@ -88,7 +88,11 @@ and scope authority, then observe that condition within a deadline. Events
 only wake/coalesce a new backend read; an event, invocation return, or elapsed
 time never establishes semantic success. The ordinary cache, scopes, scene,
 and focus are rebuilt from the authoritative read, and local optimistic state
-is never the authority.
+is never the authority. A surface being visible or focused does not by itself
+grant interaction authority. A structurally contained temporary subtree may
+be used inside its current Window scope when fresh Showing state makes its
+exact commands available; an active modal establishes its existing confined
+scope. Missing ownership never creates an owner or a new scope.
 
 ## 7. Repository / Module Map
 
@@ -128,7 +132,10 @@ new process or snapshot. Cache reconciliation may retain a `RuntimeNodeId`
 across an exact, unique structural replacement to reduce presentation churn,
 but that continuity is never operation authority: authority captured for
 locator L1 cannot act on or confirm locator L2. A newly current binding may
-capture fresh authority for L2 normally.
+capture fresh authority for L2 normally. Command-palette entries retain their
+exact locator and intent and are revalidated against current visibility,
+scope, and semantics before execution; a binding from a hidden or disappeared
+temporary surface cannot remain operation-authoritative.
 
 ## 9. Semantic Operations
 
@@ -262,7 +269,8 @@ layout reconstruction.
 - v0.4 Semantic Workflow Reconstruction Discovery: **COMPLETE**; conclusion
   **B — NARROWER CONTINUATION MODEL SUFFICIENT**
 - v0.4A Exact Authority and Bounded Transition Observation: **VALIDATED**
-- Recommended next work: **0.4B Dynamic Surface and Scope Continuation**,
+- v0.4B Dynamic Surface and Scope Continuation: **VALIDATED**
+- Recommended next work: **0.4C Realization and Hierarchical Continuation**,
   awaiting explicit user authorization
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -274,9 +282,10 @@ does not authorize it.
 
 The evidence and bounded phase plan for v0.4 are recorded in the
 [v0.4 Discovery](planning/v0.4-workflow-reconstruction.md) and
-[v0.4 roadmap](planning/v0.4-roadmap.md). The completed 0.4A evidence is in the
-[transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md).
-Completion of 0.4A does not authorize 0.4B or later implementation.
+[v0.4 roadmap](planning/v0.4-roadmap.md). Completed evidence is in the
+[0.4A transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md)
+and [0.4B surface/scope handoff](validation/v0.4/surface-scope-continuation/HANDOFF.md).
+Completion of 0.4B does not authorize 0.4C or later implementation.
 
 ## 20. v0.3 Capability Recovery
 
