@@ -31,6 +31,9 @@ pub(crate) enum TransitionCondition {
         present: bool,
         refresh: ConditionRefresh,
     },
+    ExactSurfaceUnavailable {
+        locator: BackendLocator,
+    },
     NewActiveModal {
         previous_scope_locator: BackendLocator,
     },
@@ -187,6 +190,11 @@ impl TransitionCondition {
                 })
             }),
             UiIntent::Activate => {
+                if let Some(menu_locator) = showing_menu_ancestor(cache, target) {
+                    return Some(Self::ExactSurfaceUnavailable {
+                        locator: menu_locator,
+                    });
+                }
                 let active = scopes.scope(scopes.active())?;
                 if matches!(
                     active.kind,
@@ -210,22 +218,25 @@ impl TransitionCondition {
     pub fn refresh_kind(&self) -> ConditionRefresh {
         match self {
             Self::ExactNodeState { refresh, .. } => *refresh,
-            Self::NewActiveModal { .. } | Self::ScopeInactive { .. } => {
-                ConditionRefresh::FullApplication
-            }
+            Self::ExactSurfaceUnavailable { .. }
+            | Self::NewActiveModal { .. }
+            | Self::ScopeInactive { .. } => ConditionRefresh::FullApplication,
         }
     }
 
     pub fn exact_locator(&self) -> Option<&BackendLocator> {
         match self {
             Self::ExactNodeState { locator, .. } => Some(locator),
-            Self::NewActiveModal { .. } | Self::ScopeInactive { .. } => None,
+            Self::ExactSurfaceUnavailable { .. }
+            | Self::NewActiveModal { .. }
+            | Self::ScopeInactive { .. } => None,
         }
     }
 
     pub fn kind(&self) -> &'static str {
         match self {
             Self::ExactNodeState { .. } => "exact-node-state",
+            Self::ExactSurfaceUnavailable { .. } => "exact-surface-unavailable",
             Self::NewActiveModal { .. } => "new-active-modal",
             Self::ScopeInactive { .. } => "scope-inactive",
         }
@@ -295,6 +306,22 @@ impl TransitionObservation {
                     TransitionEvaluation::Pending
                 }
             }
+            TransitionCondition::ExactSurfaceUnavailable { locator } => {
+                let Some(id) = cache.runtime_id(locator) else {
+                    return TransitionEvaluation::Confirmed;
+                };
+                cache
+                    .node(id)
+                    .map_or(TransitionEvaluation::Confirmed, |node| {
+                        if node.states.iter().any(
+                            |state| matches!(state, SemanticState::Other(value) if value == "showing"),
+                        ) {
+                            TransitionEvaluation::Pending
+                        } else {
+                            TransitionEvaluation::Confirmed
+                        }
+                    })
+            }
             TransitionCondition::NewActiveModal {
                 previous_scope_locator,
             } => scopes
@@ -352,6 +379,23 @@ fn unique_menu_descendant(cache: &SemanticCache, target: RuntimeNodeId) -> Optio
     (menus.len() == 1).then_some(menus[0])
 }
 
+fn showing_menu_ancestor(cache: &SemanticCache, target: RuntimeNodeId) -> Option<BackendLocator> {
+    let mut parent = cache.node(target)?.parent;
+    while let Some(id) = parent {
+        let node = cache.node(id)?;
+        if node.role == SemanticRole::Menu
+            && node
+                .states
+                .iter()
+                .any(|state| matches!(state, SemanticState::Other(value) if value == "showing"))
+        {
+            return Some(node.backend_locator.clone());
+        }
+        parent = node.parent;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use crate::semantic::{DebugInfo, SemanticNode, TextInputKind, TreeTruncation};
@@ -380,6 +424,9 @@ mod tests {
     fn tree(target_path: &str) -> SemanticNode {
         let mut app = node("/app", SemanticRole::Application, "App");
         let mut window = node("/window", SemanticRole::Window, "Main");
+        window
+            .states
+            .push(SemanticState::Other("showing".to_owned()));
         window
             .children
             .push(node(target_path, SemanticRole::CheckBox, "Stable"));
@@ -524,5 +571,80 @@ mod tests {
         );
         let confirmed = TransitionObservation::report(TransitionOutcome::Confirmed, 2, 0, 0);
         assert_eq!(confirmed.event_wakeups, 0);
+    }
+
+    #[test]
+    fn exact_temporary_surface_can_confirm_hidden_or_removed() {
+        let mut app = node("/app", SemanticRole::Application, "App");
+        let mut window = node("/window", SemanticRole::Window, "Main");
+        window
+            .states
+            .push(SemanticState::Other("showing".to_owned()));
+        let mut menu = node("/menu", SemanticRole::Menu, "Tools");
+        menu.states.push(SemanticState::Other("showing".to_owned()));
+        menu.children
+            .push(node("/item", SemanticRole::MenuItem, "Activate"));
+        window.children.push(menu);
+        app.children.push(window);
+        let mut cache = SemanticCache::from_snapshot(app).unwrap();
+        let scopes = InteractionScopes::analyze(
+            &cache,
+            &crate::semantic::RelationalSemanticGraph::new(&cache),
+        );
+        let target = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/item"))
+            .unwrap();
+        let authority = OperationAuthority::capture(
+            &RuntimeSession::default(),
+            &BackendLocator::new(":1.2", "/app"),
+            target,
+            &BackendLocator::new(":1.2", "/item"),
+            &cache,
+            &scopes,
+        );
+        assert_eq!(authority, Err(TransitionOutcome::ApplicationGone));
+
+        let mut runtime = RuntimeSession::default();
+        runtime.open_application(BackendLocator::new(":1.2", "/app"));
+        let authority = OperationAuthority::capture(
+            &runtime,
+            &BackendLocator::new(":1.2", "/app"),
+            target,
+            &BackendLocator::new(":1.2", "/item"),
+            &cache,
+            &scopes,
+        )
+        .unwrap();
+        let observation = TransitionObservation::new(
+            authority,
+            TransitionCondition::ExactSurfaceUnavailable {
+                locator: BackendLocator::new(":1.2", "/menu"),
+            },
+            Duration::from_millis(10),
+            CancellationToken::default(),
+        );
+        assert_eq!(
+            observation.evaluate(&runtime, &cache, &scopes),
+            TransitionEvaluation::Pending
+        );
+
+        let mut hidden = node("/menu", SemanticRole::Menu, "Tools");
+        hidden.states.clear();
+        cache.refresh_node(hidden).unwrap();
+        assert_eq!(
+            observation.evaluate(&runtime, &cache, &scopes),
+            TransitionEvaluation::Confirmed
+        );
+
+        cache
+            .replace_subtree(
+                &BackendLocator::new(":1.2", "/window"),
+                node("/window", SemanticRole::Window, "Main"),
+            )
+            .unwrap();
+        assert_eq!(
+            observation.evaluate(&runtime, &cache, &scopes),
+            TransitionEvaluation::Confirmed
+        );
     }
 }

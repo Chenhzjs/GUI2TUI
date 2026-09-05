@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 use crate::{
-    semantic::RuntimeNodeId,
+    semantic::{BackendLocator, RuntimeNodeId},
     transcompile::{
         CommandEntry, CommandGroup, CommandHierarchy, InteractionScopeId, SemanticCommand,
     },
@@ -16,7 +16,7 @@ const DEFAULT_CONTEXT_LIMIT: usize = 15;
 pub struct PaletteEntry {
     pub label: String,
     pub group: bool,
-    target: Option<(RuntimeNodeId, UiIntent)>,
+    target: Option<(RuntimeNodeId, BackendLocator, UiIntent)>,
     group_index: Option<usize>,
 }
 
@@ -32,11 +32,11 @@ pub struct CommandPalette {
     search_all_scopes: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PaletteOutcome {
     Continue,
     Close,
-    Execute(RuntimeNodeId, UiIntent),
+    Execute(RuntimeNodeId, BackendLocator, UiIntent),
 }
 
 impl CommandPalette {
@@ -106,8 +106,8 @@ impl CommandPalette {
                 } else {
                     entry
                         .target
-                        .map_or(PaletteOutcome::Continue, |(id, intent)| {
-                            PaletteOutcome::Execute(id, intent)
+                        .map_or(PaletteOutcome::Continue, |(id, locator, intent)| {
+                            PaletteOutcome::Execute(id, locator, intent)
                         })
                 }
             }
@@ -166,7 +166,11 @@ impl CommandPalette {
                 .map(|ranked| PaletteEntry {
                     label: format!("{} › {}", ranked.path.join(" › "), ranked.command.label),
                     group: false,
-                    target: Some((ranked.command.source, ranked.command.intent)),
+                    target: Some((
+                        ranked.command.source,
+                        ranked.command.backend_locator.clone(),
+                        ranked.command.intent,
+                    )),
                     group_index: None,
                 })
                 .collect()
@@ -200,7 +204,7 @@ fn browse_entries(group: &CommandGroup, scope: InteractionScopeId) -> Vec<Palett
                     group_index: Some(index),
                 })
             }
-            CommandEntry::Command(command) if command.scope == scope => {
+            CommandEntry::Command(command) if command.scope == scope && command.visible => {
                 Some(command_entry(command))
             }
             _ => None,
@@ -212,7 +216,7 @@ fn browse_entries(group: &CommandGroup, scope: InteractionScopeId) -> Vec<Palett
 fn group_contains_scope(group: &CommandGroup, scope: InteractionScopeId) -> bool {
     group.children.iter().any(|entry| match entry {
         CommandEntry::Group(group) => group_contains_scope(group, scope),
-        CommandEntry::Command(command) => command.scope == scope,
+        CommandEntry::Command(command) => command.scope == scope && command.visible,
     })
 }
 
@@ -220,7 +224,11 @@ fn command_entry(command: &SemanticCommand) -> PaletteEntry {
     PaletteEntry {
         label: command.label.clone(),
         group: false,
-        target: Some((command.source, command.intent)),
+        target: Some((
+            command.source,
+            command.backend_locator.clone(),
+            command.intent,
+        )),
         group_index: None,
     }
 }
@@ -233,6 +241,7 @@ mod tests {
     fn command(id: u64, scope: InteractionScopeId, label: &str) -> CommandEntry {
         CommandEntry::Command(SemanticCommand {
             source: RuntimeNodeId::new(id),
+            backend_locator: BackendLocator::new(":1.2", format!("/{id}")),
             label: label.to_owned(),
             scope,
             intent: UiIntent::Activate,

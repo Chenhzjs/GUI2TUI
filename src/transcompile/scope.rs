@@ -113,7 +113,21 @@ impl InteractionScopes {
         let focused = cache
             .nodes()
             .find(|node| node.states.contains(&SemanticState::Focused))
-            .and_then(|node| node_scope.get(&node.runtime_id).copied());
+            .and_then(|node| node_scope.get(&node.runtime_id).copied())
+            .filter(|scope| {
+                scopes.get(scope).is_some_and(|scope| {
+                    matches!(
+                        scope.kind,
+                        InteractionScopeKind::Window
+                            | InteractionScopeKind::Dialog
+                            | InteractionScopeKind::ModalDialog
+                            | InteractionScopeKind::Popup
+                            | InteractionScopeKind::MenuPopup
+                    ) && cache
+                        .node(scope.root)
+                        .is_some_and(|root| surface_is_present(root.states.as_slice()))
+                })
+            });
         let modal = scopes
             .values()
             .filter(|scope| scope.modal)
@@ -132,8 +146,13 @@ impl InteractionScopes {
         let active = modal.or(popup).or(focused).unwrap_or_else(|| {
             scopes
                 .values()
-                .filter(|scope| scope.kind == InteractionScopeKind::Window)
-                .max_by_key(|scope| scope_depth(&scopes, scope.id))
+                .filter(|scope| {
+                    scope.kind == InteractionScopeKind::Window
+                        && cache
+                            .node(scope.root)
+                            .is_some_and(|root| surface_is_present(root.states.as_slice()))
+                })
+                .min_by_key(|scope| scope.root)
                 .map_or(root, |scope| scope.id)
         });
         if let Some(scope) = scopes.get_mut(&active) {
@@ -171,14 +190,16 @@ impl InteractionScopes {
         let Some(node_scope) = self.scope_for_node(id) else {
             return false;
         };
-        let confines_interaction = self.scopes.get(&self.active).is_some_and(|scope| {
+        let permits_descendant_scope = self.scopes.get(&self.active).is_some_and(|scope| {
             scope.modal
                 || matches!(
                     scope.kind,
                     InteractionScopeKind::Popup | InteractionScopeKind::MenuPopup
                 )
         });
-        !confines_interaction || is_descendant_or_same(&self.scopes, node_scope, self.active)
+        node_scope == self.active
+            || (permits_descendant_scope
+                && is_descendant_or_same(&self.scopes, node_scope, self.active))
     }
 }
 
@@ -189,15 +210,15 @@ fn scope_kind(
     states: &[SemanticState],
     graph: &RelationalSemanticGraph<'_>,
 ) -> Option<InteractionScopeKind> {
-    let modal = states
-        .iter()
-        .any(|state| matches!(state, SemanticState::Other(value) if value == "modal"));
+    let present = surface_is_present(states);
+    let modal = present && has_state(states, "modal");
     // Several AT-SPI implementations expose an application-modal dialog as an
     // active Dialog without publishing the optional `modal` state. Treating an
     // active dialog as a modal boundary is the conservative choice: it prevents
     // commands from escaping to the background window while the dialog owns
     // interaction. This is protocol/state based and not toolkit specific.
-    let active_dialog = role == SemanticRole::Dialog
+    let active_dialog = present
+        && role == SemanticRole::Dialog
         && states.iter().any(|state| {
             matches!(state, SemanticState::Focused)
                 || matches!(state, SemanticState::Other(value) if value == "active")
@@ -208,11 +229,11 @@ fn scope_kind(
             Some(InteractionScopeKind::ModalDialog)
         }
         SemanticRole::Dialog => Some(InteractionScopeKind::Dialog),
-        SemanticRole::Window if graph.popup_owner(id).is_some() => {
+        SemanticRole::Window if present && graph.popup_owner(id).is_some() => {
             Some(InteractionScopeKind::Popup)
         }
         SemanticRole::Window => Some(InteractionScopeKind::Window),
-        SemanticRole::Menu if graph.popup_owner(id).is_some() => {
+        SemanticRole::Menu if present && graph.popup_owner(id).is_some() => {
             Some(InteractionScopeKind::MenuPopup)
         }
         SemanticRole::List
@@ -242,6 +263,16 @@ fn scope_kind(
         }
         _ => None,
     }
+}
+
+fn surface_is_present(states: &[SemanticState]) -> bool {
+    has_state(states, "showing") || has_state(states, "visible")
+}
+
+fn has_state(states: &[SemanticState], expected: &str) -> bool {
+    states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == expected))
 }
 
 fn nearest_scope_parent(
@@ -344,7 +375,10 @@ mod tests {
             description: None,
             value: None,
             text_input_kind: None,
-            states: vec![],
+            states: vec![
+                SemanticState::Other("showing".to_owned()),
+                SemanticState::Other("visible".to_owned()),
+            ],
             actions: vec![],
             capabilities: vec![],
             children: vec![],
@@ -442,5 +476,42 @@ mod tests {
         assert_eq!(scopes.scope(scopes.active()).unwrap().root, menu);
         assert!(!scopes.allows_node(RuntimeNodeId::new(2)));
         assert!(scopes.allows_node(menu));
+    }
+
+    #[test]
+    fn ownerless_menu_is_same_scope_only_when_structurally_contained() {
+        let mut app = node(0, SemanticRole::Application, "App");
+        let mut window = node(1, SemanticRole::Window, "Main");
+        let contained = node(2, SemanticRole::Menu, "Contained");
+        let mut detached = node(3, SemanticRole::Menu, "Detached");
+        detached.states.push(SemanticState::Focused);
+        window.children.push(contained);
+        app.children = vec![window, detached];
+        let cache = SemanticCache::from_snapshot(app).unwrap();
+        let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+        let contained = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("Contained"))
+            .unwrap()
+            .runtime_id;
+        let detached = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("Detached"))
+            .unwrap()
+            .runtime_id;
+
+        assert_eq!(
+            scopes.scope(scopes.active()).unwrap().kind,
+            InteractionScopeKind::Window
+        );
+        assert!(scopes.allows_node(contained));
+        assert!(!scopes.allows_node(detached));
+        assert!(!scopes.scopes().any(|scope| {
+            scope.root == detached
+                && matches!(
+                    scope.kind,
+                    InteractionScopeKind::Popup | InteractionScopeKind::MenuPopup
+                )
+        }));
     }
 }

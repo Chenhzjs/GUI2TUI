@@ -1491,12 +1491,29 @@ impl TuiApplication {
             match palette.handle_key(key) {
                 PaletteOutcome::Continue => self.command_palette = Some(palette),
                 PaletteOutcome::Close => self.status = "Command palette closed".to_owned(),
-                PaletteOutcome::Execute(runtime_id, intent) => {
-                    if let Some(scene_id) = self.scene.scene_id_for_runtime(runtime_id) {
+                PaletteOutcome::Execute(runtime_id, locator, intent) => {
+                    if !self.commands.validates_current_target(
+                        runtime_id,
+                        &locator,
+                        self.scopes.active(),
+                        intent,
+                    ) || !self.scopes.allows_node(runtime_id)
+                    {
+                        self.status =
+                            "Command is no longer available in the current semantic surface"
+                                .to_owned();
+                    } else if let Some(scene_id) = self.scene.scene_id_for_runtime(runtime_id)
+                        && self
+                            .scene
+                            .element(scene_id)
+                            .and_then(|element| element.binding.as_ref())
+                            .is_some_and(|binding| binding.backend_locator == locator)
+                    {
                         self.focus.set(&self.scene, scene_id);
                         self.execute_focused(intent).await;
                     } else {
-                        self.execute_cached_command(runtime_id, intent).await;
+                        self.execute_cached_command(runtime_id, &locator, intent)
+                            .await;
                     }
                 }
             }
@@ -2289,11 +2306,30 @@ impl TuiApplication {
         }
     }
 
-    async fn execute_cached_command(&mut self, runtime_id: RuntimeNodeId, intent: UiIntent) {
+    async fn execute_cached_command(
+        &mut self,
+        runtime_id: RuntimeNodeId,
+        expected_locator: &BackendLocator,
+        intent: UiIntent,
+    ) {
+        if !self.commands.validates_current_target(
+            runtime_id,
+            expected_locator,
+            self.scopes.active(),
+            intent,
+        ) || !self.scopes.allows_node(runtime_id)
+        {
+            self.status = "Command is no longer available in the current semantic surface".into();
+            return;
+        }
         let Some(node) = self.cache.node(runtime_id) else {
             self.status = "Command is no longer present in the semantic runtime".to_owned();
             return;
         };
+        if node.backend_locator != *expected_locator {
+            self.status = "Command target changed; refresh and choose the current binding".into();
+            return;
+        }
         let label = node.name.clone().unwrap_or_else(|| node.role.to_string());
         let Some(operation) = SemanticOperation::from_intent(runtime_id, intent) else {
             self.status = format!("Command \"{label}\" has no executable semantic operation");
@@ -4589,15 +4625,27 @@ fn build_contextual_view(
                 || !promoted_choice_options.contains(&binding.runtime_id)
         })
     });
+    let commands = CommandHierarchy::build(cache, &scopes);
     for element in &mut scene.elements {
         if let Some(binding) = &element.binding
-            && !scopes.allows_node(binding.runtime_id)
+            && (!scopes.allows_node(binding.runtime_id)
+                || (matches!(
+                    binding.capability,
+                    InteractionCapability::Activate
+                        | InteractionCapability::Toggle
+                        | InteractionCapability::Select
+                        | InteractionCapability::OpenMenu
+                ) && !commands.validates_current_target(
+                    binding.runtime_id,
+                    &binding.backend_locator,
+                    scopes.active(),
+                    binding.default_intent,
+                )))
         {
             element.binding = None;
         }
     }
     compress_content_scene(&mut scene, cache, content);
-    let commands = CommandHierarchy::build(cache, &scopes);
     Ok((scene, scopes, commands, choices))
 }
 

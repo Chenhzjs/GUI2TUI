@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    semantic::{RuntimeNodeId, SemanticCache, SemanticRole, SemanticState},
+    semantic::{BackendLocator, RuntimeNodeId, SemanticCache, SemanticRole, SemanticState},
     tui::action::{InteractionCapability, UiIntent, interaction_capability},
 };
 
@@ -10,6 +10,7 @@ use super::scope::{InteractionScopeId, InteractionScopes};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SemanticCommand {
     pub source: RuntimeNodeId,
+    pub backend_locator: BackendLocator,
     pub label: String,
     pub scope: InteractionScopeId,
     pub intent: UiIntent,
@@ -79,6 +80,23 @@ impl CommandHierarchy {
         };
         collect_command_entries(cache, scopes, root_id, &mut root.children);
         Self { root }
+    }
+
+    pub fn validates_current_target(
+        &self,
+        source: RuntimeNodeId,
+        locator: &BackendLocator,
+        scope: InteractionScopeId,
+        intent: UiIntent,
+    ) -> bool {
+        all_commands(&self.root).any(|command| {
+            command.source == source
+                && command.backend_locator == *locator
+                && command.scope == scope
+                && command.intent == intent
+                && command.enabled
+                && command.visible
+        })
     }
 
     pub fn search<'a>(
@@ -195,12 +213,25 @@ fn collect_command_entries(
             &child.capabilities,
             parent_capabilities,
         );
-        if is_command_container(&child.role)
-            || child.children.iter().any(|nested| {
-                cache
-                    .node(*nested)
-                    .is_some_and(|node| is_command_role(&node.role))
-            })
+        let command = (is_command_role(&child.role))
+            .then(|| capability_intent(capability))
+            .flatten()
+            .map(|intent| SemanticCommand {
+                source: child.runtime_id,
+                backend_locator: child.backend_locator.clone(),
+                label: child.name.clone().unwrap_or_else(|| child.role.to_string()),
+                scope,
+                intent,
+                enabled: !child.states.iter().any(
+                    |state| matches!(state, SemanticState::Other(value) if value == "disabled"),
+                ),
+                visible: command_is_visible(cache, child.runtime_id),
+                shortcut: child
+                    .actions
+                    .iter()
+                    .find_map(|action| action.keybinding.clone()),
+            });
+        if is_command_container(&child.role) || has_safe_command_descendant(cache, child.runtime_id)
         {
             let mut group = CommandGroup {
                 source: child.runtime_id,
@@ -208,30 +239,17 @@ fn collect_command_entries(
                 scope,
                 children: Vec::new(),
             };
+            if let Some(command) = command.clone() {
+                group.children.push(CommandEntry::Command(command));
+            }
             collect_command_entries(cache, scopes, child.runtime_id, &mut group.children);
             if !group.children.is_empty() {
                 output.push(CommandEntry::Group(group));
                 continue;
             }
         }
-        if is_command_role(&child.role)
-            && let Some(intent) = capability_intent(capability)
-        {
-            output.push(CommandEntry::Command(SemanticCommand {
-                source: child.runtime_id,
-                label: child
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| child.role.to_string()),
-                scope,
-                intent,
-                enabled: !child.states.iter().any(
-                    |state| matches!(state, SemanticState::Other(value) if value == "disabled")
-                ),
-                visible: child.states.iter().any(|state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"))
-                    || !child.states.iter().any(|state| matches!(state, SemanticState::Other(value) if value == "hidden")),
-                shortcut: child.actions.iter().find_map(|action| action.keybinding.clone()),
-            }));
+        if let Some(command) = command {
+            output.push(CommandEntry::Command(command));
         } else {
             collect_command_entries(cache, scopes, child.runtime_id, output);
         }
@@ -254,7 +272,8 @@ fn flatten_ranked<'a>(
                 flatten_ranked(group, path, query, scope, global, recent, output)
             }
             CommandEntry::Command(command) => {
-                if (!global && command.scope != scope)
+                if !command.visible
+                    || (!global && command.scope != scope)
                     || (!query.is_empty()
                         && !command.label.to_lowercase().contains(query)
                         && !path.iter().any(|part| part.to_lowercase().contains(query)))
@@ -293,6 +312,42 @@ fn flatten_ranked<'a>(
         }
     }
     path.pop();
+}
+
+fn command_is_visible(cache: &SemanticCache, id: RuntimeNodeId) -> bool {
+    let Some(command) = cache.node(id) else {
+        return false;
+    };
+    if command
+        .states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "hidden"))
+    {
+        return false;
+    }
+
+    let mut ancestor = command.parent;
+    let mut inside_menu = false;
+    while let Some(id) = ancestor {
+        let Some(node) = cache.node(id) else {
+            return false;
+        };
+        if node.role == SemanticRole::Menu {
+            inside_menu = true;
+            if !has_state(node.states.as_slice(), "showing") {
+                return false;
+            }
+        }
+        ancestor = node.parent;
+    }
+
+    !inside_menu || has_state(command.states.as_slice(), "showing")
+}
+
+fn has_state(states: &[SemanticState], expected: &str) -> bool {
+    states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == expected))
 }
 
 fn all_commands(group: &CommandGroup) -> impl Iterator<Item = &SemanticCommand> {
@@ -428,6 +483,65 @@ mod tests {
         assert_eq!(scoped.len(), 3);
         assert!(scoped.iter().all(|ranked| ranked.score >= 65));
         assert!(scoped[0].reasons.contains(&"current-scope +50"));
+    }
+
+    #[test]
+    fn hidden_menu_descendant_requires_fresh_showing_state() {
+        let mut app = node(0, SemanticRole::Application, "App");
+        let mut window = node(1, SemanticRole::Window, "Main");
+        let mut trigger = node(2, SemanticRole::MenuItem, "Tools");
+        trigger.actions.push(SemanticAction {
+            index: 0,
+            name: "ShowMenu".to_owned(),
+            description: None,
+            keybinding: None,
+        });
+        let mut menu = node(3, SemanticRole::Menu, "Tools popup");
+        menu.states
+            .retain(|state| !matches!(state, SemanticState::Other(value) if value == "showing"));
+        let mut item = command(4, "Activate Demo");
+        item.states
+            .retain(|state| !matches!(state, SemanticState::Other(value) if value == "showing"));
+        menu.children.push(item);
+        trigger.children.push(menu);
+        window.children.push(trigger);
+        app.children.push(window);
+        let mut cache = SemanticCache::from_snapshot(app).unwrap();
+        let menu_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/3"))
+            .unwrap();
+        let item_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/4"))
+            .unwrap();
+        let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+        let hierarchy = CommandHierarchy::build(&cache, &scopes);
+        assert_eq!(
+            hierarchy
+                .search("Tools", scopes.active(), false, &HashMap::new())
+                .len(),
+            1
+        );
+        assert!(
+            hierarchy
+                .search("Activate Demo", scopes.active(), false, &HashMap::new())
+                .is_empty()
+        );
+
+        cache
+            .refresh_node(node(3, SemanticRole::Menu, "Tools popup"))
+            .unwrap();
+        cache.refresh_node(command(4, "Activate Demo")).unwrap();
+        let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+        let hierarchy = CommandHierarchy::build(&cache, &scopes);
+        let results = hierarchy.search("Activate Demo", scopes.active(), false, &HashMap::new());
+        assert_eq!(results.len(), 1);
+        assert!(hierarchy.validates_current_target(
+            item_id,
+            &BackendLocator::new(":1.2", "/4"),
+            scopes.active(),
+            UiIntent::Activate,
+        ));
+        assert_ne!(menu_id, item_id);
     }
 
     #[test]
