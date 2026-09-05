@@ -113,10 +113,10 @@ small change.
 
 ## Git and Release Discipline
 
-Never rewrite history or move a published tag. `v0.1.0` and `v0.2.0` are
-immutable; post-release fixes belong to later versions. Distinguish the
-release source commit from later evidence/documentation HEADs. Avoid
-destructive Git operations unless explicitly authorized.
+Never rewrite history or move a published tag. `v0.1.0`, `v0.2.0`, and
+`v0.3.0` are immutable; post-release fixes belong to later versions.
+Distinguish the release source commit from later evidence/documentation HEADs.
+Avoid destructive Git operations unless explicitly authorized.
 
 ## Before Changing Code
 

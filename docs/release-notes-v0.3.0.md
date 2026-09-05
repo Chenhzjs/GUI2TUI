@@ -74,9 +74,9 @@ available.
 
 ## Demonstration and verification
 
-The [real v0.3 demonstration](demo/v0.3/README.md) shows Value `4 → 5 → 4`, a
-configured external edit confirmed in Mousepad while its backing file remains
-unchanged, conflict refusal with candidate preservation, and safe Writer
-degradation. The future public release, if authorized, will use the exact source
-commit qualified by the v0.3.0 RC workflow; this document does not claim that
-publication has occurred.
+The [real v0.3 demonstration](https://github.com/Chenhzjs/GUI2TUI/blob/v0.3.0/docs/demo/v0.3/README.md)
+shows Value `4 → 5 → 4`, a configured external edit confirmed in Mousepad while
+its backing file remains unchanged, conflict refusal with candidate
+preservation, and safe Writer degradation. The public release was rebuilt from
+and attested against the exact source commit qualified by the v0.3.0 RC
+workflow: `efc704adf8a3ded3463ed8bb81670eddd08296c3`.

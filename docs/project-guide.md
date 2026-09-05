@@ -225,8 +225,8 @@ The supported release pipeline builds native Linux x86_64 and aarch64 packages,
 runs extracted-package smoke, checks ABI, checksums, manifest, and
 attestations, then optionally publishes. Published tags are immutable. The
 release source commit is distinct from later evidence/documentation commits;
-never assume newest HEAD is the binary source. `v0.1.0` and `v0.2.0` must not
-be moved.
+never assume newest HEAD is the binary source. `v0.1.0`, `v0.2.0`, and
+`v0.3.0` must not be moved.
 
 ## 18. Known Boundaries / Non-goals
 
@@ -239,16 +239,16 @@ layout reconstruction.
 
 ## 19. Current Project State
 
-- Public release: **v0.2.0**
-- Project state: **POST-v0.2 MAINTENANCE**
-- v0.2.0 source tag: immutable and already published
+- Public release: **v0.3.0**
+- Project state: **POST-v0.3 MAINTENANCE**
+- v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
-- v0.3.0 release-candidate qualification: **CURRENT / AUTHORIZED**
-- v0.3.0 public release: **NOT AUTHORIZED**
+- v0.3.0 release-candidate qualification: **QUALIFIED**
+- v0.3.0 public release: **COMPLETE** from frozen source
+  `efc704adf8a3ded3463ed8bb81670eddd08296c3`
 
-Release and validation details live in [v0.2.0 release notes](release-notes-v0.2.0.md)
-and [public release verification](release-v0.2.0-validation.md). The reviewed
-v0.3 state and next authorization gate live in the
+Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
+[production release verification](validation/v0.3/release/HANDOFF.md), and
 [v0.3 roadmap](planning/v0.3-roadmap.md).
 
 ## 20. v0.3 Capability Recovery
@@ -258,8 +258,9 @@ configured complex plain-text interaction modality while preserving public
 Accessibility mutation, stale/conflict checks, and authoritative read-back.
 Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
-handoff before any further work. RC qualification is authorized; tag creation,
-publication, and release activity still require separate explicit authorization.
+handoff before any further work. v0.3.0 is released and immutable. Future
+source fixes require v0.3.1 or later; do not begin v0.4 without explicit
+authorization.
 
 ## 21. Glossary
 
