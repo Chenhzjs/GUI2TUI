@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QButtonGroup,
+    QGroupBox,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -112,6 +113,22 @@ class QtFixture(QMainWindow):
         items.addItems(["Alpha", "Beta", "Gamma"])
         layout.addWidget(items)
 
+        realization_trigger = QPushButton("Toggle descendant realization")
+        realization_trigger.clicked.connect(self.toggle_descendant_realization)
+        layout.addWidget(realization_trigger)
+        self.descendant_group = QGroupBox("Descendant container")
+        self.descendant_layout = QVBoxLayout(self.descendant_group)
+        self.realized_descendant = None
+        layout.addWidget(self.descendant_group)
+
+        unrelated_trigger = QPushButton("Toggle unrelated realization")
+        unrelated_trigger.clicked.connect(self.toggle_unrelated_realization)
+        layout.addWidget(unrelated_trigger)
+        self.unrelated_group = QGroupBox("Unrelated container")
+        self.unrelated_layout = QVBoxLayout(self.unrelated_group)
+        self.unrelated_descendant = None
+        layout.addWidget(self.unrelated_group)
+
         self.tools = self.menuBar().addMenu("Tools")
         demo = self.tools.addAction("Activate Demo")
         self.menu_activation_count = 0
@@ -146,6 +163,40 @@ class QtFixture(QMainWindow):
         self.menu_activation_count += 1
         self.status.setText(f"Status: menu activated {self.menu_activation_count}")
         self.tools.close()
+
+    def toggle_descendant_realization(self) -> None:
+        if self.realized_descendant is None:
+            control = QCheckBox("Realized descendant toggle")
+            control.stateChanged.connect(
+                lambda state: self.status.setText(f"Status: descendant state {state}")
+            )
+            self.descendant_layout.addWidget(control)
+            self.realized_descendant = control
+            self.status.setText("Status: descendant realized")
+        else:
+            control = self.realized_descendant
+            self.realized_descendant = None
+            self.descendant_layout.removeWidget(control)
+            control.setParent(None)
+            control.deleteLater()
+            self.status.setText("Status: descendant removed")
+
+    def toggle_unrelated_realization(self) -> None:
+        if self.unrelated_descendant is None:
+            control = QPushButton("Unrelated realized action")
+            control.clicked.connect(
+                lambda: self.status.setText("Status: unrelated action activated")
+            )
+            self.unrelated_layout.addWidget(control)
+            self.unrelated_descendant = control
+            self.status.setText("Status: unrelated realized")
+        else:
+            control = self.unrelated_descendant
+            self.unrelated_descendant = None
+            self.unrelated_layout.removeWidget(control)
+            control.setParent(None)
+            control.deleteLater()
+            self.status.setText("Status: unrelated removed")
 
 
 def main() -> int:

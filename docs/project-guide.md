@@ -137,6 +137,15 @@ exact locator and intent and are revalidated against current visibility,
 scope, and semantics before execution; a binding from a hidden or disappeared
 temporary surface cannot remain operation-authoritative.
 
+Realization changes which current semantic elements are available; it does
+not create historical ownership or operation identity. Current hierarchy may
+use only freshly exposed public containment/relations. A relation target read
+for locator L1 is not migrated to replacement L2 through retained presentation
+identity, and an exact stale focus anchor falls back safely rather than
+following a retained `RuntimeNodeId`. Fresh bindings for L2 remain usable
+normally. Related content that Accessibility exposes as siblings remains
+siblings, and manual continuation from the refreshed scene is sufficient.
+
 ## 9. Semantic Operations
 
 `UiIntent` describes user intent (`Activate`, `Toggle`, `Select`, editing,
@@ -270,7 +279,8 @@ layout reconstruction.
   **B — NARROWER CONTINUATION MODEL SUFFICIENT**
 - v0.4A Exact Authority and Bounded Transition Observation: **VALIDATED**
 - v0.4B Dynamic Surface and Scope Continuation: **VALIDATED**
-- Recommended next work: **0.4C Realization and Hierarchical Continuation**,
+- v0.4C Realization and Hierarchical Continuation: **VALIDATED**
+- Recommended next work: **0.4D Continuation UX and Theme Qualification**,
   awaiting explicit user authorization
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -283,9 +293,10 @@ does not authorize it.
 The evidence and bounded phase plan for v0.4 are recorded in the
 [v0.4 Discovery](planning/v0.4-workflow-reconstruction.md) and
 [v0.4 roadmap](planning/v0.4-roadmap.md). Completed evidence is in the
-[0.4A transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md)
-and [0.4B surface/scope handoff](validation/v0.4/surface-scope-continuation/HANDOFF.md).
-Completion of 0.4B does not authorize 0.4C or later implementation.
+[0.4A transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md),
+[0.4B surface/scope handoff](validation/v0.4/surface-scope-continuation/HANDOFF.md),
+and [0.4C realization handoff](validation/v0.4/realization-continuation/HANDOFF.md).
+Completion of 0.4C does not authorize 0.4D or later implementation.
 
 ## 20. v0.3 Capability Recovery
 
@@ -309,6 +320,9 @@ authorization.
 - **SemanticOperation:** explicit safe operation resolved from a `UiIntent`.
 - **Transition observation:** short-lived, operation-adjacent bounded checking
   of an explicit postcondition through fresh authoritative semantics.
+- **Realization:** a current semantic structure change that creates, reveals,
+  hides, removes, reparents, or replaces accessible nodes; it does not imply
+  ownership beyond fresh public structure.
 - **SemanticContentModel / ContentBlockId:** bounded document/content model and
   its block identity.
 - **SpatialEvidence / SpatialTopology:** trusted geometry evidence and the
