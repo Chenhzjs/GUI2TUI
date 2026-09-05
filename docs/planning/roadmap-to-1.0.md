@@ -25,7 +25,7 @@ generic semantic tasks.
 | v0.1 | Semantic Reconstruction | **COMPLETED** |
 | v0.2 | Spatial Reconstruction | **COMPLETED** |
 | v0.3 | Verified Capability Recovery | **COMPLETED / PUBLICLY RELEASED** |
-| v0.4 | Semantic Workflow Reconstruction | **PLANNED / NEXT DISCOVERY RECOMMENDED / NOT YET AUTHORIZED** |
+| v0.4 | Semantic Workflow Reconstruction | **DISCOVERY COMPLETED / 0.4A RECOMMENDED / AWAITING USER AUTHORIZATION** |
 | v0.5 | Task & Interaction Completeness | **PLANNED / NOT AUTHORIZED** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **PLANNED / NOT AUTHORIZED** |
 | v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
@@ -131,8 +131,16 @@ inputs and are not the product architecture.
 
 ## 4. v0.4 — Semantic Workflow Reconstruction
 
-**Core question:** How can verified semantic operations compose into complete
-user tasks?
+**Qualified question:** How can one verified semantic operation be observed
+through an authoritative semantic transition so the user can continue safely?
+
+The completed [v0.4 Discovery](v0.4-workflow-reconstruction.md) selected
+**B — NARROWER CONTINUATION MODEL SUFFICIENT**. Existing refresh, scene rebuild,
+modal scope, focus history, and user navigation already solve much of dynamic
+continuation. The evidence supports a bounded operation-adjacent semantic
+observation contract, not a workflow engine or automatic task runner. The
+derived [v0.4 roadmap](v0.4-roadmap.md) recommends 0.4A Exact Authority and
+Bounded Transition Observation; implementation remains unauthorized.
 
 ### The missing layer
 
@@ -233,9 +241,9 @@ of newly interactive controls.
 
 ### Recommended next task
 
-The immediate recommended technical task is **v0.4 Semantic Workflow
-Reconstruction Discovery**. It is **not yet authorized**. This roadmap neither
-performs that discovery nor authorizes v0.4 implementation.
+The immediate recommended technical task is **0.4A Exact Authority and Bounded
+Transition Observation**. It is **awaiting explicit user authorization**.
+Discovery completion does not authorize implementation.
 
 ## 5. v0.5 — Task & Interaction Completeness
 
@@ -643,18 +651,11 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 ## 15. Immediate next decision
 
-The recommended next technical task is **v0.4 Semantic Workflow Reconstruction
-Discovery**. When explicitly authorized, it should investigate current
-transition/runtime architecture, concrete dynamic task failures,
-Expand/Collapse realization, menus and popups, dialogs, tree workflows, file
-chooser lifecycle, scope changes, event-driven observation, exact target
-rebinding, and completion conditions. Its output should decide whether a shared
-transition/workflow abstraction is actually justified.
-
-That Discovery is not part of this documentation task and is not authorized by
-the existence of this roadmap. v0.4 implementation requires subsequent,
-explicitly reviewed authorization. v0.5, v0.6, v0.7, and 1.0 likewise remain
-direction only until separately authorized.
+The v0.4 Discovery is complete. After user architectural review, the
+recommended next technical task is **0.4A Exact Authority and Bounded
+Transition Observation**, as bounded in the [v0.4 roadmap](v0.4-roadmap.md).
+It is not authorized by this roadmap update. v0.5, v0.6, v0.7, and 1.0 likewise
+remain direction only until separately authorized.
 
 ## 16. References
 
@@ -670,3 +671,7 @@ direction only until separately authorized.
   — final functional-phase evidence.
 - [v0.3 production release verification](../validation/v0.3/release/HANDOFF.md)
   — immutable public release identity and current post-release evidence.
+- [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
+  evidence and conclusion B.
+- [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no
+  implementation authorization.

@@ -246,6 +246,10 @@ layout reconstruction.
 - v0.3.0 release-candidate qualification: **QUALIFIED**
 - v0.3.0 public release: **COMPLETE** from frozen source
   `efc704adf8a3ded3463ed8bb81670eddd08296c3`
+- v0.4 Semantic Workflow Reconstruction Discovery: **COMPLETE**; conclusion
+  **B — NARROWER CONTINUATION MODEL SUFFICIENT**
+- Recommended next work: **0.4A Exact Authority and Bounded Transition
+  Observation**, awaiting explicit user authorization
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -253,6 +257,11 @@ Release and validation details live in the [v0.3.0 release notes](release-notes-
 from the completed v0.3 release to 1.0 is recorded separately in the
 [roadmap to 1.0](planning/roadmap-to-1.0.md); listing a future milestone there
 does not authorize it.
+
+The evidence and bounded phase plan for v0.4 are recorded in the
+[v0.4 Discovery](planning/v0.4-workflow-reconstruction.md) and
+[v0.4 roadmap](planning/v0.4-roadmap.md). Discovery does not authorize 0.4A or
+later implementation.
 
 ## 20. v0.3 Capability Recovery
 
