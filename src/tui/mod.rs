@@ -14,4 +14,5 @@ pub mod palette;
 pub mod region_navigation;
 pub mod renderer;
 pub mod selector;
+mod transition;
 pub mod view_model;

@@ -18,8 +18,8 @@ use crate::{
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::{
         BackendLocator, LARGE_TREE_RELATION_CANDIDATE_LIMIT, RelationPriorityContext,
-        RuntimeNodeId, SemanticCache, SemanticCapability, SemanticRole, SemanticState,
-        schedule_on_demand_relations, schedule_relation_candidates,
+        RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability, SemanticRole,
+        SemanticState, schedule_on_demand_relations, schedule_relation_candidates,
     },
     transcompile::{
         ChoiceCatalog, ChoiceOptions, CommandHierarchy, InteractionScopeId, InteractionScopes,
@@ -48,6 +48,10 @@ use super::{
     region_navigation::RegionNavigator,
     renderer::{
         ChoiceRender, ContentRender, InlineContentRender, PaletteRender, RenderContext, render,
+    },
+    transition::{
+        ConditionRefresh, OperationAuthority, TransitionCondition, TransitionEvaluation,
+        TransitionObservation, TransitionOutcome, TransitionReport,
     },
 };
 
@@ -116,6 +120,12 @@ struct CaptureCompletion {
     candidate: crate::modality::ModalityCandidate,
     modality: crate::modality::ExternalModality,
     artifact: crate::modality::materialize::MaterializedArtifact,
+}
+
+struct ActionObservationResult {
+    report: TransitionReport,
+    invocation_accepted: bool,
+    rejection: Option<BackendError>,
 }
 
 impl TuiApplication {
@@ -2211,6 +2221,27 @@ impl TuiApplication {
             }
             return;
         }
+        if let BackendOperation::InvokeAction { locator, action } = &backend_operation
+            && matches!(
+                intent,
+                UiIntent::Activate | UiIntent::Toggle | UiIntent::OpenMenu
+            )
+        {
+            if self
+                .invoke_action_with_transition(
+                    runtime_id,
+                    intent,
+                    locator.clone(),
+                    action.clone(),
+                    element_label(&element).to_owned(),
+                    operation_description,
+                )
+                .await
+            {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
+            }
+            return;
+        }
         let result = match &backend_operation {
             BackendOperation::InvokeAction { locator, action } => self
                 .backend
@@ -2276,6 +2307,27 @@ impl TuiApplication {
             }
         };
         let description = describe_operation(intent, &backend_operation);
+        if let BackendOperation::InvokeAction { locator, action } = &backend_operation
+            && matches!(
+                intent,
+                UiIntent::Activate | UiIntent::Toggle | UiIntent::OpenMenu
+            )
+        {
+            if self
+                .invoke_action_with_transition(
+                    runtime_id,
+                    intent,
+                    locator.clone(),
+                    action.clone(),
+                    label.clone(),
+                    description,
+                )
+                .await
+            {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
+            }
+            return;
+        }
         let result = match &backend_operation {
             BackendOperation::InvokeAction { locator, action } => self
                 .backend
@@ -3032,6 +3084,350 @@ impl TuiApplication {
         }
     }
 
+    async fn invoke_action_with_transition(
+        &mut self,
+        runtime_id: RuntimeNodeId,
+        intent: UiIntent,
+        locator: BackendLocator,
+        action: SemanticAction,
+        label: String,
+        description: String,
+    ) -> bool {
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            runtime_id,
+            &locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(outcome) => {
+                self.status = transition_status(outcome, &label, intent, &description);
+                return false;
+            }
+        };
+        if let Err(outcome) =
+            authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+        {
+            self.status = transition_status(outcome, &label, intent, &description);
+            return false;
+        }
+
+        let condition =
+            TransitionCondition::for_action(intent, runtime_id, &self.cache, &self.scopes);
+        let cancellation = crate::modality::CancellationToken::default();
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::TransitionObservation,
+            cancellation.clone(),
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                self.status = error.to_string();
+                return false;
+            }
+        };
+
+        let Some(condition) = condition else {
+            let result = self
+                .backend
+                .do_action_by_name(&locator.encode(), &action.name)
+                .await;
+            let ticket_result = self.runtime.complete(&ticket);
+            return match result {
+                Ok(_) if ticket_result.is_ok() => {
+                    self.full_reload(None).await;
+                    self.status = transition_status(
+                        TransitionOutcome::Unverifiable,
+                        &label,
+                        intent,
+                        &description,
+                    );
+                    tracing::debug!(
+                        target: "gui2tui::product",
+                        outcome = ?TransitionOutcome::Unverifiable,
+                        condition = "unavailable",
+                        authoritative_checks = 1_u32,
+                        event_wakeups = 0_u32,
+                        invocation_wakeups = 1_u32,
+                        "semantic transition observation completed"
+                    );
+                    true
+                }
+                Ok(_) => {
+                    self.status = crate::runtime::RuntimeError::StaleIdentity.to_string();
+                    false
+                }
+                Err(error) => {
+                    let (status, refresh) = operation_error_status(&error);
+                    self.status = status;
+                    if refresh {
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                    false
+                }
+            };
+        };
+
+        let condition_kind = condition.kind();
+        let observation =
+            TransitionObservation::new(authority, condition, self.settle_delay, cancellation);
+        let mut invocation = {
+            let backend = self.backend.clone();
+            let encoded = locator.encode();
+            tokio::spawn(async move { backend.do_action_by_name(&encoded, &action.name).await })
+        };
+        let mut result = self
+            .observe_transition_action(&observation, &mut invocation)
+            .await;
+        if !invocation.is_finished() {
+            // The public call may remain blocked until a newly opened modal is
+            // closed. Once fresh semantics confirm the transition, its return
+            // value is no longer authoritative and the bounded client wait can
+            // be retired without affecting the GUI-owned surface.
+            invocation.abort();
+        }
+        if let Err(error) = self.runtime.complete(&ticket)
+            && !matches!(
+                result.report.outcome,
+                TransitionOutcome::ApplicationGone | TransitionOutcome::Cancelled
+            )
+        {
+            result.report.outcome = match error {
+                crate::runtime::RuntimeError::StaleIdentity => TransitionOutcome::Stale,
+                _ => TransitionOutcome::Cancelled,
+            };
+        }
+
+        tracing::debug!(
+            target: "gui2tui::product",
+            outcome = ?result.report.outcome,
+            condition = condition_kind,
+            authoritative_checks = result.report.authoritative_checks,
+            event_wakeups = result.report.event_wakeups,
+            invocation_wakeups = result.report.invocation_wakeups,
+            "semantic transition observation completed"
+        );
+        if let Some(error) = result.rejection {
+            let (status, refresh) = operation_error_status(&error);
+            self.status = status;
+            if refresh {
+                self.full_reload(Some(self.status.clone())).await;
+            }
+            return false;
+        }
+        if result.report.outcome != TransitionOutcome::ApplicationGone {
+            self.status = transition_status(result.report.outcome, &label, intent, &description);
+        }
+        result.invocation_accepted || result.report.outcome == TransitionOutcome::Confirmed
+    }
+
+    async fn observe_transition_action(
+        &mut self,
+        observation: &TransitionObservation,
+        invocation: &mut tokio::task::JoinHandle<Result<SemanticAction, BackendError>>,
+    ) -> ActionObservationResult {
+        let mut authoritative_checks = 1_u32;
+        let mut event_wakeups = 0_u32;
+        let mut invocation_wakeups = 0_u32;
+        let mut invocation_accepted = false;
+        let mut invocation_pending = true;
+
+        let initial = self.evaluate_transition_authoritatively(observation).await;
+        if let Some(outcome) = terminal_transition_outcome(initial) {
+            return ActionObservationResult {
+                report: TransitionObservation::report(
+                    outcome,
+                    authoritative_checks,
+                    event_wakeups,
+                    invocation_wakeups,
+                ),
+                invocation_accepted,
+                rejection: None,
+            };
+        }
+
+        loop {
+            let remaining = observation.remaining();
+            if remaining.is_zero() {
+                authoritative_checks = authoritative_checks.saturating_add(1);
+                let final_state = self.evaluate_transition_authoritatively(observation).await;
+                let outcome =
+                    terminal_transition_outcome(final_state).unwrap_or(TransitionOutcome::Timeout);
+                return ActionObservationResult {
+                    report: TransitionObservation::report(
+                        outcome,
+                        authoritative_checks,
+                        event_wakeups,
+                        invocation_wakeups,
+                    ),
+                    invocation_accepted,
+                    rejection: None,
+                };
+            }
+
+            tokio::select! {
+                biased;
+                joined = &mut *invocation, if invocation_pending => {
+                    invocation_pending = false;
+                    invocation_wakeups = invocation_wakeups.saturating_add(1);
+                    match joined {
+                        Ok(Ok(_)) => invocation_accepted = true,
+                        Ok(Err(error)) => {
+                            return ActionObservationResult {
+                                report: TransitionObservation::report(
+                                    TransitionOutcome::Unverifiable,
+                                    authoritative_checks,
+                                    event_wakeups,
+                                    invocation_wakeups,
+                                ),
+                                invocation_accepted,
+                                rejection: Some(error),
+                            };
+                        }
+                        Err(_) => {
+                            return ActionObservationResult {
+                                report: TransitionObservation::report(
+                                    TransitionOutcome::Unverifiable,
+                                    authoritative_checks,
+                                    event_wakeups,
+                                    invocation_wakeups,
+                                ),
+                                invocation_accepted,
+                                rejection: None,
+                            };
+                        }
+                    }
+                    authoritative_checks = authoritative_checks.saturating_add(1);
+                    let evaluation = self.evaluate_transition_authoritatively(observation).await;
+                    if let Some(outcome) = terminal_transition_outcome(evaluation) {
+                        return ActionObservationResult {
+                            report: TransitionObservation::report(
+                                outcome,
+                                authoritative_checks,
+                                event_wakeups,
+                                invocation_wakeups,
+                            ),
+                            invocation_accepted,
+                            rejection: None,
+                        };
+                    }
+                }
+                delivery = self.event_subscription.recv() => {
+                    let Some(delivery) = delivery else {
+                        self.event_stream_available = false;
+                        self.handle_event_stream_closed().await;
+                        authoritative_checks = authoritative_checks.saturating_add(1);
+                        let final_state = observation.evaluate(
+                            &self.runtime,
+                            &self.cache,
+                            &self.scopes,
+                        );
+                        let outcome = terminal_transition_outcome(final_state)
+                            .unwrap_or(TransitionOutcome::ApplicationGone);
+                        return ActionObservationResult {
+                            report: TransitionObservation::report(
+                                outcome,
+                                authoritative_checks,
+                                event_wakeups,
+                                invocation_wakeups,
+                            ),
+                            invocation_accepted,
+                            rejection: None,
+                        };
+                    };
+                    match delivery {
+                        EventDelivery::Event(first) => {
+                            event_wakeups = event_wakeups.saturating_add(1);
+                            let batch_window = Duration::from_millis(40).min(observation.remaining());
+                            if !batch_window.is_zero() {
+                                tokio::time::sleep(batch_window).await;
+                            }
+                            let mut events = vec![first];
+                            while let Ok(event) = self.event_subscription.try_recv() {
+                                events.push(event);
+                            }
+                            if let Some(EventDelivery::ResyncRequired { dropped }) =
+                                self.event_subscription.take_resync()
+                            {
+                                self.resynchronize_after_overflow(dropped).await;
+                            } else {
+                                self.apply_event_batch(events, None).await;
+                            }
+                        }
+                        EventDelivery::ResyncRequired { dropped } => {
+                            event_wakeups = event_wakeups.saturating_add(1);
+                            self.resynchronize_after_overflow(dropped).await;
+                        }
+                    }
+                    authoritative_checks = authoritative_checks.saturating_add(1);
+                    let evaluation = self.evaluate_transition_authoritatively(observation).await;
+                    if let Some(outcome) = terminal_transition_outcome(evaluation) {
+                        return ActionObservationResult {
+                            report: TransitionObservation::report(
+                                outcome,
+                                authoritative_checks,
+                                event_wakeups,
+                                invocation_wakeups,
+                            ),
+                            invocation_accepted,
+                            rejection: None,
+                        };
+                    }
+                }
+                _ = tokio::time::sleep(remaining) => {
+                    authoritative_checks = authoritative_checks.saturating_add(1);
+                    let final_state = self.evaluate_transition_authoritatively(observation).await;
+                    let outcome = terminal_transition_outcome(final_state)
+                        .unwrap_or(TransitionOutcome::Timeout);
+                    return ActionObservationResult {
+                        report: TransitionObservation::report(
+                            outcome,
+                            authoritative_checks,
+                            event_wakeups,
+                            invocation_wakeups,
+                        ),
+                        invocation_accepted,
+                        rejection: None,
+                    };
+                }
+            }
+        }
+    }
+
+    async fn evaluate_transition_authoritatively(
+        &mut self,
+        observation: &TransitionObservation,
+    ) -> TransitionEvaluation {
+        if let Some(evaluation) = observation.authority_evaluation(&self.runtime) {
+            return evaluation;
+        }
+        // Event-applied cache state is never sufficient for confirmation.
+        // Every decision below follows a fresh backend read at the condition's
+        // narrowest safe refresh boundary.
+        match observation.condition().refresh_kind() {
+            ConditionRefresh::ExactNode => {
+                let locator = observation
+                    .condition()
+                    .exact_locator()
+                    .expect("exact-node transition condition has locator")
+                    .clone();
+                match self.backend.refresh_node(&locator, false).await {
+                    Ok(node) => {
+                        if self.cache.refresh_node(node).is_ok() {
+                            self.rebuild_view_preserving_focus().await;
+                        } else {
+                            self.full_reload(None).await;
+                        }
+                    }
+                    Err(_) => self.full_reload(None).await,
+                }
+            }
+            ConditionRefresh::FullApplication => self.full_reload(None).await,
+        }
+        observation.evaluate(&self.runtime, &self.cache, &self.scopes)
+    }
+
     async fn update_from_action_events(&mut self, success_status: String) {
         let first =
             match tokio::time::timeout(self.settle_delay, self.event_subscription.recv()).await {
@@ -3720,6 +4116,47 @@ fn operation_verb(intent: UiIntent) -> &'static str {
         UiIntent::IncreaseValue => "Increased",
         UiIntent::DecreaseValue => "Decreased",
         _ => "Activated",
+    }
+}
+
+fn terminal_transition_outcome(evaluation: TransitionEvaluation) -> Option<TransitionOutcome> {
+    match evaluation {
+        TransitionEvaluation::Confirmed => Some(TransitionOutcome::Confirmed),
+        TransitionEvaluation::Pending => None,
+        TransitionEvaluation::Stale => Some(TransitionOutcome::Stale),
+        TransitionEvaluation::ApplicationGone => Some(TransitionOutcome::ApplicationGone),
+        TransitionEvaluation::Cancelled => Some(TransitionOutcome::Cancelled),
+        TransitionEvaluation::Ambiguous => Some(TransitionOutcome::Ambiguous),
+    }
+}
+
+fn transition_status(
+    outcome: TransitionOutcome,
+    label: &str,
+    intent: UiIntent,
+    description: &str,
+) -> String {
+    match outcome {
+        TransitionOutcome::Confirmed => format!(
+            "{} \"{label}\" via {description}; authoritative transition confirmed",
+            operation_verb(intent)
+        ),
+        TransitionOutcome::Timeout => {
+            format!("Action not confirmed for \"{label}\" before observation deadline")
+        }
+        TransitionOutcome::Stale => {
+            format!("Target changed before \"{label}\" could be confirmed")
+        }
+        TransitionOutcome::ApplicationGone => {
+            "Application changed; action outcome not confirmed".to_owned()
+        }
+        TransitionOutcome::Cancelled => "Action observation cancelled".to_owned(),
+        TransitionOutcome::Ambiguous => {
+            format!("Action outcome for \"{label}\" is semantically ambiguous")
+        }
+        TransitionOutcome::Unverifiable => format!(
+            "Action invoked for \"{label}\"; no authoritative transition condition was available"
+        ),
     }
 }
 
