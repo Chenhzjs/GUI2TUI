@@ -26,7 +26,7 @@ generic semantic tasks.
 | v0.2 | Spatial Reconstruction | **COMPLETED / PUBLICLY RELEASED** |
 | v0.3 | Verified Capability Recovery | **COMPLETED / PUBLICLY RELEASED** |
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.5 | Task & Interaction Completeness | **PLANNED / NEXT DISCOVERY RECOMMENDED / NOT AUTHORIZED** |
+| v0.5 | Task & Interaction Completeness | **DISCOVERY COMPLETE / 0.5A RECOMMENDED / NOT AUTHORIZED** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **PLANNED / NOT AUTHORIZED** |
 | v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
@@ -283,20 +283,31 @@ by newly interactive control count.
 
 ### Recommended next task
 
-The next recommended technical task is **v0.5 Task & Interaction Completeness
-Discovery**. It is **not authorized**. v0.4 milestone qualification does not
-start v0.5 automatically.
+The authorized [v0.5 Task & Interaction Completeness Discovery](v0.5-task-interaction-completeness.md)
+is complete. Its conclusion is **A — TASK-COMPLETENESS MILESTONE JUSTIFIED**;
+the derived [v0.5 roadmap](v0.5-roadmap.md) recommends 0.5A Verified Current
+Collection Selection next. No implementation phase is automatically
+authorized.
 
 ## 5. v0.5 — Task & Interaction Completeness
 
 **Core question:** Can the common interaction families of ordinary desktop
 applications actually be used to complete tasks?
 
-v0.5 should build on semantic reconstruction, spatial composition, verified
-primitive capabilities, and transition evidence produced by v0.4. Its purpose
-is coverage at the task level. It should identify gaps that prevent ordinary
-work, qualify the relevant public contracts, and add only the bounded
-interaction needed to complete those generic tasks.
+Discovery confirmed that v0.5 should build on semantic reconstruction,
+spatial composition, verified primitive capabilities, and transition evidence
+produced by v0.4. Several high-value tasks are blocked by a bounded set of
+missing or incompletely qualified interactions: exact current selection,
+Table-row selection, hierarchy reveal, page switching, and their composition
+in Open-file and Choose-folder tasks. The current capability/operation pipeline
+and v0.4 continuation remain sufficient; no distinct architectural layer or
+task engine was found.
+
+The detailed task matrix, negative evidence, 1.0 baseline, and four bounded
+phases are recorded in the [v0.5 Discovery](v0.5-task-interaction-completeness.md)
+and [v0.5 roadmap](v0.5-roadmap.md). Discovery is complete; 0.5A and every
+later implementation phase remain **NOT AUTHORIZED** until explicit user
+approval.
 
 ### Candidate interaction families
 
@@ -332,10 +343,10 @@ become a production condition.
 ### File chooser decision
 
 Open, Save As, Choose File, and Choose Folder are common desktop workflows.
-Before 1.0, the project must make an explicit evidence-based decision about
-generic accessible file-chooser task support. Future discovery must determine
-how navigation, selection, location entry, scope changes, overwrite prompts,
-and confirmation can be represented through public semantics.
+Discovery selected a bounded baseline: Open and Choose Folder are required
+where current public semantics suffice; Save As requires further overwrite and
+destination evidence. Selection, location, traversal, and confirmation must
+remain exact and authoritative.
 
 Directly changing application backing state, mutating files to simulate a GUI
 choice, injecting input, or adding application-specific dialog adapters remain
@@ -733,11 +744,11 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 ## 15. Immediate next decision
 
-v0.4 is complete and milestone-qualified. After user review, the recommended
-next technical task is **v0.5 Task & Interaction Completeness Discovery**. It
-is not authorized by this roadmap update. v0.6, v0.7, 1.0 integration,
-v1.0.0 RC, and public release likewise remain direction only until separately
-authorized.
+v0.4 is complete and milestone-qualified. v0.5 Discovery is complete with
+conclusion A. After user review, the recommended next technical task is
+**0.5A — Verified Current Collection Selection**. It is not authorized by this
+roadmap update. v0.6, v0.7, 1.0 integration, v1.0.0 RC, and public release
+likewise remain direction only until separately authorized.
 
 ## 16. References
 
@@ -753,6 +764,10 @@ authorized.
   — final functional-phase evidence.
 - [v0.3 production release verification](../validation/v0.3/release/HANDOFF.md)
   — immutable public release identity and current post-release evidence.
+- [v0.5 task-completeness Discovery](v0.5-task-interaction-completeness.md) —
+  current task matrix, live evidence, and 1.0 baseline.
+- [v0.5 roadmap](v0.5-roadmap.md) — derived bounded phases; none are
+  automatically authorized.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

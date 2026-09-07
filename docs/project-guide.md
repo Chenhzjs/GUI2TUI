@@ -285,7 +285,8 @@ layout reconstruction.
 ## 19. Current Project State
 
 - Public release: **v0.3.0**
-- Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL**
+- Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
+  DISCOVERY COMPLETE**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -300,7 +301,9 @@ layout reconstruction.
 - v0.4 functional development: **COMPLETE**
 - v0.4 milestone qualification: **QUALIFIED**
 - v0.4.0 RC and public release: **NOT PLANNED under the current pre-1.0 policy**
-- Recommended next work: **v0.5 Task & Interaction Completeness Discovery**,
+- v0.5 Task & Interaction Completeness Discovery: **COMPLETE**; conclusion
+  **A — TASK-COMPLETENESS MILESTONE JUSTIFIED**
+- Recommended next work: **0.5A Verified Current Collection Selection**,
   **NOT YET AUTHORIZED**
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -318,8 +321,11 @@ The evidence and bounded phase plan for v0.4 are recorded in the
 [0.4C realization handoff](validation/v0.4/realization-continuation/HANDOFF.md),
 and [0.4D continuation UX handoff](validation/v0.4/continuation-ux/HANDOFF.md).
 The [v0.4 milestone handoff](validation/v0.4/milestone/HANDOFF.md) indexes the
-qualification basis and records the internal close. Milestone completion does
-not authorize RC, release, or v0.5 work.
+qualification basis and records the internal close. The current task matrix,
+1.0 baseline, and derived bounded phases are in the
+[v0.5 Discovery](planning/v0.5-task-interaction-completeness.md) and
+[v0.5 roadmap](planning/v0.5-roadmap.md). Discovery completion authorizes
+neither 0.5A nor release work.
 
 ## 20. v0.3 Capability Recovery
 
@@ -329,8 +335,9 @@ Accessibility mutation, stale/conflict checks, and authoritative read-back.
 Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
-source fixes require v0.3.1 or later. v0.4 is now an internal qualified
-milestone; do not begin v0.5 without explicit authorization.
+source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
+v0.5 Discovery is complete, but no implementation phase starts without
+explicit authorization.
 
 ## 21. Glossary
 
