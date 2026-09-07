@@ -1499,9 +1499,7 @@ impl TuiApplication {
                         intent,
                     ) || !self.scopes.allows_node(runtime_id)
                     {
-                        self.status =
-                            "Command is no longer available in the current semantic surface"
-                                .to_owned();
+                        self.status = current_command_unavailable_status().to_owned();
                     } else if let Some(scene_id) = self.scene.scene_id_for_runtime(runtime_id)
                         && self
                             .scene
@@ -2251,7 +2249,6 @@ impl TuiApplication {
                     locator.clone(),
                     action.clone(),
                     element_label(&element).to_owned(),
-                    operation_description,
                 )
                 .await
             {
@@ -2319,15 +2316,16 @@ impl TuiApplication {
             intent,
         ) || !self.scopes.allows_node(runtime_id)
         {
-            self.status = "Command is no longer available in the current semantic surface".into();
+            self.status = current_command_unavailable_status().to_owned();
             return;
         }
         let Some(node) = self.cache.node(runtime_id) else {
-            self.status = "Command is no longer present in the semantic runtime".to_owned();
+            self.status = current_command_unavailable_status().to_owned();
             return;
         };
         if node.backend_locator != *expected_locator {
-            self.status = "Command target changed; refresh and choose the current binding".into();
+            self.status =
+                "Command target changed; choose it again from the current interface".into();
             return;
         }
         let label = node.name.clone().unwrap_or_else(|| node.role.to_string());
@@ -2356,7 +2354,6 @@ impl TuiApplication {
                     locator.clone(),
                     action.clone(),
                     label.clone(),
-                    description,
                 )
                 .await
             {
@@ -3127,7 +3124,6 @@ impl TuiApplication {
         locator: BackendLocator,
         action: SemanticAction,
         label: String,
-        description: String,
     ) -> bool {
         let authority = match OperationAuthority::capture(
             &self.runtime,
@@ -3139,14 +3135,14 @@ impl TuiApplication {
         ) {
             Ok(authority) => authority,
             Err(outcome) => {
-                self.status = transition_status(outcome, &label, intent, &description);
+                self.status = transition_status(outcome, &label, intent);
                 return false;
             }
         };
         if let Err(outcome) =
             authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
         {
-            self.status = transition_status(outcome, &label, intent, &description);
+            self.status = transition_status(outcome, &label, intent);
             return false;
         }
 
@@ -3173,12 +3169,8 @@ impl TuiApplication {
             return match result {
                 Ok(_) if ticket_result.is_ok() => {
                     self.full_reload(None).await;
-                    self.status = transition_status(
-                        TransitionOutcome::Unverifiable,
-                        &label,
-                        intent,
-                        &description,
-                    );
+                    self.status =
+                        transition_status(TransitionOutcome::Unverifiable, &label, intent);
                     tracing::debug!(
                         target: "gui2tui::product",
                         outcome = ?TransitionOutcome::Unverifiable,
@@ -3253,7 +3245,7 @@ impl TuiApplication {
             return false;
         }
         if result.report.outcome != TransitionOutcome::ApplicationGone {
-            self.status = transition_status(result.report.outcome, &label, intent, &description);
+            self.status = transition_status(result.report.outcome, &label, intent);
         }
         result.invocation_accepted || result.report.outcome == TransitionOutcome::Confirmed
     }
@@ -4166,34 +4158,30 @@ fn terminal_transition_outcome(evaluation: TransitionEvaluation) -> Option<Trans
     }
 }
 
-fn transition_status(
-    outcome: TransitionOutcome,
-    label: &str,
-    intent: UiIntent,
-    description: &str,
-) -> String {
+fn transition_status(outcome: TransitionOutcome, label: &str, intent: UiIntent) -> String {
     match outcome {
-        TransitionOutcome::Confirmed => format!(
-            "{} \"{label}\" via {description}; authoritative transition confirmed",
-            operation_verb(intent)
-        ),
+        TransitionOutcome::Confirmed => format!("{} \"{label}\"", operation_verb(intent)),
         TransitionOutcome::Timeout => {
-            format!("Action not confirmed for \"{label}\" before observation deadline")
+            format!("Action for \"{label}\" was not confirmed; current interface is shown")
         }
         TransitionOutcome::Stale => {
-            format!("Target changed before \"{label}\" could be confirmed")
+            format!("Control changed; choose \"{label}\" again from the current interface")
         }
         TransitionOutcome::ApplicationGone => {
             "Application changed; action outcome not confirmed".to_owned()
         }
-        TransitionOutcome::Cancelled => "Action observation cancelled".to_owned(),
+        TransitionOutcome::Cancelled => "Action confirmation was cancelled".to_owned(),
         TransitionOutcome::Ambiguous => {
-            format!("Action outcome for \"{label}\" is semantically ambiguous")
+            format!("Action for \"{label}\" could not be confirmed from the current interface")
         }
-        TransitionOutcome::Unverifiable => format!(
-            "Action invoked for \"{label}\"; no authoritative transition condition was available"
-        ),
+        TransitionOutcome::Unverifiable => {
+            format!("Action sent for \"{label}\"; its result could not be confirmed")
+        }
     }
+}
+
+fn current_command_unavailable_status() -> &'static str {
+    "Command is no longer available; choose from the current interface"
 }
 
 fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String {
@@ -4781,6 +4769,43 @@ mod tests {
             operation_error_status(&error),
             ("Selection was rejected by application".to_owned(), false)
         );
+    }
+
+    #[test]
+    fn continuation_status_uses_task_language_without_internal_taxonomy() {
+        let confirmed =
+            transition_status(TransitionOutcome::Confirmed, "Tools", UiIntent::OpenMenu);
+        let timeout = transition_status(
+            TransitionOutcome::Timeout,
+            "Open modal dialog",
+            UiIntent::Activate,
+        );
+        let stale = transition_status(
+            TransitionOutcome::Stale,
+            "Realized descendant toggle",
+            UiIntent::Toggle,
+        );
+
+        assert_eq!(confirmed, "Opened menu \"Tools\"");
+        assert_eq!(
+            timeout,
+            "Action for \"Open modal dialog\" was not confirmed; current interface is shown"
+        );
+        assert_eq!(
+            stale,
+            "Control changed; choose \"Realized descendant toggle\" again from the current interface"
+        );
+        assert_eq!(
+            current_command_unavailable_status(),
+            "Command is no longer available; choose from the current interface"
+        );
+        for status in [confirmed, timeout, stale] {
+            assert!(!status.contains("BackendLocator"));
+            assert!(!status.contains("RuntimeNodeId"));
+            assert!(!status.contains("InteractionScope"));
+            assert!(!status.contains("observation deadline"));
+            assert!(!status.contains("authoritative transition"));
+        }
     }
 
     #[test]
