@@ -264,6 +264,15 @@ release source commit is distinct from later evidence/documentation commits;
 never assume newest HEAD is the binary source. `v0.1.0`, `v0.2.0`, and
 `v0.3.0` must not be moved.
 
+Under the current [roadmap to 1.0](planning/roadmap-to-1.0.md), `v0.3.0` is the
+last planned public pre-1.0 release. v0.4–v0.7 are internal architectural and
+product milestone names, not implied public package versions. Each still
+requires evidence-backed milestone qualification and user review, but does not
+automatically trigger a version bump, RC, tag, package, publication, or the
+next milestone. Public release engineering resumes during the planned 1.0
+integration and stabilization effort; v1.0.0 is the next planned public
+release and remains separately authorized.
+
 ## 18. Known Boundaries / Non-goals
 
 Accessibility quality varies by application. Long documents may remain partial;
@@ -276,7 +285,7 @@ layout reconstruction.
 ## 19. Current Project State
 
 - Public release: **v0.3.0**
-- Project state: **v0.4 DEVELOPMENT**
+- Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -289,8 +298,10 @@ layout reconstruction.
 - v0.4C Realization and Hierarchical Continuation: **VALIDATED**
 - v0.4D Continuation UX and Theme Qualification: **VALIDATED**
 - v0.4 functional development: **COMPLETE**
-- Recommended next work: **v0.4.0 RC qualification**, awaiting explicit user
-  authorization
+- v0.4 milestone qualification: **QUALIFIED**
+- v0.4.0 RC and public release: **NOT PLANNED under the current pre-1.0 policy**
+- Recommended next work: **v0.5 Task & Interaction Completeness Discovery**,
+  **NOT YET AUTHORIZED**
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -306,7 +317,9 @@ The evidence and bounded phase plan for v0.4 are recorded in the
 [0.4B surface/scope handoff](validation/v0.4/surface-scope-continuation/HANDOFF.md),
 [0.4C realization handoff](validation/v0.4/realization-continuation/HANDOFF.md),
 and [0.4D continuation UX handoff](validation/v0.4/continuation-ux/HANDOFF.md).
-Functional completion does not authorize RC, release, or v0.5 work.
+The [v0.4 milestone handoff](validation/v0.4/milestone/HANDOFF.md) indexes the
+qualification basis and records the internal close. Milestone completion does
+not authorize RC, release, or v0.5 work.
 
 ## 20. v0.3 Capability Recovery
 
@@ -316,8 +329,8 @@ Accessibility mutation, stale/conflict checks, and authoritative read-back.
 Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
-source fixes require v0.3.1 or later; do not begin v0.4 without explicit
-authorization.
+source fixes require v0.3.1 or later. v0.4 is now an internal qualified
+milestone; do not begin v0.5 without explicit authorization.
 
 ## 21. Glossary
 

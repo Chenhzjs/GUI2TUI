@@ -9,8 +9,8 @@ must be qualified through evidence before implementation.
 [engineering guide](../project-guide.md) describes the current architecture;
 version-specific planning and validation records preserve the detailed
 evidence behind completed milestones. This roadmap identifies the product
-layers that still need to close. It does not replace those documents or begin
-v0.4 work.
+layers that still need to close. It does not replace those documents or
+authorize the next milestone.
 
 ## 1. Purpose and status
 
@@ -22,19 +22,66 @@ generic semantic tasks.
 
 | Version | Architectural layer | Status |
 | --- | --- | --- |
-| v0.1 | Semantic Reconstruction | **COMPLETED** |
-| v0.2 | Spatial Reconstruction | **COMPLETED** |
+| v0.1 | Semantic Reconstruction | **COMPLETED / PUBLICLY RELEASED** |
+| v0.2 | Spatial Reconstruction | **COMPLETED / PUBLICLY RELEASED** |
 | v0.3 | Verified Capability Recovery | **COMPLETED / PUBLICLY RELEASED** |
-| v0.4 | Semantic Workflow Reconstruction | **DISCOVERY COMPLETED / 0.4A RECOMMENDED / AWAITING USER AUTHORIZATION** |
-| v0.5 | Task & Interaction Completeness | **PLANNED / NOT AUTHORIZED** |
+| v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
+| v0.5 | Task & Interaction Completeness | **PLANNED / NEXT DISCOVERY RECOMMENDED / NOT AUTHORIZED** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **PLANNED / NOT AUTHORIZED** |
 | v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
-| 1.0 | Stabilization, Product Contract & Release Qualification | **PLANNED / NOT AUTHORIZED** |
+| 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
 evidence reveals another missing architectural layer, adding a pre-1.0
 milestone requires documented justification and explicit user review.
+
+### Pre-1.0 delivery policy
+
+`v0.3.0` is the last currently planned public pre-1.0 release. Under the
+current policy, v0.4, v0.5, v0.6, and v0.7 are internal architectural/product
+milestone names, not promises of public `0.4.0`, `0.5.0`, `0.6.0`, or `0.7.0`
+package versions. Their identity is preserved by planning documents,
+validation evidence, branches, and commits. Completing one does not trigger a
+version bump, RC, tag, package publication, GitHub Release, public-download
+smoke, checksums, release manifest, or attestation campaign.
+
+Internal does not mean unqualified. Every milestone still follows Discovery,
+bounded implementation, relevant Linux live evidence, representative
+prior-layer regression, appropriate full source quality, documentation, and a
+formal milestone qualification with P0 = 0 and P1 = 0. It then stops for user
+review; it neither starts the next milestone nor defers its own validation to
+1.0.
+
+The planned delivery path is:
+
+```text
+public releases: v0.1.0 -> v0.2.0 -> v0.3.0
+
+internal milestones:
+  v0.4 Semantic Workflow Reconstruction -> Milestone Qualification -> STOP
+  v0.5 Task & Interaction Completeness -> Milestone Qualification -> STOP
+  v0.6 Runtime Continuity & Multi-Surface Robustness -> Qualification -> STOP
+  v0.7 Deployment & Environment Completeness -> Qualification -> STOP
+
+functional / architectural feature freeze
+  -> 1.0 Integration & Stabilization
+  -> separately authorized v1.0.0 RC
+  -> separately authorized public v1.0.0 release
+```
+
+This cadence avoids repeating public release engineering while the remaining
+product layers are still tightly coupled. Release engineering remains
+essential; it is deliberately concentrated in the integrated 1.0
+stabilization/release effort. The next currently planned public GUI2TUI
+release after v0.3.0 is v1.0.0, but neither its RC nor production release is
+automatically authorized.
+
+The user may explicitly approve an exceptional pre-1.0 public release for a
+genuine collaboration, distribution-testing, major-public-milestone, or
+critical-maintenance need. Agents must never infer that exception from an
+internal milestone completing. Existing `v0.3.0` remains immutable; any v0.3
+maintenance would require a separately authorized new version such as v0.3.1.
 
 ## 2. Completed architectural arc
 
@@ -139,10 +186,11 @@ The completed [v0.4 Discovery](v0.4-workflow-reconstruction.md) selected
 modal scope, focus history, and user navigation already solve much of dynamic
 continuation. The evidence supports a bounded operation-adjacent semantic
 observation contract, not a workflow engine or automatic task runner. The
-derived [v0.4 roadmap](v0.4-roadmap.md) recommends 0.4A Exact Authority and
-Bounded Transition Observation; implementation remains unauthorized.
+derived [v0.4 roadmap](v0.4-roadmap.md) records completed and validated phases
+0.4A–0.4D. v0.4 is **COMPLETE / MILESTONE QUALIFIED / INTERNAL**; no v0.4.0 RC,
+tag, package, or public release is planned under the current pre-1.0 policy.
 
-### The missing layer
+### Qualified layer
 
 v0.3 primarily qualified bounded or atomic interactions. Many real GUI tasks
 continue after an operation changes the accessibility surface:
@@ -156,18 +204,16 @@ operation
   → task completion
 ```
 
-GUI2TUI already has event processing, cache refresh, runtime generations,
-operation tickets, scene rebuilding, and `InteractionScope`. The open question
-is whether these pieces support a generic transition-aware task model, or
-whether recurring evidence justifies a small additional abstraction. v0.4
-should make task progression state-aware rather than treating every step as an
-unrelated snapshot operation.
+GUI2TUI already had event processing, cache refresh, runtime generations,
+operation tickets, scene rebuilding, and `InteractionScope`. Discovery and the
+four bounded phases established the missing addition as operation-adjacent
+transition observation plus exact authority hardening. The existing scene,
+scope, focus, and navigation mechanisms remain the continuation model.
 
-### Discovery candidates
+### Discovery evidence families
 
-The first v0.4 work must be Discovery, not implementation. It should survey a
-small corpus of real generic transitions and determine which contracts recur.
-Candidate problem families include:
+Discovery surveyed a small corpus of generic transitions and determined which
+contracts recur. Evidence families included:
 
 - Expand or Collapse followed by descendant realization;
 - menus, popovers, and context-menu lifecycle;
@@ -179,8 +225,8 @@ Candidate problem families include:
 - accessible file-chooser lifecycle;
 - operations followed by semantic subtree replacement.
 
-These are evidence candidates, not promised v0.4 features. The common
-hypothesis to test is:
+These were evidence carriers, not promises of interaction breadth. The
+qualified common pattern is:
 
 ```text
 explicit semantic invocation
@@ -190,11 +236,8 @@ explicit semantic invocation
   → continue toward an explicit completion condition
 ```
 
-Discovery must inspect current transition/runtime architecture, real dynamic
-task failures, event-driven observation, target rebinding, scope ownership,
-timeouts and cancellation, realization evidence, and completion conditions.
-It must distinguish a state change such as `Expanded=true` from a stronger
-claim such as complete descendant realization.
+The evidence distinguished observable state such as `Expanded=true` from the
+stronger and often unsupported claim of complete descendant ownership.
 
 ### No script engine
 
@@ -223,10 +266,9 @@ refresh, implement no compound framework. The v0.3 Expand/Collapse evidence is
 an important warning: explicit state mutation alone did not establish generic
 ownership between the action target and realized descendants.
 
-### Success direction
+### Qualified result
 
-A successful v0.4 should demonstrate multiple generic dynamic tasks chosen by
-future evidence. Illustrative shapes include:
+Completed v0.4 evidence demonstrates multiple generic dynamic task shapes:
 
 - expand a semantic item, observe qualified realization, then interact with a
   newly available descendant;
@@ -235,15 +277,15 @@ future evidence. Illustrative shapes include:
 - open a dialog, enter its active scope, perform verified interaction, confirm
   it, and observe task completion or return to the prior scope.
 
-Success means stateful semantic task progression with deterministic refusal on
-stale, ambiguous, timed-out, or unverifiable transitions. It is not the number
-of newly interactive controls.
+The result is stateful semantic continuation with deterministic refusal on
+stale, ambiguous, timed-out, or unverifiable transitions. It is not measured
+by newly interactive control count.
 
 ### Recommended next task
 
-The immediate recommended technical task is **0.4A Exact Authority and Bounded
-Transition Observation**. It is **awaiting explicit user authorization**.
-Discovery completion does not authorize implementation.
+The next recommended technical task is **v0.5 Task & Interaction Completeness
+Discovery**. It is **not authorized**. v0.4 milestone qualification does not
+start v0.5 automatically.
 
 ## 5. v0.5 — Task & Interaction Completeness
 
@@ -432,10 +474,28 @@ changes project scope.
 
 ## 8. From v0.7 to 1.0
 
-After v0.7, the default action is a functional feature freeze and a formal 1.0
-readiness review. That review should compare accumulated evidence against the
-product contract and qualification dimensions below. It should not create
-v0.8 or v0.9 merely to continue development.
+After v0.7 milestone qualification, the default action is a functional and
+architectural feature freeze followed by **1.0 Integration & Stabilization**.
+This is an explicit cross-layer phase, not merely a final packaging pass. It
+integrates and qualifies:
+
+- v0.1 semantic reconstruction;
+- v0.2 spatial reconstruction;
+- v0.3 verified primitive capabilities;
+- v0.4 bounded semantic continuation;
+- v0.5 common task completeness;
+- v0.6 long-running runtime continuity;
+- v0.7 supported deployment environments;
+- a representative end-to-end task corpus;
+- security/privacy and performance/resource bounds;
+- install, `doctor`, configuration, documentation, and product UX;
+- packaging, ABI, reproducibility, and release engineering.
+
+Only after that integrated evidence may a separately authorized v1.0.0 RC be
+qualified, followed by a separately authorized public v1.0.0 release. The
+review must compare accumulated evidence against the product contract and
+qualification dimensions below. It must not create v0.8 or v0.9 merely to
+continue development.
 
 If a fundamental layer remains missing, the HANDOFF must name the gap, show
 evidence that it blocks the 1.0 contract, propose one bounded milestone, and
@@ -621,20 +681,42 @@ Every future milestone follows the same discipline:
 1. perform Discovery and collect evidence where the architecture is uncertain;
 2. define bounded implementation phases from that evidence;
 3. validate generic tasks in controlled fixtures and a small real-app corpus;
-4. close the milestone with explicit P0/P1/open questions and a HANDOFF;
-5. recommend one next step and wait for user review.
+4. run the relevant live evidence and representative prior-layer regression;
+5. run the normal full source-quality pass once at milestone close when source
+   changed;
+6. close with P0 = 0, P1 = 0, documented open questions, and a milestone
+   qualification HANDOFF;
+7. recommend one next step and wait for user review.
 
 Do not self-expand, begin the next milestone automatically, introduce a
-speculative generic framework, optimize for test or application count, or
-solve P2 compatibility limitations with application-specific hacks.
+speculative generic framework, optimize for test or application count, defer
+milestone validation until 1.0, or solve P2 compatibility limitations with
+application-specific hacks.
+
+Milestone qualification replaces automatic pre-1.0 RC/release work. It does
+not require release artifacts, public packaging, tagging, GitHub Release,
+public-download validation, or provenance/attestation campaigns. Those steps
+resume for v1.0.0 unless separately justified and explicitly authorized.
 
 ### Version scope discipline
 
-Each version should solve one architectural or product-layer question. “Add
+Each roadmap milestone should solve one architectural or product-layer question. “Add
 trees, menus, and fifteen controls” is a poor milestone definition. “Enable
 verified semantic state transitions so dynamic tasks can continue after GUI
 structure changes” identifies an architectural gap and a meaningful exit
 direction. Individual features are subordinate evidence for the question.
+Milestone names v0.4–v0.7 do not imply matching public package versions or
+tags. Do not bump package metadata merely because a milestone completes.
+
+### Delivery anti-drift rules
+
+- Internal milestone completion triggers neither RC nor public release.
+- Internal milestone completion never starts the next milestone automatically.
+- Every internal milestone still requires its own evidence and qualification.
+- Unqualified changes must not accumulate for a single deferred 1.0 test pass.
+- v1.0.0 is the next planned public release after v0.3.0.
+- v0.8/v0.9 require evidence of a distinct missing layer and user approval.
+- Any exception to this release cadence requires explicit user approval.
 
 ### Roadmap change process
 
@@ -651,11 +733,11 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 ## 15. Immediate next decision
 
-The v0.4 Discovery is complete. After user architectural review, the
-recommended next technical task is **0.4A Exact Authority and Bounded
-Transition Observation**, as bounded in the [v0.4 roadmap](v0.4-roadmap.md).
-It is not authorized by this roadmap update. v0.5, v0.6, v0.7, and 1.0 likewise
-remain direction only until separately authorized.
+v0.4 is complete and milestone-qualified. After user review, the recommended
+next technical task is **v0.5 Task & Interaction Completeness Discovery**. It
+is not authorized by this roadmap update. v0.6, v0.7, 1.0 integration,
+v1.0.0 RC, and public release likewise remain direction only until separately
+authorized.
 
 ## 16. References
 
@@ -674,4 +756,6 @@ remain direction only until separately authorized.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no
-  implementation authorization.
+  further v0.4 phase or release authorization.
+- [v0.4 milestone qualification](../validation/v0.4/milestone/HANDOFF.md) —
+  internal milestone close and evidence index.
