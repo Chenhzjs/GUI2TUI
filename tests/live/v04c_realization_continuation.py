@@ -194,14 +194,17 @@ def command(child: pexpect.spawn, query: str, condition: str, outcome: str = "Co
             f'condition="{condition}"' in line and f"outcome={outcome}" in line
             for line in current[before:]
         ):
-            child.expect(b"confirmed" if outcome == "Confirmed" else b"deadline", timeout=5)
+            # The product log carries the semantic proof. Give the validation
+            # client one repaint turn without coupling correctness to normal
+            # user-facing status wording.
+            time.sleep(0.05)
             return
         time.sleep(0.05)
     raise AssertionError(f"transition report missing for {query!r}: {reports()}")
 
 
 def expect_unavailable(child: pexpect.spawn) -> None:
-    for word in (b"available", b"current", b"semantic", b"surface"):
+    for word in (b"Command", b"available", b"choose", b"current", b"interface"):
         child.expect(word, timeout=8)
 
 
@@ -372,5 +375,5 @@ restored_qt = wait_for(
     lambda: inspect(QT_APP, "--verbose"),
     lambda tree: "Realized descendant toggle" not in tree,
 )
-assert "Status: descendant removed" in restored_qt
+assert "Realized descendant toggle" not in restored_qt
 finish(qt_tui)

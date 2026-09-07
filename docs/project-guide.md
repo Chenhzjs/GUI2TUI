@@ -94,6 +94,13 @@ be used inside its current Window scope when fresh Showing state makes its
 exact commands available; an active modal establishes its existing confined
 scope. Missing ownership never creates an owner or a new scope.
 
+After a dynamic transition, the ordinary current `TuiScene` and command
+palette remain the user interface: fresh scope and public structure determine
+what is present, and a fresh current binding determines the next operation.
+The user continues manually. Fast success normally needs no lifecycle message;
+stale, ambiguous, or unconfirmed outcomes use concise task language while
+detailed identities, conditions, and event evidence remain diagnostic-only.
+
 ## 7. Repository / Module Map
 
 - `src/backend/`: public AT-SPI transport, bootstrap/cache acquisition,
@@ -280,8 +287,10 @@ layout reconstruction.
 - v0.4A Exact Authority and Bounded Transition Observation: **VALIDATED**
 - v0.4B Dynamic Surface and Scope Continuation: **VALIDATED**
 - v0.4C Realization and Hierarchical Continuation: **VALIDATED**
-- Recommended next work: **0.4D Continuation UX and Theme Qualification**,
-  awaiting explicit user authorization
+- v0.4D Continuation UX and Theme Qualification: **VALIDATED**
+- v0.4 functional development: **COMPLETE**
+- Recommended next work: **v0.4.0 RC qualification**, awaiting explicit user
+  authorization
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -295,8 +304,9 @@ The evidence and bounded phase plan for v0.4 are recorded in the
 [v0.4 roadmap](planning/v0.4-roadmap.md). Completed evidence is in the
 [0.4A transition-observation handoff](validation/v0.4/transition-observation/HANDOFF.md),
 [0.4B surface/scope handoff](validation/v0.4/surface-scope-continuation/HANDOFF.md),
-and [0.4C realization handoff](validation/v0.4/realization-continuation/HANDOFF.md).
-Completion of 0.4C does not authorize 0.4D or later implementation.
+[0.4C realization handoff](validation/v0.4/realization-continuation/HANDOFF.md),
+and [0.4D continuation UX handoff](validation/v0.4/continuation-ux/HANDOFF.md).
+Functional completion does not authorize RC, release, or v0.5 work.
 
 ## 20. v0.3 Capability Recovery
 

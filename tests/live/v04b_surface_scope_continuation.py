@@ -135,7 +135,10 @@ def command(
             f'condition="{condition}"' in line and f"outcome={outcome}" in line
             for line in current[before:]
         ):
-            child.expect(b"confirmed" if outcome == "Confirmed" else b"deadline", timeout=5)
+            # The product log carries the semantic proof. Give the validation
+            # client one repaint turn without coupling correctness to normal
+            # user-facing status wording.
+            time.sleep(0.05)
             return
         time.sleep(0.05)
     raise AssertionError(
@@ -159,7 +162,7 @@ def open_palette(child: pexpect.spawn, query: str) -> None:
 
 
 def expect_unavailable_status(child: pexpect.spawn) -> None:
-    for word in (b"available", b"current", b"semantic", b"surface"):
+    for word in (b"Command", b"available", b"choose", b"current", b"interface"):
         child.expect(word, timeout=8)
 
 
