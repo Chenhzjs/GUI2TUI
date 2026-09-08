@@ -123,7 +123,7 @@ impl TuiViewModel {
         let mut node_contexts = HashMap::new();
         let mut node_metadata = HashMap::new();
         index_nodes(root, None, &mut node_contexts, &mut node_metadata);
-        map_node(root, &[], &mut title, &mut elements);
+        map_node(root, &[], &[], &mut title, &mut elements);
         remove_redundant_input_labels(&mut elements);
         Self {
             title,
@@ -209,6 +209,7 @@ fn index_nodes(
 fn map_node(
     node: &SemanticNode,
     parent_capabilities: &[SemanticCapability],
+    parent_states: &[SemanticState],
     title: &mut String,
     output: &mut Vec<TuiElement>,
 ) {
@@ -220,6 +221,7 @@ fn map_node(
             | SemanticRole::RadioButton
             | SemanticRole::TextInput
             | SemanticRole::ListItem
+            | SemanticRole::Table
     ) || (node.role == SemanticRole::Slider
         && node.capabilities.contains(&SemanticCapability::Value));
     let kind = match &node.role {
@@ -290,9 +292,11 @@ fn map_node(
         SemanticRole::MenuItem => {
             let capability = interaction_capability(
                 &node.role,
+                &node.states,
                 &node.actions,
                 &node.capabilities,
                 parent_capabilities,
+                parent_states,
             );
             Some(TuiElementKind::MenuItem {
                 label: node.name.clone().unwrap_or_else(|| "Menu item".to_owned()),
@@ -308,9 +312,11 @@ fn map_node(
     if let Some(kind) = kind {
         let capability = interaction_capability(
             &node.role,
+            &node.states,
             &node.actions,
             &node.capabilities,
             parent_capabilities,
+            parent_states,
         );
         output.push(TuiElement {
             runtime_id: node.runtime_id,
@@ -324,7 +330,7 @@ fn map_node(
 
     if !terminal_leaf {
         for child in &node.children {
-            map_node(child, &node.capabilities, title, output);
+            map_node(child, &node.capabilities, &node.states, title, output);
         }
     }
 }

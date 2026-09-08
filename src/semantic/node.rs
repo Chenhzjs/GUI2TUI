@@ -335,6 +335,14 @@ pub struct SemanticAction {
 pub enum SemanticCapability {
     /// The container can select one of its direct children.
     SelectChildren,
+    /// A single-selection collection can select one exact current direct child.
+    ///
+    /// The child index is deliberately not part of this capability: it is
+    /// resolved from fresh structure immediately before the backend call.
+    SelectCurrentChild,
+    /// A single-selection Table can select the row containing one exact
+    /// current realized cell through the public Table interface.
+    SelectCurrentTableRow,
     /// A plain text input supports atomic replacement through AT-SPI.
     EditText,
     /// A finite bounded AT-SPI Value with a positive advertised increment.

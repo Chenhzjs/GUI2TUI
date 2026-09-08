@@ -1140,12 +1140,19 @@ impl TuiApplication {
             partial: matches!(overlay.choice().options, ChoiceOptions::Partial(_)),
         });
         let content = self.content_view.as_ref().and_then(|view| {
-            let model = self.content.model(view.root)?;
+            let model = self.content.model(view.root);
+            if model.is_none() && view.mode != ContentViewMode::Table {
+                return None;
+            }
             let outline = model
-                .navigation
-                .headings
-                .iter()
-                .filter_map(|id| model.block(*id))
+                .into_iter()
+                .flat_map(|model| {
+                    model
+                        .navigation
+                        .headings
+                        .iter()
+                        .filter_map(|id| model.block(*id))
+                })
                 .map(|block| {
                     let level = match block.kind {
                         crate::content::ContentBlockKind::Heading { level } => level,
@@ -1170,12 +1177,20 @@ impl TuiApplication {
                     } else {
                         " "
                     };
-                    lines.push(format!(
-                        "{marker} r{} c{}  {}",
-                        cell.row + 1,
-                        cell.column + 1,
-                        cell.label
-                    ));
+                    let selected = if cell.selected { "*" } else { " " };
+                    if table.completeness == crate::semantic::CollectionCompleteness::Complete {
+                        lines.push(format!(
+                            "{marker} {selected} r{} c{}  {}",
+                            cell.row + 1,
+                            cell.column + 1,
+                            cell.label
+                        ));
+                    } else {
+                        // Partial realized children do not establish complete
+                        // row/column presentation. Backend TableCell positions
+                        // remain the operation authority below the TUI layer.
+                        lines.push(format!("{marker} {selected} {}", cell.label));
+                    }
                 }
                 lines
             } else if let Some(collection) = &view.virtual_collection {
@@ -1210,9 +1225,7 @@ impl TuiApplication {
             };
             Some(ContentRender {
                 title: model
-                    .metadata
-                    .title
-                    .clone()
+                    .and_then(|model| model.metadata.title.clone())
                     .or_else(|| {
                         self.cache
                             .node(view.root)
@@ -1226,12 +1239,20 @@ impl TuiApplication {
                 query: view.query.clone(),
                 results: view.results.clone(),
                 result_selected: view.result_selected,
-                partial: model.completeness != ContentCompleteness::Complete,
+                partial: model.map_or_else(
+                    || {
+                        view.table.as_ref().is_some_and(|table| {
+                            table.completeness != crate::semantic::CollectionCompleteness::Complete
+                        })
+                    },
+                    |model| model.completeness != ContentCompleteness::Complete,
+                ),
                 full_search: view
                     .full_search
                     .as_ref()
                     .map(|search| (search.state.clone(), search.progress)),
                 structure_lines,
+                table_row_selection: view.table.as_ref().is_some_and(|table| table.row_selection),
             })
         });
         let inline_content = self
@@ -1399,6 +1420,11 @@ impl TuiApplication {
                     ContentViewMode::Reader => H::Reader,
                     ContentViewMode::Outline => H::Outline,
                     ContentViewMode::Search => H::Search,
+                    ContentViewMode::Table
+                        if view.table.as_ref().is_some_and(|table| table.row_selection) =>
+                    {
+                        H::SelectableTable
+                    }
                     ContentViewMode::Table => H::Table,
                     ContentViewMode::VirtualCollection => H::Collection,
                 }
@@ -1707,10 +1733,16 @@ impl TuiApplication {
         let Some(element) = self.scene.element(scene_id) else {
             return;
         };
-        let Some(binding) = element.binding.as_ref() else {
+        let Some(binding) = element.binding.clone() else {
             return;
         };
         let root = binding.runtime_id;
+        if binding.semantic_role == SemanticRole::Table
+            && binding.capability == InteractionCapability::BrowseContent
+        {
+            self.begin_current_table(scene_id, binding).await;
+            return;
+        }
         let Some(model) = self.content.model(root) else {
             self.status = "Document content is no longer available".to_owned();
             return;
@@ -1726,6 +1758,76 @@ impl TuiApplication {
             Some(root),
         ));
         self.refresh_content_view().await;
+    }
+
+    async fn begin_current_table(&mut self, restore_scene: SceneElementId, binding: SceneBinding) {
+        let locator = binding.backend_locator.clone();
+        let Some(current) = self.cache.node(binding.runtime_id) else {
+            self.status = current_selection_unavailable_status().to_owned();
+            return;
+        };
+        if current.backend_locator != locator
+            || current.role != SemanticRole::Table
+            || !self.scopes.allows_node(binding.runtime_id)
+        {
+            self.status = current_selection_unavailable_status().to_owned();
+            return;
+        }
+
+        let fresh = match self
+            .backend
+            .refresh_subtree(&locator, self.inspect_options)
+            .await
+        {
+            Ok(fresh) => fresh,
+            Err(_) => {
+                self.status = "Current Table content is no longer available".to_owned();
+                return;
+            }
+        };
+        if self.cache.replace_subtree(&locator, fresh).is_err() {
+            self.status = "Current Table changed; choose it again".to_owned();
+            return;
+        }
+        self.rebuild_view_preserving_focus().await;
+
+        let Some(current_root) = self.cache.runtime_id(&locator) else {
+            self.status = current_selection_unavailable_status().to_owned();
+            return;
+        };
+        let Some(current) = self.cache.node(current_root) else {
+            self.status = current_selection_unavailable_status().to_owned();
+            return;
+        };
+        if current.role != SemanticRole::Table || !self.scopes.allows_node(current_root) {
+            self.status = current_selection_unavailable_status().to_owned();
+            return;
+        }
+        let Some(table) = self.content.table(current_root).cloned() else {
+            self.status = "Current Table exposes no accessible rows".to_owned();
+            return;
+        };
+        if table.cells.is_empty() {
+            self.status = "Current Table exposes no accessible rows".to_owned();
+            return;
+        }
+        self.content_view = Some(ContentViewState::for_table(
+            table,
+            self.scene
+                .scene_id_for_runtime(current_root)
+                .or(Some(restore_scene)),
+            Some(current_root),
+        ));
+        self.status = if self
+            .content_view
+            .as_ref()
+            .and_then(|view| view.table.as_ref())
+            .is_some_and(|table| table.row_selection)
+        {
+            "Table view uses current accessible cells; Enter selects the current row".to_owned()
+        } else {
+            "Table view is read-only for the current accessible cells".to_owned()
+        };
     }
 
     fn open_outline(&mut self) {
@@ -1955,6 +2057,55 @@ impl TuiApplication {
                     }
                 }
             }
+            ContentViewCommand::SelectCurrentTableRow => {
+                let Some((table_owner, target_cell)) = self
+                    .content_view
+                    .as_ref()
+                    .and_then(|view| view.table.as_ref())
+                    .filter(|table| table.row_selection)
+                    .and_then(|table| table.position.cell.map(|cell| (table.owner, cell)))
+                else {
+                    self.status =
+                        "Current Table row is not safely selectable; continue reading".to_owned();
+                    return;
+                };
+                let Some(table) = self.cache.node(table_owner) else {
+                    self.status = current_selection_unavailable_status().to_owned();
+                    return;
+                };
+                let Some(cell) = self.cache.node(target_cell) else {
+                    self.status = current_selection_unavailable_status().to_owned();
+                    return;
+                };
+                if table.role != SemanticRole::Table
+                    || cell.role != SemanticRole::Cell
+                    || !table
+                        .capabilities
+                        .contains(&SemanticCapability::SelectCurrentTableRow)
+                    || !self.scopes.allows_node(table_owner)
+                    || !self.scopes.allows_node(target_cell)
+                {
+                    self.status = current_selection_unavailable_status().to_owned();
+                    return;
+                }
+                let table_locator = table.backend_locator.clone();
+                let target_locator = cell.backend_locator.clone();
+                let label = cell
+                    .name
+                    .clone()
+                    .or_else(|| cell.value.clone())
+                    .unwrap_or_else(|| "current row".to_owned());
+                let operation = BackendOperation::SelectCurrentTableRow {
+                    table_locator: table_locator.clone(),
+                    target_cell_locator: target_locator.clone(),
+                };
+                if self
+                    .execute_verified_selection(target_cell, label, operation)
+                    .await
+                {
+                    self.restore_current_table_position(&table_locator, &target_locator);
+                }
+            }
         }
     }
 
@@ -2163,6 +2314,25 @@ impl TuiApplication {
         let popup_owner = (intent == UiIntent::Select)
             .then(|| self.active_popup_owner())
             .flatten();
+        if matches!(
+            backend_operation,
+            BackendOperation::SelectCurrentItem { .. }
+        ) {
+            if self
+                .execute_verified_selection(
+                    runtime_id,
+                    element_label(&element).to_owned(),
+                    backend_operation,
+                )
+                .await
+            {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                if let Some(owner) = popup_owner {
+                    self.close_popup_after_selection(owner).await;
+                }
+            }
+            return;
+        }
         if let BackendOperation::AdjustValue { locator, increase } = &backend_operation {
             let Some(node) = self.cache.node(runtime_id) else {
                 self.status = "Value control became stale; refresh and retry".to_owned();
@@ -2262,13 +2432,9 @@ impl TuiApplication {
                 .do_action(&locator.encode(), action.index)
                 .await
                 .map(|_| ()),
-            BackendOperation::SelectChild {
-                container_locator,
-                child_index,
-            } => {
-                self.backend
-                    .select_child(container_locator, *child_index)
-                    .await
+            BackendOperation::SelectCurrentItem { .. }
+            | BackendOperation::SelectCurrentTableRow { .. } => {
+                unreachable!("verified selection operations are handled above")
             }
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("text commits use commit_edit")
@@ -2367,13 +2533,9 @@ impl TuiApplication {
                 .do_action(&locator.encode(), action.index)
                 .await
                 .map(|_| ()),
-            BackendOperation::SelectChild {
-                container_locator,
-                child_index,
-            } => {
-                self.backend
-                    .select_child(container_locator, *child_index)
-                    .await
+            BackendOperation::SelectCurrentItem { .. }
+            | BackendOperation::SelectCurrentTableRow { .. } => {
+                unreachable!("command palette does not execute collection selection")
             }
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("command palette never edits text")
@@ -2459,19 +2621,29 @@ impl TuiApplication {
             }
         };
         let operation_name = describe_operation(UiIntent::Select, &operation);
+        if matches!(operation, BackendOperation::SelectCurrentItem { .. }) {
+            if self
+                .execute_verified_selection(option.runtime_id, option.label.clone(), operation)
+                .await
+            {
+                let restore_runtime = overlay.restore_runtime();
+                if let Some(scene_id) = self.scene.scene_id_for_runtime(restore_runtime) {
+                    self.focus.set(&self.scene, scene_id);
+                }
+            } else {
+                self.choice_overlay = Some(overlay.clone());
+            }
+            return;
+        }
         let result = match &operation {
             BackendOperation::InvokeAction { locator, action } => self
                 .backend
                 .do_action(&locator.encode(), action.index)
                 .await
                 .map(|_| ()),
-            BackendOperation::SelectChild {
-                container_locator,
-                child_index,
-            } => {
-                self.backend
-                    .select_child(container_locator, *child_index)
-                    .await
+            BackendOperation::SelectCurrentItem { .. }
+            | BackendOperation::SelectCurrentTableRow { .. } => {
+                unreachable!("verified selection operations are handled above")
             }
             BackendOperation::SetTextContents { .. } => unreachable!("choice never edits text"),
             BackendOperation::SetComplexTextContents { .. } => {
@@ -3114,6 +3286,322 @@ impl TuiApplication {
             Err(error) => {
                 self.status = format!("Refresh failed: {error}");
             }
+        }
+    }
+
+    async fn execute_verified_selection(
+        &mut self,
+        runtime_id: RuntimeNodeId,
+        label: String,
+        operation: BackendOperation,
+    ) -> bool {
+        let target_locator = match &operation {
+            BackendOperation::SelectCurrentItem { target_locator, .. } => target_locator,
+            BackendOperation::SelectCurrentTableRow {
+                target_cell_locator,
+                ..
+            } => target_cell_locator,
+            _ => return false,
+        }
+        .clone();
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            runtime_id,
+            &target_locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(outcome) => {
+                self.status = transition_status(outcome, &label, UiIntent::Select);
+                return false;
+            }
+        };
+        if let Err(outcome) =
+            authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+        {
+            self.status = transition_status(outcome, &label, UiIntent::Select);
+            return false;
+        }
+        if let Err(outcome) = self.validate_current_selection_operation(&operation) {
+            self.status = transition_status(outcome, &label, UiIntent::Select);
+            return false;
+        }
+
+        let cancellation = crate::modality::CancellationToken::default();
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::TransitionObservation,
+            cancellation,
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                self.status = error.to_string();
+                return false;
+            }
+        };
+        let invocation = match &operation {
+            BackendOperation::SelectCurrentItem {
+                collection_locator,
+                target_locator,
+                target_role,
+                action,
+            } => {
+                self.backend
+                    .select_current_item(
+                        collection_locator,
+                        target_locator,
+                        target_role,
+                        action.as_ref().map(|action| action.name.as_str()),
+                    )
+                    .await
+            }
+            BackendOperation::SelectCurrentTableRow {
+                table_locator,
+                target_cell_locator,
+            } => {
+                self.backend
+                    .select_current_table_row(table_locator, target_cell_locator)
+                    .await
+            }
+            _ => unreachable!("selection helper requires a selection operation"),
+        };
+        let mutation = match invocation {
+            Ok(mutation) => mutation,
+            Err(error) => {
+                let _ = self.runtime.complete(&ticket);
+                let (status, refresh) = selection_operation_error_status(&error);
+                self.status = status;
+                if refresh {
+                    self.full_reload(Some(self.status.clone())).await;
+                }
+                return false;
+            }
+        };
+
+        let deadline = Instant::now() + self.settle_delay;
+        let mut authoritative_checks = 0_u32;
+        let mut event_wakeups = 0_u32;
+        let outcome = loop {
+            if let Err(outcome) =
+                authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+            {
+                break outcome;
+            }
+            if let Err(outcome) = self.validate_current_selection_operation(&operation) {
+                break outcome;
+            }
+            authoritative_checks = authoritative_checks.saturating_add(1);
+            let verification = match &operation {
+                BackendOperation::SelectCurrentItem {
+                    collection_locator,
+                    target_locator,
+                    target_role,
+                    action,
+                } => {
+                    self.backend
+                        .current_item_is_selected(
+                            collection_locator,
+                            target_locator,
+                            target_role,
+                            action.is_some(),
+                        )
+                        .await
+                }
+                BackendOperation::SelectCurrentTableRow {
+                    table_locator,
+                    target_cell_locator,
+                } => {
+                    self.backend
+                        .current_table_row_is_selected(table_locator, target_cell_locator)
+                        .await
+                }
+                _ => unreachable!("selection helper requires a selection operation"),
+            };
+            match verification {
+                Ok(true) => break TransitionOutcome::Confirmed,
+                Ok(false) => {}
+                Err(error) if selection_error_is_stale(&error) => break TransitionOutcome::Stale,
+                Err(error) if selection_error_is_ambiguous(&error) => {
+                    break TransitionOutcome::Ambiguous;
+                }
+                Err(error) => {
+                    let _ = self.runtime.complete(&ticket);
+                    let (status, refresh) = selection_operation_error_status(&error);
+                    self.status = status;
+                    if refresh {
+                        self.full_reload(Some(self.status.clone())).await;
+                    }
+                    return false;
+                }
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() || mutation.already_selected {
+                break TransitionOutcome::Timeout;
+            }
+            match tokio::time::timeout(remaining, self.event_subscription.recv()).await {
+                Ok(Some(EventDelivery::Event(first))) => {
+                    event_wakeups = event_wakeups.saturating_add(1);
+                    let batch_window = Duration::from_millis(40)
+                        .min(deadline.saturating_duration_since(Instant::now()));
+                    if !batch_window.is_zero() {
+                        tokio::time::sleep(batch_window).await;
+                    }
+                    let mut events = vec![first];
+                    while let Ok(event) = self.event_subscription.try_recv() {
+                        events.push(event);
+                    }
+                    self.apply_event_batch(events, None).await;
+                }
+                Ok(Some(EventDelivery::ResyncRequired { dropped })) => {
+                    event_wakeups = event_wakeups.saturating_add(1);
+                    self.resynchronize_after_overflow(dropped).await;
+                }
+                Ok(None) => {
+                    self.event_stream_available = false;
+                    break TransitionOutcome::ApplicationGone;
+                }
+                Err(_) => {
+                    // The deadline performs one final fresh authoritative read;
+                    // elapsed time itself never establishes success.
+                }
+            }
+        };
+        let outcome = match self.runtime.complete(&ticket) {
+            Ok(()) => outcome,
+            Err(crate::runtime::RuntimeError::StaleIdentity) => TransitionOutcome::Stale,
+            Err(_) => TransitionOutcome::Cancelled,
+        };
+        tracing::debug!(
+            target: "gui2tui::product",
+            ?outcome,
+            ?mutation.address,
+            already_selected = mutation.already_selected,
+            authoritative_checks,
+            event_wakeups,
+            "current semantic selection observation completed"
+        );
+        let status = transition_status(outcome, &label, UiIntent::Select);
+        if outcome != TransitionOutcome::ApplicationGone {
+            self.full_reload(Some(status)).await;
+        } else {
+            self.status = status;
+        }
+        outcome == TransitionOutcome::Confirmed
+    }
+
+    fn validate_current_selection_operation(
+        &self,
+        operation: &BackendOperation,
+    ) -> Result<(), TransitionOutcome> {
+        match operation {
+            BackendOperation::SelectCurrentItem {
+                collection_locator,
+                target_locator,
+                target_role,
+                action,
+            } => {
+                let collection_id = self
+                    .cache
+                    .runtime_id(collection_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let target_id = self
+                    .cache
+                    .runtime_id(target_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let collection = self
+                    .cache
+                    .node(collection_id)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let target = self.cache.node(target_id).ok_or(TransitionOutcome::Stale)?;
+                let operation_still_advertised = action.as_ref().map_or_else(
+                    || {
+                        let required_capability = if target.role == SemanticRole::ListItem {
+                            SemanticCapability::SelectCurrentChild
+                        } else {
+                            SemanticCapability::SelectChildren
+                        };
+                        collection.capabilities.contains(&required_capability)
+                    },
+                    |action| target.actions.contains(action),
+                );
+                if (target.role == SemanticRole::ListItem && collection.role != SemanticRole::List)
+                    || target.role != *target_role
+                    || target.parent != Some(collection_id)
+                    || !operation_still_advertised
+                    || !self.scopes.allows_node(collection_id)
+                    || !self.scopes.allows_node(target_id)
+                {
+                    return Err(TransitionOutcome::Stale);
+                }
+                Ok(())
+            }
+            BackendOperation::SelectCurrentTableRow {
+                table_locator,
+                target_cell_locator,
+            } => {
+                let table_id = self
+                    .cache
+                    .runtime_id(table_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let target_id = self
+                    .cache
+                    .runtime_id(target_cell_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let table = self.cache.node(table_id).ok_or(TransitionOutcome::Stale)?;
+                let target = self.cache.node(target_id).ok_or(TransitionOutcome::Stale)?;
+                let mut ancestor = target.parent;
+                let mut belongs_to_table = false;
+                for _ in 0..64 {
+                    let Some(candidate) = ancestor else { break };
+                    if candidate == table_id {
+                        belongs_to_table = true;
+                        break;
+                    }
+                    ancestor = self.cache.node(candidate).and_then(|node| node.parent);
+                }
+                if table.role != SemanticRole::Table
+                    || target.role != SemanticRole::Cell
+                    || !table
+                        .capabilities
+                        .contains(&SemanticCapability::SelectCurrentTableRow)
+                    || !belongs_to_table
+                    || !self.scopes.allows_node(table_id)
+                    || !self.scopes.allows_node(target_id)
+                {
+                    return Err(TransitionOutcome::Stale);
+                }
+                Ok(())
+            }
+            _ => Err(TransitionOutcome::Ambiguous),
+        }
+    }
+
+    fn restore_current_table_position(
+        &mut self,
+        table_locator: &BackendLocator,
+        target_locator: &BackendLocator,
+    ) {
+        let Some(table_id) = self.cache.runtime_id(table_locator) else {
+            return;
+        };
+        let Some(target_id) = self.cache.runtime_id(target_locator) else {
+            return;
+        };
+        let Some(mut table) = self.content.table(table_id).cloned() else {
+            return;
+        };
+        let Some(cell) = table.cells.iter().find(|cell| cell.source == target_id) else {
+            return;
+        };
+        table.position = crate::content::TablePosition {
+            row: cell.row,
+            column: cell.column,
+            cell: Some(target_id),
+        };
+        if let Some(view) = self.content_view.as_mut() {
+            view.table = Some(table);
         }
     }
 
@@ -4184,12 +4672,23 @@ fn current_command_unavailable_status() -> &'static str {
     "Command is no longer available; choose from the current interface"
 }
 
+fn current_selection_unavailable_status() -> &'static str {
+    "Item is no longer available; choose from the current interface"
+}
+
 fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String {
     match operation {
         BackendOperation::InvokeAction { action, .. } => action.name.clone(),
-        BackendOperation::SelectChild { child_index, .. } => {
+        BackendOperation::SelectCurrentItem { action, .. } => {
             debug_assert_eq!(intent, UiIntent::Select);
-            format!("parent Selection child {child_index}")
+            action.as_ref().map_or_else(
+                || "verified current selection".to_owned(),
+                |action| format!("verified {}", action.name),
+            )
+        }
+        BackendOperation::SelectCurrentTableRow { .. } => {
+            debug_assert_eq!(intent, UiIntent::Select);
+            "verified current Table row selection".to_owned()
         }
         BackendOperation::SetTextContents { .. } => "EditableText.SetTextContents".to_owned(),
         BackendOperation::SetComplexTextContents { .. } => {
@@ -4214,6 +4713,48 @@ fn operation_error_status(error: &BackendError) -> (String, bool) {
             true,
         ),
         _ => (format!("Action failed: {error}"), false),
+    }
+}
+
+fn selection_error_is_stale(error: &BackendError) -> bool {
+    matches!(
+        error,
+        BackendError::ObjectUnavailable(_, _)
+            | BackendError::SelectionTargetNotCurrent { .. }
+            | BackendError::TableRowTargetNotCurrent { .. }
+    )
+}
+
+fn selection_error_is_ambiguous(error: &BackendError) -> bool {
+    matches!(
+        error,
+        BackendError::MultiSelectionUnsupported(_) | BackendError::SelectionReadbackAmbiguous(_)
+    )
+}
+
+fn selection_operation_error_status(error: &BackendError) -> (String, bool) {
+    if selection_error_is_stale(error) {
+        return (current_selection_unavailable_status().to_owned(), true);
+    }
+    if selection_error_is_ambiguous(error) {
+        return (
+            "Selection is unavailable for this collection; current interface is unchanged"
+                .to_owned(),
+            false,
+        );
+    }
+    match error {
+        BackendError::SelectionRejected { .. } => (
+            "Selection was not accepted; current interface is unchanged".to_owned(),
+            false,
+        ),
+        BackendError::SelectionTargetUnavailable(_)
+        | BackendError::SelectionUnsupported(_)
+        | BackendError::TableRowSelectionUnsupported(_) => (
+            "Current item is not safely selectable; current interface is unchanged".to_owned(),
+            false,
+        ),
+        _ => (format!("Selection could not be confirmed: {error}"), false),
     }
 }
 

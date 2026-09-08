@@ -56,7 +56,7 @@ pub struct ChoiceOption {
 pub enum ChoiceSelectionStrategy {
     ParentSelection {
         parent: RuntimeNodeId,
-        child_index: usize,
+        child: RuntimeNodeId,
     },
     ChildSemanticAction {
         child: RuntimeNodeId,
@@ -344,6 +344,16 @@ fn child_selection_strategy(
     child: RuntimeNodeId,
 ) -> Option<ChoiceSelectionStrategy> {
     let node = cache.node(child)?;
+    let direct_parent = node.parent.and_then(|parent| cache.node(parent));
+    if node.role == SemanticRole::ListItem {
+        let parent = direct_parent?;
+        let multiselectable = parent.states.iter().chain(&node.states).any(
+            |state| matches!(state, SemanticState::Other(value) if value == "multiselectable"),
+        );
+        if parent.role != SemanticRole::List || multiselectable {
+            return None;
+        }
+    }
     let intent = match node.role {
         SemanticRole::ListItem => UiIntent::Select,
         SemanticRole::RadioButton => UiIntent::Toggle,
@@ -357,21 +367,21 @@ fn child_selection_strategy(
         });
     }
     let parent = node.parent?;
-    let parent_node = cache.node(parent)?;
+    let parent_node = direct_parent?;
+    let parent_selection_capability = if node.role == SemanticRole::ListItem {
+        SemanticCapability::SelectCurrentChild
+    } else {
+        SemanticCapability::SelectChildren
+    };
     if parent_node
         .capabilities
-        .contains(&SemanticCapability::SelectChildren)
+        .contains(&parent_selection_capability)
         && parent_node
             .states
             .iter()
             .any(|state| matches!(state, SemanticState::Other(value) if value == "showing"))
     {
-        return node
-            .index_in_parent
-            .map(|child_index| ChoiceSelectionStrategy::ParentSelection {
-                parent,
-                child_index,
-            });
+        return Some(ChoiceSelectionStrategy::ParentSelection { parent, child });
     }
     None
 }
@@ -443,10 +453,15 @@ mod tests {
         let mut list = node(2, SemanticRole::List, "Options");
         let mut alpha = node(3, SemanticRole::ListItem, "Alpha");
         alpha.index_in_parent = Some(0);
+        alpha
+            .states
+            .push(SemanticState::Other("selectable".to_owned()));
         alpha.states.push(SemanticState::Selected);
         alpha.actions.push(action("Toggle"));
         let mut beta = node(4, SemanticRole::ListItem, "Beta");
         beta.index_in_parent = Some(1);
+        beta.states
+            .push(SemanticState::Other("selectable".to_owned()));
         beta.actions.push(action("Toggle"));
         list.children = vec![alpha, beta];
         combo.children.push(list);
@@ -482,7 +497,8 @@ mod tests {
         assert!(choice.is_interactive());
         assert!(matches!(
             choice.options.options()[0].selection,
-            Some(ChoiceSelectionStrategy::ParentSelection { child_index: 7, .. })
+            Some(ChoiceSelectionStrategy::ParentSelection { child, .. })
+                if child == cache.runtime_id(&BackendLocator::new(":1.2", "/node/3")).unwrap()
         ));
     }
 
@@ -568,10 +584,13 @@ mod tests {
     #[test]
     fn unnamed_list_items_use_a_unique_descendant_text_label() {
         let mut list = node(1, SemanticRole::List, "Items");
-        list.capabilities.push(SemanticCapability::SelectChildren);
+        list.capabilities
+            .push(SemanticCapability::SelectCurrentChild);
         list.states.push(SemanticState::Other("showing".to_owned()));
         let mut item = node(2, SemanticRole::ListItem, "");
         item.index_in_parent = Some(0);
+        item.states
+            .push(SemanticState::Other("selectable".to_owned()));
         let mut wrapper = node(3, SemanticRole::Container, "");
         wrapper.children.push(node(4, SemanticRole::Label, "Alpha"));
         item.children.push(wrapper);
@@ -582,7 +601,7 @@ mod tests {
         assert_eq!(choice.options.options()[0].label, "Alpha");
         assert!(matches!(
             choice.options.options()[0].selection,
-            Some(ChoiceSelectionStrategy::ParentSelection { child_index: 0, .. })
+            Some(ChoiceSelectionStrategy::ParentSelection { .. })
         ));
     }
 

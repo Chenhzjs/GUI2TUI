@@ -332,6 +332,15 @@ fn semantic_capabilities(
     let mut capabilities = Vec::new();
     if record.interfaces.contains(atspi::Interface::Selection) {
         capabilities.push(SemanticCapability::SelectChildren);
+        if *role == SemanticRole::List && !record.states.contains(atspi::State::Multiselectable) {
+            capabilities.push(SemanticCapability::SelectCurrentChild);
+        }
+    }
+    if *role == SemanticRole::Table
+        && record.interfaces.contains(atspi::Interface::Table)
+        && !record.states.contains(atspi::State::Multiselectable)
+    {
+        capabilities.push(SemanticCapability::SelectCurrentTableRow);
     }
     if *role == SemanticRole::TextInput
         && input_kind == Some(TextInputKind::Plain)

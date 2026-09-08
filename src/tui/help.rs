@@ -7,6 +7,7 @@ pub enum HelpContext {
     Search,
     Choice,
     Table,
+    SelectableTable,
     Collection,
     Command,
     Edit,
@@ -33,6 +34,9 @@ impl HelpContext {
             }
             Self::Table => {
                 "Table\nh/j/k/l or arrows: move by semantic row/column\nEsc: return to Reader\nCells not exposed by accessibility remain unavailable."
+            }
+            Self::SelectableTable => {
+                "Table\nh/j/k/l or arrows: move through current accessible cells\nEnter: select the row containing the current cell and confirm it from the GUI\nEsc: return to Reader\nCells not exposed by accessibility remain unavailable."
             }
             Self::Collection => {
                 "Collection\nj/k or Down/Up: move through exposed items\nEsc: return to Reader\nPartial collections do not imply all logical items are loaded."
@@ -96,5 +100,11 @@ mod tests {
         assert!(HelpContext::Command.text().contains("F2"));
         assert!(HelpContext::Choice.text().contains("GUI unchanged"));
         assert!(HelpContext::Table.text().contains("row/column"));
+        assert!(!HelpContext::Table.text().contains("select the current row"));
+        assert!(
+            HelpContext::SelectableTable
+                .text()
+                .contains("select the row containing the current cell")
+        );
     }
 }

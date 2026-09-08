@@ -10,6 +10,7 @@ pub struct SemanticTableCell {
     pub label: String,
     pub row_span: usize,
     pub column_span: usize,
+    pub selected: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -27,6 +28,7 @@ pub struct SemanticTableModel {
     pub cells: Vec<SemanticTableCell>,
     pub column_headers: Vec<String>,
     pub completeness: CollectionCompleteness,
+    pub row_selection: bool,
     pub position: TablePosition,
 }
 
@@ -60,6 +62,9 @@ impl SemanticTableModel {
             .max()
             .filter(|_| !cells.is_empty());
         let completeness = collection_completeness(table);
+        let row_selection = table
+            .capabilities
+            .contains(&crate::semantic::SemanticCapability::SelectCurrentTableRow);
         let rows = (completeness == CollectionCompleteness::Complete)
             .then_some(realized_rows.max(usize::from(!cells.is_empty())));
         let position = cells
@@ -76,6 +81,7 @@ impl SemanticTableModel {
             cells,
             column_headers: headers,
             completeness,
+            row_selection,
             position,
         })
     }
@@ -139,6 +145,9 @@ fn append_cell(
         label,
         row_span: 1,
         column_span: 1,
+        selected: node
+            .states
+            .contains(&crate::semantic::SemanticState::Selected),
     });
 }
 

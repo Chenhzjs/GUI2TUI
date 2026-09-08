@@ -10,14 +10,15 @@ use std::{
 };
 
 use atspi::{
-    AccessibilityConnection, CoordType, Granularity, Interface, MatchType, ObjectMatchRule,
-    ObjectRef, ObjectRefOwned, Role, SortOrder, State, TreeTraversalType,
+    AccessibilityConnection, CoordType, Granularity, Interface, InterfaceSet, MatchType,
+    ObjectMatchRule, ObjectRef, ObjectRefOwned, Role, SortOrder, State, StateSet,
+    TreeTraversalType,
     events::{CacheEvents, Event, ObjectEvents, WindowEvents},
     proxy::{
         accessible::ObjectRefExt, action::ActionProxy, collection::CollectionProxy,
         component::ComponentProxy, document::DocumentProxy, hyperlink::HyperlinkProxy,
-        hypertext::HypertextProxy, proxy_ext::ProxyExt, table::TableProxy, text::TextProxy,
-        value::ValueProxy,
+        hypertext::HypertextProxy, proxy_ext::ProxyExt, table::TableProxy,
+        table_cell::TableCellProxy, text::TextProxy, value::ValueProxy,
     },
 };
 use futures_lite::StreamExt;
@@ -62,6 +63,18 @@ pub struct ValueMutation {
     pub requested: f64,
     pub resulting: f64,
     pub normalized: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CurrentSelectionAddress {
+    DirectChild(usize),
+    TableRow(i32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SelectionMutation {
+    pub address: CurrentSelectionAddress,
+    pub already_selected: bool,
 }
 
 pub const MAX_EXTERNAL_TEXT_BYTES: usize = 256 * 1024;
@@ -170,6 +183,21 @@ pub enum BackendError {
     SelectionIndexOutOfRange { node_id: String, index: usize },
     #[error("selection of child {index} was rejected by AT-SPI container {node_id}")]
     SelectionRejected { node_id: String, index: usize },
+    #[error("the exact selection target {target_id} is not a current member of {container_id}")]
+    SelectionTargetNotCurrent {
+        container_id: String,
+        target_id: String,
+    },
+    #[error("the current selection target {0} is unavailable")]
+    SelectionTargetUnavailable(String),
+    #[error("single-item Select is unavailable for multiselectable collection {0}")]
+    MultiSelectionUnsupported(String),
+    #[error("selection readback for {0} did not identify one exact current target")]
+    SelectionReadbackAmbiguous(String),
+    #[error("AT-SPI Table row selection is unavailable for {0}")]
+    TableRowSelectionUnsupported(String),
+    #[error("the exact current Table cell {target_id} cannot be mapped safely in {table_id}")]
+    TableRowTargetNotCurrent { table_id: String, target_id: String },
     #[error("AT-SPI object {0} is not a supported editable plain-text input")]
     TextEditUnsupported(String),
     #[error("password editing is disabled by GUI2TUI for AT-SPI object {0}")]
@@ -2270,6 +2298,475 @@ impl AtspiBackend {
         Ok(())
     }
 
+    /// Select one exact current direct member. The target locator is semantic
+    /// authority; the child index is derived from a fresh child list and is
+    /// never accepted from a scene or command binding.
+    pub async fn select_current_item(
+        &self,
+        collection: &BackendLocator,
+        target: &BackendLocator,
+        expected_role: &SemanticRole,
+        action_name: Option<&str>,
+    ) -> Result<SelectionMutation, BackendError> {
+        let snapshot = self
+            .current_selection_target(collection, target, expected_role)
+            .await?;
+        if snapshot.selected {
+            return Ok(SelectionMutation {
+                address: CurrentSelectionAddress::DirectChild(snapshot.index),
+                already_selected: true,
+            });
+        }
+
+        if let Some(action_name) = action_name {
+            self.do_action_by_name(&target.encode(), action_name)
+                .await?;
+        } else {
+            let collection_id = collection.encode();
+            if !snapshot.interfaces.contains(Interface::Selection) {
+                return Err(BackendError::SelectionUnsupported(collection_id));
+            }
+            let index = i32::try_from(snapshot.index).map_err(|_| {
+                BackendError::SelectionIndexOutOfRange {
+                    node_id: collection_id.clone(),
+                    index: snapshot.index,
+                }
+            })?;
+            let object = object_ref_from_id(collection)?;
+            let proxy = object
+                .as_accessible_proxy(self.connection.connection())
+                .await
+                .map_err(|error| BackendError::ObjectUnavailable(collection_id.clone(), error))?;
+            let proxies = atspi_operation(
+                self.operation_timeout,
+                "create interface proxies for current selection",
+                &collection_id,
+                proxy.proxies(),
+            )
+            .await?;
+            let selection = atspi_operation(
+                self.operation_timeout,
+                "create Selection proxy for current target",
+                &collection_id,
+                proxies.selection(),
+            )
+            .await?;
+            let accepted = dbus_operation(
+                self.operation_timeout,
+                "select exact current child",
+                &collection_id,
+                selection.select_child(index),
+            )
+            .await?;
+            if !accepted {
+                return Err(BackendError::SelectionRejected {
+                    node_id: collection_id,
+                    index: snapshot.index,
+                });
+            }
+        }
+
+        Ok(SelectionMutation {
+            address: CurrentSelectionAddress::DirectChild(snapshot.index),
+            already_selected: false,
+        })
+    }
+
+    /// Freshly prove that one exact current direct member is selected.
+    pub async fn current_item_is_selected(
+        &self,
+        collection: &BackendLocator,
+        target: &BackendLocator,
+        expected_role: &SemanticRole,
+        action_selection: bool,
+    ) -> Result<bool, BackendError> {
+        let snapshot = self
+            .current_selection_target(collection, target, expected_role)
+            .await?;
+        if !snapshot.selected {
+            return Ok(false);
+        }
+        if action_selection && !snapshot.interfaces.contains(Interface::Selection) {
+            return Ok(true);
+        }
+        if !snapshot.interfaces.contains(Interface::Selection) {
+            return Err(BackendError::SelectionUnsupported(collection.encode()));
+        }
+
+        let collection_id = collection.encode();
+        let object = object_ref_from_id(collection)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(collection_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create Selection readback proxies",
+            &collection_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let selection = atspi_operation(
+            self.operation_timeout,
+            "create Selection readback proxy",
+            &collection_id,
+            proxies.selection(),
+        )
+        .await?;
+        let count = dbus_operation(
+            self.operation_timeout,
+            "read selected-child count",
+            &collection_id,
+            selection.n_selected_children(),
+        )
+        .await?;
+        if count > 1 {
+            return Err(BackendError::SelectionReadbackAmbiguous(collection_id));
+        }
+        if count != 1 {
+            return Ok(false);
+        }
+        let selected = dbus_operation(
+            self.operation_timeout,
+            "read exact selected child",
+            &collection_id,
+            selection.get_selected_child(0),
+        )
+        .await?;
+        Ok(selected_object_matches(target, node_id_from_ref(&selected)))
+    }
+
+    /// Select the Table row containing one exact current realized cell. The
+    /// row number is freshly derived from public Table structure.
+    pub async fn select_current_table_row(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<SelectionMutation, BackendError> {
+        let row = self.current_table_row(table, target_cell).await?;
+        let selected = self.selected_table_rows(table).await?;
+        if selected.len() > 1 {
+            return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
+        }
+        if selected.as_slice() == [row] {
+            return Ok(SelectionMutation {
+                address: CurrentSelectionAddress::TableRow(row),
+                already_selected: true,
+            });
+        }
+
+        let table_id = table.encode();
+        let object = object_ref_from_id(table)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create Table selection proxies",
+            &table_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let table_proxy = atspi_operation(
+            self.operation_timeout,
+            "create Table selection proxy",
+            &table_id,
+            proxies.table(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "select exact current Table row",
+            &table_id,
+            table_proxy.add_row_selection(row),
+        )
+        .await?;
+        if !accepted {
+            return Err(BackendError::SelectionRejected {
+                node_id: table_id,
+                index: usize::try_from(row).unwrap_or(usize::MAX),
+            });
+        }
+        Ok(SelectionMutation {
+            address: CurrentSelectionAddress::TableRow(row),
+            already_selected: false,
+        })
+    }
+
+    /// Freshly prove that the row containing the exact current cell is the
+    /// sole selected row.
+    pub async fn current_table_row_is_selected(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<bool, BackendError> {
+        let row = self.current_table_row(table, target_cell).await?;
+        let selected = self.selected_table_rows(table).await?;
+        if selected.len() > 1 {
+            return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
+        }
+        Ok(selected_row_matches_target(
+            target_cell,
+            row,
+            &selected,
+            Some(target_cell.clone()),
+        ))
+    }
+
+    async fn current_selection_target(
+        &self,
+        collection: &BackendLocator,
+        target: &BackendLocator,
+        expected_role: &SemanticRole,
+    ) -> Result<CurrentSelectionTarget, BackendError> {
+        let collection_id = collection.encode();
+        let target_id = target.encode();
+        let collection_object = object_ref_from_id(collection)?;
+        let collection_proxy = collection_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(collection_id.clone(), error))?;
+        let collection_states = dbus_operation(
+            self.operation_timeout,
+            "read current collection states",
+            &collection_id,
+            collection_proxy.get_state(),
+        )
+        .await?;
+        if collection_states.contains(State::Multiselectable) {
+            return Err(BackendError::MultiSelectionUnsupported(collection_id));
+        }
+        if collection_states.contains(State::ReadOnly)
+            || !current_item_states_are_available(&collection_states)
+        {
+            return Err(BackendError::SelectionTargetUnavailable(collection_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "read current collection interfaces",
+            &collection_id,
+            collection_proxy.get_interfaces(),
+        )
+        .await?;
+        let children = dbus_operation(
+            self.operation_timeout,
+            "read current collection children",
+            &collection_id,
+            collection_proxy.get_children(),
+        )
+        .await?;
+        let matches = children
+            .iter()
+            .enumerate()
+            .filter_map(|(index, child)| {
+                (node_id_from_ref(child).as_ref() == Some(target)).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let [index] = matches.as_slice() else {
+            return Err(BackendError::SelectionTargetNotCurrent {
+                container_id: collection_id,
+                target_id,
+            });
+        };
+
+        let target_object = object_ref_from_id(target)?;
+        let target_proxy = target_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(target_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "read current selection target role",
+            &target_id,
+            target_proxy.get_role(),
+        )
+        .await?;
+        if SemanticRole::from(role) != *expected_role {
+            return Err(BackendError::SelectionTargetNotCurrent {
+                container_id: collection.encode(),
+                target_id,
+            });
+        }
+        let states = dbus_operation(
+            self.operation_timeout,
+            "read current selection target states",
+            &target_id,
+            target_proxy.get_state(),
+        )
+        .await?;
+        if states.contains(State::Multiselectable) {
+            return Err(BackendError::MultiSelectionUnsupported(collection.encode()));
+        }
+        if !current_item_states_are_available(&states) {
+            return Err(BackendError::SelectionTargetUnavailable(target_id));
+        }
+        Ok(CurrentSelectionTarget {
+            index: *index,
+            selected: states.contains(State::Selected),
+            interfaces,
+        })
+    }
+
+    async fn current_table_row(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<i32, BackendError> {
+        let table_id = table.encode();
+        let target_id = target_cell.encode();
+        let table_object = object_ref_from_id(table)?;
+        let table_accessible = table_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "read current Table interfaces",
+            &table_id,
+            table_accessible.get_interfaces(),
+        )
+        .await?;
+        let states = dbus_operation(
+            self.operation_timeout,
+            "read current Table states",
+            &table_id,
+            table_accessible.get_state(),
+        )
+        .await?;
+        if !interfaces.contains(Interface::Table)
+            || states.contains(State::Multiselectable)
+            || states.contains(State::ReadOnly)
+            || !current_item_states_are_available(&states)
+        {
+            return Err(BackendError::TableRowSelectionUnsupported(table_id));
+        }
+        let target_object = object_ref_from_id(target_cell)?;
+        let target_accessible = target_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(target_id.clone(), error))?;
+        let target_role = dbus_operation(
+            self.operation_timeout,
+            "read current Table target role",
+            &target_id,
+            target_accessible.get_role(),
+        )
+        .await?;
+        let target_interfaces = dbus_operation(
+            self.operation_timeout,
+            "read current Table target interfaces",
+            &target_id,
+            target_accessible.get_interfaces(),
+        )
+        .await?;
+        let target_states = dbus_operation(
+            self.operation_timeout,
+            "read current Table target states",
+            &target_id,
+            target_accessible.get_state(),
+        )
+        .await?;
+        if SemanticRole::from(target_role) != SemanticRole::Cell
+            || !target_interfaces.contains(Interface::TableCell)
+            || !current_item_states_are_available(&target_states)
+        {
+            return Err(BackendError::SelectionTargetUnavailable(target_id));
+        }
+        let table_cell = TableCellProxy::builder(self.connection.connection())
+            .destination(target_cell.bus_name())
+            .and_then(|builder| builder.path(target_cell.object_path()))
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let current_table = dbus_operation(
+            self.operation_timeout,
+            "read current TableCell owner",
+            &target_id,
+            table_cell.table(),
+        )
+        .await?;
+        if node_id_from_ref(&current_table).as_ref() != Some(table) {
+            return Err(BackendError::TableRowTargetNotCurrent {
+                table_id,
+                target_id,
+            });
+        }
+        let (row, column) = dbus_operation(
+            self.operation_timeout,
+            "read current TableCell position",
+            &target_id,
+            table_cell.position(),
+        )
+        .await?;
+        if row < 0 || column < 0 {
+            return Err(BackendError::TableRowTargetNotCurrent {
+                table_id,
+                target_id,
+            });
+        }
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create current Table proxies",
+            &table_id,
+            table_accessible.proxies(),
+        )
+        .await?;
+        let table_proxy = atspi_operation(
+            self.operation_timeout,
+            "create current Table proxy",
+            &table_id,
+            proxies.table(),
+        )
+        .await?;
+        let resolved = dbus_operation(
+            self.operation_timeout,
+            "revalidate exact current Table cell",
+            &table_id,
+            table_proxy.get_accessible_at(row, column),
+        )
+        .await?;
+        if node_id_from_ref(&resolved).as_ref() != Some(target_cell) {
+            return Err(BackendError::TableRowTargetNotCurrent {
+                table_id,
+                target_id,
+            });
+        }
+        Ok(row)
+    }
+
+    async fn selected_table_rows(&self, table: &BackendLocator) -> Result<Vec<i32>, BackendError> {
+        let table_id = table.encode();
+        let object = object_ref_from_id(table)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create Table readback proxies",
+            &table_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let table_proxy = atspi_operation(
+            self.operation_timeout,
+            "create Table readback proxy",
+            &table_id,
+            proxies.table(),
+        )
+        .await?;
+        dbus_operation(
+            self.operation_timeout,
+            "read selected Table rows",
+            &table_id,
+            table_proxy.get_selected_rows(),
+        )
+        .await
+    }
+
     fn build_node<'a>(
         &'a self,
         object: ObjectRefOwned,
@@ -2738,6 +3235,31 @@ struct TraversalContext {
     runtime_ids: RuntimeIdAllocator,
 }
 
+struct CurrentSelectionTarget {
+    index: usize,
+    selected: bool,
+    interfaces: InterfaceSet,
+}
+
+fn current_item_states_are_available(states: &StateSet) -> bool {
+    (states.contains(State::Enabled) || states.contains(State::Sensitive))
+        && !states.contains(State::Defunct)
+        && (states.contains(State::Showing) || states.contains(State::Visible))
+}
+
+fn selected_object_matches(expected: &BackendLocator, selected: Option<BackendLocator>) -> bool {
+    selected.as_ref() == Some(expected)
+}
+
+fn selected_row_matches_target(
+    expected: &BackendLocator,
+    current_row: i32,
+    selected_rows: &[i32],
+    current_row_target: Option<BackendLocator>,
+) -> bool {
+    selected_rows == [current_row] && current_row_target.as_ref() == Some(expected)
+}
+
 fn node_id_from_ref(object: &ObjectRefOwned) -> Option<BackendLocator> {
     Some(BackendLocator::new(
         object.name_as_str()?,
@@ -3049,6 +3571,17 @@ fn semantic_capabilities(
     let mut capabilities = Vec::new();
     if interfaces.contains(Interface::Selection) {
         capabilities.push(SemanticCapability::SelectChildren);
+        if role == SemanticRole::List
+            && !states.contains(&SemanticState::Other("multiselectable".to_owned()))
+        {
+            capabilities.push(SemanticCapability::SelectCurrentChild);
+        }
+    }
+    if role == SemanticRole::Table
+        && interfaces.contains(Interface::Table)
+        && !states.contains(&SemanticState::Other("multiselectable".to_owned()))
+    {
+        capabilities.push(SemanticCapability::SelectCurrentTableRow);
     }
     if role == SemanticRole::TextInput
         && input_kind == Some(TextInputKind::Plain)
@@ -3328,7 +3861,10 @@ mod tests {
                 Role::List,
                 false,
             ),
-            vec![SemanticCapability::SelectChildren]
+            vec![
+                SemanticCapability::SelectChildren,
+                SemanticCapability::SelectCurrentChild,
+            ]
         );
         assert!(
             semantic_capabilities(
@@ -3341,6 +3877,39 @@ mod tests {
             )
             .is_empty()
         );
+        assert_eq!(
+            semantic_capabilities(
+                Interface::Selection.into(),
+                &[SemanticState::Other("multiselectable".to_owned())],
+                SemanticRole::List,
+                None,
+                Role::List,
+                false,
+            ),
+            vec![SemanticCapability::SelectChildren]
+        );
+    }
+
+    #[test]
+    fn target_specific_readback_rejects_null_or_different_current_objects() {
+        let intended = BackendLocator::new(":1.2", "/item/beta");
+        let other = BackendLocator::new(":1.2", "/item/alpha");
+
+        assert!(!selected_object_matches(&intended, None));
+        assert!(!selected_object_matches(&intended, Some(other.clone())));
+        assert!(selected_object_matches(&intended, Some(intended.clone())));
+        assert!(!selected_row_matches_target(
+            &intended,
+            1,
+            &[1],
+            Some(other)
+        ));
+        assert!(selected_row_matches_target(
+            &intended,
+            1,
+            &[1],
+            Some(intended.clone())
+        ));
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt};
 use crate::{
     semantic::{
         BackendLocator, RuntimeNodeId, SemanticAction, SemanticCapability, SemanticNode,
-        SemanticRole, TextInputKind,
+        SemanticRole, SemanticState, TextInputKind,
     },
     tui::action::{InteractionCapability, UiIntent},
 };
@@ -131,6 +131,10 @@ impl SceneElement {
                     | SceneElementKind::SelectionItem { .. }
                     | SceneElementKind::Command { .. }
             )
+            || self
+                .binding
+                .as_ref()
+                .is_some_and(|binding| binding.capability == InteractionCapability::BrowseContent)
     }
 
     pub fn capability(&self) -> InteractionCapability {
@@ -190,6 +194,8 @@ pub struct SceneNodeContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SceneNodeMetadata {
     pub backend_locator: BackendLocator,
+    pub role: SemanticRole,
+    pub states: Vec<SemanticState>,
     pub capabilities: Vec<SemanticCapability>,
 }
 
@@ -362,6 +368,8 @@ fn index_nodes(
         node.runtime_id,
         SceneNodeMetadata {
             backend_locator: node.backend_locator.clone(),
+            role: node.role.clone(),
+            states: node.states.clone(),
             capabilities: node.capabilities.clone(),
         },
     );

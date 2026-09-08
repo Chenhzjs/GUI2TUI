@@ -1,7 +1,10 @@
 use thiserror::Error;
 
 use crate::{
-    semantic::{BackendLocator, RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability},
+    semantic::{
+        BackendLocator, RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability,
+        SemanticRole, SemanticState,
+    },
     transcompile::{ChoiceSelectionStrategy, TuiScene},
 };
 
@@ -119,9 +122,15 @@ pub enum BackendOperation {
         locator: BackendLocator,
         action: SemanticAction,
     },
-    SelectChild {
-        container_locator: BackendLocator,
-        child_index: usize,
+    SelectCurrentItem {
+        collection_locator: BackendLocator,
+        target_locator: BackendLocator,
+        target_role: SemanticRole,
+        action: Option<SemanticAction>,
+    },
+    SelectCurrentTableRow {
+        table_locator: BackendLocator,
+        target_cell_locator: BackendLocator,
     },
     SetTextContents {
         locator: BackendLocator,
@@ -141,11 +150,13 @@ pub enum BackendOperation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectionStrategy {
     NodeAction {
+        collection_locator: BackendLocator,
+        target_locator: BackendLocator,
         action: SemanticAction,
     },
     ParentSelection {
-        container_locator: BackendLocator,
-        child_index: usize,
+        collection_locator: BackendLocator,
+        target_locator: BackendLocator,
     },
     Unsupported,
 }
@@ -166,29 +177,62 @@ pub fn resolve_choice_backend_operation(
                     "choice action is no longer safely advertised".to_owned(),
                 ));
             }
-            Ok(BackendOperation::InvokeAction {
-                locator: node.backend_locator.clone(),
-                action: action.clone(),
-            })
+            if node.role == SemanticRole::ListItem {
+                let parent = node.parent.and_then(|id| cache.node(id)).ok_or_else(|| {
+                    OperationResolutionError::NoCompatibleOperation(
+                        "selection target has no current collection".to_owned(),
+                    )
+                })?;
+                if parent.role != SemanticRole::List
+                    || is_multiselectable(&parent.states)
+                    || is_multiselectable(&node.states)
+                    || !is_current_available_target(&node.states)
+                {
+                    return Err(OperationResolutionError::NoCompatibleOperation(
+                        "choice target is not a current single-selection list member".to_owned(),
+                    ));
+                }
+                Ok(BackendOperation::SelectCurrentItem {
+                    collection_locator: parent.backend_locator.clone(),
+                    target_locator: node.backend_locator.clone(),
+                    target_role: node.role.clone(),
+                    action: Some(action.clone()),
+                })
+            } else {
+                Ok(BackendOperation::InvokeAction {
+                    locator: node.backend_locator.clone(),
+                    action: action.clone(),
+                })
+            }
         }
-        ChoiceSelectionStrategy::ParentSelection {
-            parent,
-            child_index,
-        } => {
-            let node = cache
+        ChoiceSelectionStrategy::ParentSelection { parent, child } => {
+            let collection = cache
                 .node(*parent)
                 .ok_or(OperationResolutionError::NodeNotFound(*parent))?;
-            if !node
-                .capabilities
-                .contains(&SemanticCapability::SelectChildren)
+            let target = cache
+                .node(*child)
+                .ok_or(OperationResolutionError::NodeNotFound(*child))?;
+            let required_capability = if target.role == SemanticRole::ListItem {
+                SemanticCapability::SelectCurrentChild
+            } else {
+                SemanticCapability::SelectChildren
+            };
+            if target.parent != Some(*parent)
+                || (target.role == SemanticRole::ListItem && collection.role != SemanticRole::List)
+                || !collection.capabilities.contains(&required_capability)
+                || is_multiselectable(&collection.states)
+                || is_multiselectable(&target.states)
+                || !is_current_available_target(&target.states)
             {
                 return Err(OperationResolutionError::NoCompatibleOperation(
-                    "choice parent no longer exposes Selection".to_owned(),
+                    "choice target is no longer a current single-selection member".to_owned(),
                 ));
             }
-            Ok(BackendOperation::SelectChild {
-                container_locator: node.backend_locator.clone(),
-                child_index: *child_index,
+            Ok(BackendOperation::SelectCurrentItem {
+                collection_locator: collection.backend_locator.clone(),
+                target_locator: target.backend_locator.clone(),
+                target_role: target.role.clone(),
+                action: None,
             })
         }
     }
@@ -263,16 +307,24 @@ pub fn resolve_backend_operation(
 
     if matches!(operation, SemanticOperation::SelectNode(_)) {
         return match resolve_selection_strategy(scene, runtime_id) {
-            SelectionStrategy::NodeAction { action } => Ok(BackendOperation::InvokeAction {
-                locator: binding.backend_locator.clone(),
+            SelectionStrategy::NodeAction {
+                collection_locator,
+                target_locator,
                 action,
+            } => Ok(BackendOperation::SelectCurrentItem {
+                collection_locator,
+                target_locator,
+                target_role: binding.semantic_role.clone(),
+                action: Some(action),
             }),
             SelectionStrategy::ParentSelection {
-                container_locator,
-                child_index,
-            } => Ok(BackendOperation::SelectChild {
-                container_locator,
-                child_index,
+                collection_locator,
+                target_locator,
+            } => Ok(BackendOperation::SelectCurrentItem {
+                collection_locator,
+                target_locator,
+                target_role: binding.semantic_role.clone(),
+                action: None,
             }),
             SelectionStrategy::Unsupported => Err(OperationResolutionError::NoCompatibleOperation(
                 "the list item has neither a compatible action nor a selectable parent".to_owned(),
@@ -303,32 +355,64 @@ pub fn resolve_selection_strategy(
         return SelectionStrategy::Unsupported;
     };
 
-    if let Ok(action) = resolve_action(&binding.semantic_role, &binding.actions, UiIntent::Select) {
-        return SelectionStrategy::NodeAction {
-            action: action.clone(),
-        };
-    }
-
     let Some(context) = scene.node_context(runtime_id) else {
         return SelectionStrategy::Unsupported;
     };
-    let (Some(parent_id), Some(child_index)) = (context.parent_id, context.index_in_parent) else {
+    let Some(parent_id) = context.parent_id else {
         return SelectionStrategy::Unsupported;
     };
     let Some(parent) = scene.node_metadata(parent_id) else {
         return SelectionStrategy::Unsupported;
     };
+    let Some(target) = scene.node_metadata(runtime_id) else {
+        return SelectionStrategy::Unsupported;
+    };
+    if binding.semantic_role != SemanticRole::ListItem
+        || parent.role != SemanticRole::List
+        || is_multiselectable(&parent.states)
+        || is_multiselectable(&target.states)
+        || !is_current_available_target(&target.states)
+    {
+        return SelectionStrategy::Unsupported;
+    }
+    if let Ok(action) = resolve_action(&binding.semantic_role, &binding.actions, UiIntent::Select) {
+        return SelectionStrategy::NodeAction {
+            collection_locator: parent.backend_locator.clone(),
+            target_locator: binding.backend_locator.clone(),
+            action: action.clone(),
+        };
+    }
     if parent
         .capabilities
-        .contains(&SemanticCapability::SelectChildren)
+        .contains(&SemanticCapability::SelectCurrentChild)
     {
         SelectionStrategy::ParentSelection {
-            container_locator: parent.backend_locator.clone(),
-            child_index,
+            collection_locator: parent.backend_locator.clone(),
+            target_locator: binding.backend_locator.clone(),
         }
     } else {
         SelectionStrategy::Unsupported
     }
+}
+
+fn is_multiselectable(states: &[SemanticState]) -> bool {
+    states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "multiselectable"))
+}
+
+fn is_current_available_target(states: &[SemanticState]) -> bool {
+    let enabled = states.iter().any(|state| {
+        matches!(state, SemanticState::Enabled)
+            || matches!(state, SemanticState::Other(value) if value == "sensitive")
+    });
+    let showing = states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "showing"));
+    let visible = states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "visible"));
+    enabled && (showing || visible)
 }
 
 fn action_error(error: ActionResolutionError) -> OperationResolutionError {
@@ -373,12 +457,18 @@ mod tests {
     }
 
     #[test]
-    fn gtk_style_selection_uses_parent_container_and_original_child_index() {
+    fn gtk_style_selection_carries_exact_target_and_never_a_child_index() {
         let mut root = node(0, SemanticRole::Window, "Demo");
         let mut list = node(1, SemanticRole::List, "Items");
-        list.capabilities.push(SemanticCapability::SelectChildren);
+        list.capabilities
+            .push(SemanticCapability::SelectCurrentChild);
         let mut alpha = node(2, SemanticRole::ListItem, "Alpha");
         alpha.index_in_parent = Some(7);
+        alpha.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("selectable".to_owned()),
+            SemanticState::Other("showing".to_owned()),
+        ];
         alpha.actions.push(action("listitem.scroll-to"));
         list.children.push(alpha);
         root.children.push(list);
@@ -387,8 +477,8 @@ mod tests {
         assert_eq!(
             resolve_selection_strategy(&scene, RuntimeNodeId::new(2)),
             SelectionStrategy::ParentSelection {
-                container_locator: BackendLocator::new(":1.2", "/node/1"),
-                child_index: 7,
+                collection_locator: BackendLocator::new(":1.2", "/node/1"),
+                target_locator: BackendLocator::new(":1.2", "/node/2"),
             }
         );
     }
@@ -396,10 +486,17 @@ mod tests {
     #[test]
     fn qt_style_toggle_action_resolves_to_select_not_toggle_semantics() {
         let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut list = node(2, SemanticRole::List, "Items");
         let mut item = node(1, SemanticRole::ListItem, "Beta");
         item.index_in_parent = Some(1);
+        item.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("selectable".to_owned()),
+            SemanticState::Other("showing".to_owned()),
+        ];
         item.actions.push(action("Toggle"));
-        root.children.push(item);
+        list.children.push(item);
+        root.children.push(list);
         let scene = compile_legacy_scene(&root);
 
         assert_eq!(
@@ -408,8 +505,30 @@ mod tests {
         );
         assert!(matches!(
             resolve_selection_strategy(&scene, RuntimeNodeId::new(1)),
-            SelectionStrategy::NodeAction { action } if action.name == "Toggle"
+            SelectionStrategy::NodeAction { action, .. } if action.name == "Toggle"
         ));
+    }
+
+    #[test]
+    fn multiselect_toggle_never_becomes_single_select() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut list = node(2, SemanticRole::List, "Items");
+        list.states = vec![SemanticState::Other("multiselectable".to_owned())];
+        let mut item = node(1, SemanticRole::ListItem, "Beta");
+        item.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("selectable".to_owned()),
+            SemanticState::Other("showing".to_owned()),
+        ];
+        item.actions.push(action("Toggle"));
+        list.children.push(item);
+        root.children.push(list);
+        let scene = compile_legacy_scene(&root);
+
+        assert_eq!(
+            resolve_selection_strategy(&scene, RuntimeNodeId::new(1)),
+            SelectionStrategy::Unsupported
+        );
     }
 
     #[test]

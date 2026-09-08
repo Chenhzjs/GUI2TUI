@@ -51,6 +51,7 @@ pub enum ContentViewCommand {
     CancelFullSearch,
     OpenStructure,
     StructureMove { rows: isize, columns: isize },
+    SelectCurrentTableRow,
 }
 
 impl ContentViewState {
@@ -72,6 +73,28 @@ impl ContentViewState {
             full_search: None,
             virtual_collection: None,
             table: None,
+            restore_scene,
+            restore_runtime,
+        }
+    }
+
+    pub fn for_table(
+        table: SemanticTableModel,
+        restore_scene: Option<SceneElementId>,
+        restore_runtime: Option<RuntimeNodeId>,
+    ) -> Self {
+        Self {
+            root: table.owner,
+            position: ContentBlockId::new(0),
+            mode: ContentViewMode::Table,
+            reader_blocks: Vec::new(),
+            outline_selected: 0,
+            query: String::new(),
+            results: Vec::new(),
+            result_selected: 0,
+            full_search: None,
+            virtual_collection: None,
+            table: Some(table),
             restore_scene,
             restore_runtime,
         }
@@ -171,6 +194,9 @@ impl ContentViewState {
                     rows: 0,
                     columns: 1,
                 },
+                KeyCode::Enter if self.table.as_ref().is_some_and(|table| table.row_selection) => {
+                    ContentViewCommand::SelectCurrentTableRow
+                }
                 _ => ContentViewCommand::Continue,
             },
         }
@@ -257,6 +283,16 @@ mod tests {
         let mut state =
             ContentViewState::new(RuntimeNodeId::new(1), ContentBlockId::new(1), None, None);
         state.mode = ContentViewMode::Table;
+        state.table = Some(SemanticTableModel {
+            owner: RuntimeNodeId::new(1),
+            rows: Some(1),
+            columns: Some(1),
+            cells: Vec::new(),
+            column_headers: Vec::new(),
+            completeness: crate::semantic::CollectionCompleteness::Complete,
+            row_selection: true,
+            position: Default::default(),
+        });
         assert_eq!(
             state.handle_key(key(KeyCode::Right)),
             ContentViewCommand::StructureMove {
@@ -270,6 +306,10 @@ mod tests {
                 rows: 1,
                 columns: 0
             }
+        );
+        assert_eq!(
+            state.handle_key(key(KeyCode::Enter)),
+            ContentViewCommand::SelectCurrentTableRow
         );
         assert_eq!(
             state.handle_key(key(KeyCode::Esc)),

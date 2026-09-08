@@ -120,8 +120,8 @@ pub fn analyze_regions_with_graph(
 impl Analyzer {
     fn run(&mut self, root: &SemanticNode) -> RegionAnalysis {
         self.metrics.semantic_nodes = count_nodes(root);
-        self.metrics.interactive_nodes = count_interactive(root, &[]);
-        let root = self.analyze_node(root, &[], &[]);
+        self.metrics.interactive_nodes = count_interactive(root, &[], &[]);
+        let root = self.analyze_node(root, &[], &[], &[]);
         self.metrics.regions = count_regions(&root);
         RegionAnalysis {
             root,
@@ -141,10 +141,11 @@ impl Analyzer {
         &mut self,
         node: &SemanticNode,
         parent_capabilities: &[crate::semantic::SemanticCapability],
+        parent_states: &[crate::semantic::SemanticState],
         command_path: &[String],
     ) -> SemanticRegion {
         if is_command_container(node) {
-            return self.command_set(node, parent_capabilities, command_path);
+            return self.command_set(node, parent_capabilities, parent_states, command_path);
         }
         if node.role == SemanticRole::List {
             return self.selection_region(node);
@@ -173,7 +174,14 @@ impl Analyzer {
         if node.role == SemanticRole::TextInput
             && let Some((label_id, label)) = self.relations.labels.get(&node.runtime_id).cloned()
         {
-            return self.relation_field(node, label_id, label, parent_capabilities, command_path);
+            return self.relation_field(
+                node,
+                label_id,
+                label,
+                parent_capabilities,
+                parent_states,
+                command_path,
+            );
         }
         if matches!(node.role, SemanticRole::Label | SemanticRole::Text)
             && let Some(control) = unique_descendant_text_input(node)
@@ -185,9 +193,12 @@ impl Analyzer {
             );
             field.label = node.name.clone().or_else(|| control.name.clone());
             field.confidence = RegionConfidence::Strong;
-            field
-                .children
-                .push(self.control_region(control, parent_capabilities, command_path));
+            field.children.push(self.control_region(
+                control,
+                parent_capabilities,
+                parent_states,
+                command_path,
+            ));
             self.metrics.reconstructed += 1;
             return field;
         }
@@ -206,7 +217,8 @@ impl Analyzer {
         }
         if node.role == SemanticRole::ComboBox {
             self.metrics.direct_controls += 1;
-            let control = self.control_region(node, parent_capabilities, command_path);
+            let control =
+                self.control_region(node, parent_capabilities, parent_states, command_path);
             let expanded = node
                 .states
                 .contains(&crate::semantic::SemanticState::Expanded);
@@ -229,18 +241,18 @@ impl Analyzer {
                 );
                 group.label = node.name.clone();
                 group.children.push(control);
-                group.children.extend(
-                    popup_children
-                        .into_iter()
-                        .map(|child| self.analyze_node(child, &node.capabilities, command_path)),
-                );
+                group
+                    .children
+                    .extend(popup_children.into_iter().map(|child| {
+                        self.analyze_node(child, &node.capabilities, &node.states, command_path)
+                    }));
                 return group;
             }
             return control;
         }
         if is_direct_control(node) {
             self.metrics.direct_controls += 1;
-            return self.control_region(node, parent_capabilities, command_path);
+            return self.control_region(node, parent_capabilities, parent_states, command_path);
         }
         if matches!(node.role, SemanticRole::Label | SemanticRole::Text) {
             let mut region = SemanticRegion::terminal_native(
@@ -305,6 +317,7 @@ impl Analyzer {
                     label_id,
                     label,
                     &node.capabilities,
+                    &node.states,
                     command_path,
                 ));
                 index += 1;
@@ -332,7 +345,14 @@ impl Analyzer {
                     group.confidence = RegionConfidence::Strong;
                     group.children = radios
                         .iter()
-                        .map(|radio| self.control_region(radio, &node.capabilities, command_path))
+                        .map(|radio| {
+                            self.control_region(
+                                radio,
+                                &node.capabilities,
+                                &node.states,
+                                command_path,
+                            )
+                        })
                         .collect();
                     self.metrics.selection_regions += 1;
                     self.metrics.reconstructed += 1;
@@ -354,15 +374,18 @@ impl Analyzer {
                 );
                 field.label = child.name.clone().or_else(|| control.name.clone());
                 field.confidence = RegionConfidence::Strong;
-                field
-                    .children
-                    .push(self.control_region(control, &node.capabilities, command_path));
+                field.children.push(self.control_region(
+                    control,
+                    &node.capabilities,
+                    &node.states,
+                    command_path,
+                ));
                 self.metrics.reconstructed += 1;
                 regions.push(field);
                 index += 2;
                 continue;
             }
-            regions.push(self.analyze_node(child, &node.capabilities, command_path));
+            regions.push(self.analyze_node(child, &node.capabilities, &node.states, command_path));
             index += 1;
         }
 
@@ -410,6 +433,7 @@ impl Analyzer {
         label_id: RuntimeNodeId,
         label: String,
         parent_capabilities: &[crate::semantic::SemanticCapability],
+        parent_states: &[crate::semantic::SemanticState],
         command_path: &[String],
     ) -> SemanticRegion {
         let mut field = SemanticRegion::terminal_native(
@@ -437,9 +461,12 @@ impl Analyzer {
             .get(&control.runtime_id)
             .cloned()
             .unwrap_or_default();
-        field
-            .children
-            .push(self.control_region(control, parent_capabilities, command_path));
+        field.children.push(self.control_region(
+            control,
+            parent_capabilities,
+            parent_states,
+            command_path,
+        ));
         self.metrics.reconstructed += 1;
         field
     }
@@ -448,13 +475,16 @@ impl Analyzer {
         &mut self,
         node: &SemanticNode,
         parent_capabilities: &[crate::semantic::SemanticCapability],
+        parent_states: &[crate::semantic::SemanticState],
         command_path: &[String],
     ) -> SemanticRegion {
         let capability = interaction_capability(
             &node.role,
+            &node.states,
             &node.actions,
             &node.capabilities,
             parent_capabilities,
+            parent_states,
         );
         let mut region = SemanticRegion::terminal_native(
             self.id(),
@@ -483,7 +513,7 @@ impl Analyzer {
         region.children = node
             .children
             .iter()
-            .map(|child| self.control_region(child, &node.capabilities, &[]))
+            .map(|child| self.control_region(child, &node.capabilities, &node.states, &[]))
             .collect();
         region
     }
@@ -492,6 +522,7 @@ impl Analyzer {
         &mut self,
         node: &SemanticNode,
         parent_capabilities: &[crate::semantic::SemanticCapability],
+        parent_states: &[crate::semantic::SemanticState],
         inherited_path: &[String],
     ) -> SemanticRegion {
         self.metrics.command_regions += 1;
@@ -505,7 +536,14 @@ impl Analyzer {
         if let Some(name) = &node.name {
             path.push(name.clone());
         }
-        collect_commands(self, node, parent_capabilities, &path, &mut region.children);
+        collect_commands(
+            self,
+            node,
+            parent_capabilities,
+            parent_states,
+            &path,
+            &mut region.children,
+        );
         region
     }
 }
@@ -514,6 +552,7 @@ fn collect_commands(
     analyzer: &mut Analyzer,
     node: &SemanticNode,
     parent_capabilities: &[crate::semantic::SemanticCapability],
+    parent_states: &[crate::semantic::SemanticState],
     path: &[String],
     output: &mut Vec<SemanticRegion>,
 ) {
@@ -528,17 +567,32 @@ fn collect_commands(
             if let Some(name) = &child.name {
                 child_path.push(name.clone());
             }
-            collect_commands(analyzer, child, &node.capabilities, &child_path, output);
+            collect_commands(
+                analyzer,
+                child,
+                &node.capabilities,
+                &node.states,
+                &child_path,
+                output,
+            );
             continue;
         }
         if is_direct_control(child) && !child.actions.is_empty() {
-            let mut command = analyzer.control_region(child, parent_capabilities, &child_path);
+            let mut command =
+                analyzer.control_region(child, parent_capabilities, parent_states, &child_path);
             command.command_path = child_path;
             if !command.interactions.is_empty() {
                 output.push(command);
             }
         } else {
-            collect_commands(analyzer, child, &node.capabilities, &child_path, output);
+            collect_commands(
+                analyzer,
+                child,
+                &node.capabilities,
+                &node.states,
+                &child_path,
+                output,
+            );
         }
     }
 }
@@ -626,6 +680,7 @@ fn is_direct_control(node: &SemanticNode) -> bool {
             | SemanticRole::ComboBox
             | SemanticRole::ListItem
             | SemanticRole::MenuItem
+            | SemanticRole::Table
     ) || (node.role == SemanticRole::Slider
         && node.capabilities.contains(&SemanticCapability::Value))
 }
@@ -688,19 +743,22 @@ fn count_nodes(node: &SemanticNode) -> usize {
 fn count_interactive(
     node: &SemanticNode,
     parent_capabilities: &[crate::semantic::SemanticCapability],
+    parent_states: &[crate::semantic::SemanticState],
 ) -> usize {
     let own = usize::from(
         interaction_capability(
             &node.role,
+            &node.states,
             &node.actions,
             &node.capabilities,
             parent_capabilities,
+            parent_states,
         ) != InteractionCapability::None,
     );
     own + node
         .children
         .iter()
-        .map(|child| count_interactive(child, &node.capabilities))
+        .map(|child| count_interactive(child, &node.capabilities, &node.states))
         .sum::<usize>()
 }
 
@@ -902,9 +960,15 @@ mod tests {
     #[test]
     fn list_is_selection_and_parent_capability_preserves_item_interaction() {
         let mut list = node(1, SemanticRole::List, "Items");
-        list.capabilities.push(SemanticCapability::SelectChildren);
+        list.capabilities
+            .push(SemanticCapability::SelectCurrentChild);
         let mut beta = node(2, SemanticRole::ListItem, "Beta");
         beta.index_in_parent = Some(1);
+        beta.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("selectable".to_owned()),
+            SemanticState::Other("showing".to_owned()),
+        ];
         list.children.push(beta);
         let result = analyze_regions(&list);
         assert_eq!(result.root.kind, SemanticRegionKind::Selection);

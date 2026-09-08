@@ -542,7 +542,6 @@ fn intent_for_role(role: &SemanticRole) -> Option<UiIntent> {
         SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
             Some(UiIntent::Toggle)
         }
-        SemanticRole::ListItem => Some(UiIntent::Select),
         SemanticRole::MenuItem => Some(UiIntent::Activate),
         SemanticRole::ComboBox => Some(UiIntent::Activate),
         _ => None,
@@ -558,6 +557,7 @@ fn capability_for_intent(intent: UiIntent) -> InteractionCapability {
         UiIntent::OpenMenu => InteractionCapability::OpenMenu,
         UiIntent::BeginEdit => InteractionCapability::EditText,
         UiIntent::IncreaseValue | UiIntent::DecreaseValue => InteractionCapability::AdjustValue,
+        UiIntent::BeginRead => InteractionCapability::BrowseContent,
         _ => InteractionCapability::None,
     }
 }

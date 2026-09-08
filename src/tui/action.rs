@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::semantic::{SemanticAction, SemanticCapability, SemanticRole};
+use crate::semantic::{SemanticAction, SemanticCapability, SemanticRole, SemanticState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiIntent {
@@ -82,9 +82,11 @@ pub fn resolve_action<'a>(
 
 pub fn interaction_capability(
     role: &SemanticRole,
+    states: &[SemanticState],
     actions: &[SemanticAction],
     capabilities: &[SemanticCapability],
     parent_capabilities: &[SemanticCapability],
+    parent_states: &[SemanticState],
 ) -> InteractionCapability {
     if *role == SemanticRole::TextInput && capabilities.contains(&SemanticCapability::EditText) {
         return InteractionCapability::EditText;
@@ -92,14 +94,40 @@ pub fn interaction_capability(
     if *role == SemanticRole::Slider && capabilities.contains(&SemanticCapability::Value) {
         return InteractionCapability::AdjustValue;
     }
+    if *role == SemanticRole::Table {
+        let visible = states.iter().any(
+            |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
+        );
+        let defunct = states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == "defunct"));
+        return if visible && !defunct {
+            InteractionCapability::BrowseContent
+        } else {
+            InteractionCapability::None
+        };
+    }
     let intent = match role {
         SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
             UiIntent::Toggle
         }
         SemanticRole::Button => UiIntent::Activate,
         SemanticRole::ListItem => {
-            if resolve_action(role, actions, UiIntent::Select).is_ok()
-                || parent_capabilities.contains(&SemanticCapability::SelectChildren)
+            let enabled = states.iter().any(|state| {
+                matches!(state, SemanticState::Enabled)
+                    || matches!(state, SemanticState::Other(value) if value == "sensitive")
+            });
+            let visible = states.iter().any(
+                |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
+            );
+            let multiselectable = parent_states.iter().chain(states).any(
+                |state| matches!(state, SemanticState::Other(value) if value == "multiselectable"),
+            );
+            if enabled
+                && visible
+                && !multiselectable
+                && (resolve_action(role, actions, UiIntent::Select).is_ok()
+                    || parent_capabilities.contains(&SemanticCapability::SelectCurrentChild))
             {
                 return InteractionCapability::Select;
             }
@@ -216,24 +244,56 @@ mod tests {
 
     #[test]
     fn capability_requires_a_role_compatible_advertised_action() {
+        let selectable = [
+            SemanticState::Enabled,
+            SemanticState::Other("showing".to_owned()),
+        ];
         assert_eq!(
-            interaction_capability(&SemanticRole::Button, &actions(&["Click"]), &[], &[]),
+            interaction_capability(
+                &SemanticRole::Button,
+                &[],
+                &actions(&["Click"]),
+                &[],
+                &[],
+                &[]
+            ),
             InteractionCapability::Activate
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::CheckBox, &[], &[], &[]),
+            interaction_capability(&SemanticRole::CheckBox, &[], &[], &[], &[], &[]),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[], &[]),
+            interaction_capability(
+                &SemanticRole::TextInput,
+                &[],
+                &actions(&["Activate"]),
+                &[],
+                &[],
+                &[]
+            ),
             InteractionCapability::None
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::ListItem, &actions(&["Toggle"]), &[], &[]),
+            interaction_capability(
+                &SemanticRole::ListItem,
+                &selectable,
+                &actions(&["Toggle"]),
+                &[],
+                &[],
+                &[]
+            ),
             InteractionCapability::Select
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::RadioButton, &actions(&["Toggle"]), &[], &[]),
+            interaction_capability(
+                &SemanticRole::RadioButton,
+                &[],
+                &actions(&["Toggle"]),
+                &[],
+                &[],
+                &[]
+            ),
             InteractionCapability::Toggle
         );
     }
@@ -264,9 +324,11 @@ mod tests {
         assert_eq!(
             interaction_capability(
                 &SemanticRole::ComboBox,
+                &[],
                 &actions(&["ShowMenu", "Press"]),
                 &[],
-                &[]
+                &[],
+                &[],
             ),
             InteractionCapability::None
         );
@@ -288,9 +350,15 @@ mod tests {
         assert_eq!(
             interaction_capability(
                 &SemanticRole::ListItem,
+                &[
+                    SemanticState::Enabled,
+                    SemanticState::Other("selectable".to_owned()),
+                    SemanticState::Other("showing".to_owned()),
+                ],
                 &actions(&["listitem.scroll-to"]),
                 &[],
-                &[SemanticCapability::SelectChildren]
+                &[SemanticCapability::SelectCurrentChild],
+                &[],
             ),
             InteractionCapability::Select
         );
@@ -302,13 +370,22 @@ mod tests {
             interaction_capability(
                 &SemanticRole::TextInput,
                 &[],
+                &[],
                 &[SemanticCapability::EditText],
-                &[]
+                &[],
+                &[],
             ),
             InteractionCapability::EditText
         );
         assert_eq!(
-            interaction_capability(&SemanticRole::TextInput, &actions(&["Activate"]), &[], &[]),
+            interaction_capability(
+                &SemanticRole::TextInput,
+                &[],
+                &actions(&["Activate"]),
+                &[],
+                &[],
+                &[]
+            ),
             InteractionCapability::None
         );
     }

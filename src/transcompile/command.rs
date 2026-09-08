@@ -140,11 +140,17 @@ impl CommandHierarchy {
                 .parent
                 .and_then(|parent| cache.node(parent))
                 .map_or(&[][..], |parent| parent.capabilities.as_slice());
+            let parent_states = node
+                .parent
+                .and_then(|parent| cache.node(parent))
+                .map_or(&[][..], |parent| parent.states.as_slice());
             let capability = interaction_capability(
                 &node.role,
+                &node.states,
                 &node.actions,
                 &node.capabilities,
                 parent_capabilities,
+                parent_states,
             );
             let structural_reveal = capability != InteractionCapability::None
                 && has_safe_command_descendant(cache, node.runtime_id);
@@ -186,9 +192,11 @@ fn has_safe_command_descendant(cache: &SemanticCache, id: RuntimeNodeId) -> bool
         (is_command_role(&child.role)
             && interaction_capability(
                 &child.role,
+                &child.states,
                 &child.actions,
                 &child.capabilities,
                 parent_capabilities,
+                &node.states,
             ) != InteractionCapability::None)
             || has_safe_command_descendant(cache, *child_id)
     })
@@ -209,9 +217,11 @@ fn collect_command_entries(
         let parent_capabilities = node.capabilities.as_slice();
         let capability = interaction_capability(
             &child.role,
+            &child.states,
             &child.actions,
             &child.capabilities,
             parent_capabilities,
+            &node.states,
         );
         let command = (is_command_role(&child.role))
             .then(|| capability_intent(capability))
