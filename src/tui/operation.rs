@@ -15,6 +15,9 @@ pub enum SemanticOperation {
     ActivateNode(RuntimeNodeId),
     ToggleNode(RuntimeNodeId),
     SelectNode(RuntimeNodeId),
+    ExpandNode(RuntimeNodeId),
+    CollapseNode(RuntimeNodeId),
+    SwitchPage(RuntimeNodeId),
     OpenMenu(RuntimeNodeId),
     ClosePopup(RuntimeNodeId),
     ReplaceText {
@@ -38,6 +41,9 @@ impl SemanticOperation {
             UiIntent::Activate => Some(Self::ActivateNode(runtime_id)),
             UiIntent::Toggle => Some(Self::ToggleNode(runtime_id)),
             UiIntent::Select => Some(Self::SelectNode(runtime_id)),
+            UiIntent::Expand => Some(Self::ExpandNode(runtime_id)),
+            UiIntent::Collapse => Some(Self::CollapseNode(runtime_id)),
+            UiIntent::SwitchPage => Some(Self::SwitchPage(runtime_id)),
             UiIntent::OpenMenu => Some(Self::OpenMenu(runtime_id)),
             UiIntent::ClosePopup => Some(Self::ClosePopup(runtime_id)),
             UiIntent::IncreaseValue => Some(Self::AdjustValue {
@@ -57,6 +63,9 @@ impl SemanticOperation {
             Self::ActivateNode(id)
             | Self::ToggleNode(id)
             | Self::SelectNode(id)
+            | Self::ExpandNode(id)
+            | Self::CollapseNode(id)
+            | Self::SwitchPage(id)
             | Self::OpenMenu(id)
             | Self::ClosePopup(id) => *id,
             Self::ReplaceText { target, .. }
@@ -70,6 +79,9 @@ impl SemanticOperation {
             Self::ActivateNode(_) => UiIntent::Activate,
             Self::ToggleNode(_) => UiIntent::Toggle,
             Self::SelectNode(_) => UiIntent::Select,
+            Self::ExpandNode(_) => UiIntent::Expand,
+            Self::CollapseNode(_) => UiIntent::Collapse,
+            Self::SwitchPage(_) => UiIntent::SwitchPage,
             Self::OpenMenu(_) => UiIntent::OpenMenu,
             Self::ClosePopup(_) => UiIntent::ClosePopup,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
@@ -97,6 +109,9 @@ pub fn resolve_cached_node_operation(
     let node = cache
         .node(runtime_id)
         .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+    if matches!(operation, SemanticOperation::SwitchPage(_)) {
+        return resolve_cached_page_switch(cache, runtime_id);
+    }
     if matches!(
         operation,
         SemanticOperation::SelectNode(_)
@@ -132,6 +147,11 @@ pub enum BackendOperation {
         table_locator: BackendLocator,
         target_cell_locator: BackendLocator,
     },
+    SwitchCurrentPage {
+        tab_list_locator: BackendLocator,
+        target_locator: BackendLocator,
+        action: Option<SemanticAction>,
+    },
     SetTextContents {
         locator: BackendLocator,
         text: String,
@@ -156,6 +176,20 @@ pub enum SelectionStrategy {
     },
     ParentSelection {
         collection_locator: BackendLocator,
+        target_locator: BackendLocator,
+    },
+    Unsupported,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PageSwitchStrategy {
+    TabAction {
+        tab_list_locator: BackendLocator,
+        target_locator: BackendLocator,
+        action: SemanticAction,
+    },
+    TabListSelection {
+        tab_list_locator: BackendLocator,
         target_locator: BackendLocator,
     },
     Unsupported,
@@ -332,6 +366,34 @@ pub fn resolve_backend_operation(
         };
     }
 
+    if matches!(operation, SemanticOperation::SwitchPage(_)) {
+        return match resolve_page_switch_strategy(scene, runtime_id) {
+            PageSwitchStrategy::TabAction {
+                tab_list_locator,
+                target_locator,
+                action,
+            } => Ok(BackendOperation::SwitchCurrentPage {
+                tab_list_locator,
+                target_locator,
+                action: Some(action),
+            }),
+            PageSwitchStrategy::TabListSelection {
+                tab_list_locator,
+                target_locator,
+            } => Ok(BackendOperation::SwitchCurrentPage {
+                tab_list_locator,
+                target_locator,
+                action: None,
+            }),
+            PageSwitchStrategy::Unsupported => {
+                Err(OperationResolutionError::NoCompatibleOperation(
+                    "the page tab has neither a compatible action nor a selectable PageTabList"
+                        .to_owned(),
+                ))
+            }
+        };
+    }
+
     let action = resolve_action(&binding.semantic_role, &binding.actions, operation.intent())
         .map_err(action_error)?
         .clone();
@@ -339,6 +401,109 @@ pub fn resolve_backend_operation(
         locator: binding.backend_locator.clone(),
         action,
     })
+}
+
+pub fn resolve_page_switch_strategy(
+    scene: &TuiScene,
+    runtime_id: RuntimeNodeId,
+) -> PageSwitchStrategy {
+    let Some(scene_id) = scene.scene_id_for_runtime(runtime_id) else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    let Some(binding) = scene
+        .element(scene_id)
+        .and_then(|element| element.binding.as_ref())
+    else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    let Some(context) = scene.node_context(runtime_id) else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    let Some(parent_id) = context.parent_id else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    let Some(parent) = scene.node_metadata(parent_id) else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    let Some(target) = scene.node_metadata(runtime_id) else {
+        return PageSwitchStrategy::Unsupported;
+    };
+    if binding.semantic_role != SemanticRole::Tab
+        || target.role != SemanticRole::Tab
+        || parent.role != SemanticRole::TabList
+        || is_multiselectable(&parent.states)
+        || is_multiselectable(&target.states)
+        || !is_current_available_target(&target.states)
+    {
+        return PageSwitchStrategy::Unsupported;
+    }
+    if let Ok(action) = resolve_action(
+        &binding.semantic_role,
+        &binding.actions,
+        UiIntent::SwitchPage,
+    ) {
+        return PageSwitchStrategy::TabAction {
+            tab_list_locator: parent.backend_locator.clone(),
+            target_locator: binding.backend_locator.clone(),
+            action: action.clone(),
+        };
+    }
+    if parent
+        .capabilities
+        .contains(&SemanticCapability::SelectChildren)
+    {
+        PageSwitchStrategy::TabListSelection {
+            tab_list_locator: parent.backend_locator.clone(),
+            target_locator: binding.backend_locator.clone(),
+        }
+    } else {
+        PageSwitchStrategy::Unsupported
+    }
+}
+
+fn resolve_cached_page_switch(
+    cache: &SemanticCache,
+    runtime_id: RuntimeNodeId,
+) -> Result<BackendOperation, OperationResolutionError> {
+    let target = cache
+        .node(runtime_id)
+        .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+    let parent = target.parent.and_then(|id| cache.node(id)).ok_or_else(|| {
+        OperationResolutionError::NoCompatibleOperation(
+            "page tab has no current PageTabList".to_owned(),
+        )
+    })?;
+    if target.role != SemanticRole::Tab
+        || parent.role != SemanticRole::TabList
+        || is_multiselectable(&parent.states)
+        || is_multiselectable(&target.states)
+        || !is_current_available_target(&target.states)
+    {
+        return Err(OperationResolutionError::NoCompatibleOperation(
+            "page tab is no longer a qualified current page target".to_owned(),
+        ));
+    }
+    if let Ok(action) = resolve_action(&target.role, &target.actions, UiIntent::SwitchPage) {
+        return Ok(BackendOperation::SwitchCurrentPage {
+            tab_list_locator: parent.backend_locator.clone(),
+            target_locator: target.backend_locator.clone(),
+            action: Some(action.clone()),
+        });
+    }
+    if parent
+        .capabilities
+        .contains(&SemanticCapability::SelectChildren)
+    {
+        Ok(BackendOperation::SwitchCurrentPage {
+            tab_list_locator: parent.backend_locator.clone(),
+            target_locator: target.backend_locator.clone(),
+            action: None,
+        })
+    } else {
+        Err(OperationResolutionError::NoCompatibleOperation(
+            "page tab is no longer a qualified current page target".to_owned(),
+        ))
+    }
 }
 
 pub fn resolve_selection_strategy(
@@ -506,6 +671,62 @@ mod tests {
         assert!(matches!(
             resolve_selection_strategy(&scene, RuntimeNodeId::new(1)),
             SelectionStrategy::NodeAction { action, .. } if action.name == "Toggle"
+        ));
+    }
+
+    #[test]
+    fn page_switch_targets_exact_current_tab_and_never_carries_a_tab_index() {
+        let mut gtk_root = node(0, SemanticRole::Window, "GTK pages");
+        let mut gtk_tabs = node(1, SemanticRole::TabList, "Pages");
+        gtk_tabs
+            .capabilities
+            .push(SemanticCapability::SelectChildren);
+        gtk_tabs.states = vec![SemanticState::Other("showing".to_owned())];
+        let mut gtk_target = node(2, SemanticRole::Tab, "Advanced");
+        gtk_target.index_in_parent = Some(7);
+        gtk_target.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("showing".to_owned()),
+        ];
+        gtk_tabs.children.push(gtk_target);
+        gtk_root.children.push(gtk_tabs);
+        let gtk_scene = compile_legacy_scene(&gtk_root);
+        assert_eq!(
+            resolve_backend_operation(
+                &gtk_scene,
+                SemanticOperation::SwitchPage(RuntimeNodeId::new(2))
+            ),
+            Ok(BackendOperation::SwitchCurrentPage {
+                tab_list_locator: BackendLocator::new(":1.2", "/node/1"),
+                target_locator: BackendLocator::new(":1.2", "/node/2"),
+                action: None,
+            })
+        );
+
+        let mut qt_root = node(10, SemanticRole::Window, "Qt pages");
+        let mut qt_tabs = node(11, SemanticRole::TabList, "General");
+        let mut qt_target = node(12, SemanticRole::Tab, "Advanced");
+        qt_target.index_in_parent = Some(4);
+        qt_target.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("showing".to_owned()),
+        ];
+        qt_target.actions.push(action("Press"));
+        qt_tabs.children.push(qt_target);
+        qt_root.children.push(qt_tabs);
+        let qt_scene = compile_legacy_scene(&qt_root);
+        assert!(matches!(
+            resolve_backend_operation(
+                &qt_scene,
+                SemanticOperation::SwitchPage(RuntimeNodeId::new(12))
+            ),
+            Ok(BackendOperation::SwitchCurrentPage {
+                tab_list_locator,
+                target_locator,
+                action: Some(action),
+            }) if tab_list_locator == BackendLocator::new(":1.2", "/node/11")
+                && target_locator == BackendLocator::new(":1.2", "/node/12")
+                && action.name == "Press"
         ));
     }
 

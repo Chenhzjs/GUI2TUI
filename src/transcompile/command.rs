@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    semantic::{BackendLocator, RuntimeNodeId, SemanticCache, SemanticRole, SemanticState},
+    semantic::{
+        BackendLocator, CachedSemanticNode, RuntimeNodeId, SemanticCache, SemanticRole,
+        SemanticState,
+    },
     tui::action::{InteractionCapability, UiIntent, interaction_capability},
 };
 
@@ -229,7 +232,7 @@ fn collect_command_entries(
             .map(|intent| SemanticCommand {
                 source: child.runtime_id,
                 backend_locator: child.backend_locator.clone(),
-                label: child.name.clone().unwrap_or_else(|| child.role.to_string()),
+                label: command_label(child, intent),
                 scope,
                 intent,
                 enabled: !child.states.iter().any(
@@ -375,6 +378,8 @@ fn is_command_role(role: &SemanticRole) -> bool {
             | SemanticRole::ToggleButton
             | SemanticRole::CheckBox
             | SemanticRole::RadioButton
+            | SemanticRole::Tab
+            | SemanticRole::TreeItem
     )
 }
 
@@ -388,12 +393,25 @@ fn capability_intent(capability: InteractionCapability) -> Option<UiIntent> {
         InteractionCapability::Activate => Some(UiIntent::Activate),
         InteractionCapability::Toggle => Some(UiIntent::Toggle),
         InteractionCapability::Select => Some(UiIntent::Select),
+        InteractionCapability::Expand => Some(UiIntent::Expand),
+        InteractionCapability::Collapse => Some(UiIntent::Collapse),
+        InteractionCapability::SwitchPage => Some(UiIntent::SwitchPage),
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText
         | InteractionCapability::AdjustValue
         | InteractionCapability::BrowseContent
         | InteractionCapability::None => None,
+    }
+}
+
+fn command_label(node: &CachedSemanticNode, intent: UiIntent) -> String {
+    let label = node.name.clone().unwrap_or_else(|| node.role.to_string());
+    match intent {
+        UiIntent::Expand => format!("Expand {label}"),
+        UiIntent::Collapse => format!("Collapse {label}"),
+        UiIntent::SwitchPage => format!("Switch to {label}"),
+        _ => label,
     }
 }
 

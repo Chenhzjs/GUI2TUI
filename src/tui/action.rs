@@ -13,6 +13,9 @@ pub enum UiIntent {
     Activate,
     Toggle,
     Select,
+    Expand,
+    Collapse,
+    SwitchPage,
     BeginChoice,
     OpenMenu,
     ClosePopup,
@@ -38,6 +41,9 @@ pub enum InteractionCapability {
     Activate,
     Toggle,
     Select,
+    Expand,
+    Collapse,
+    SwitchPage,
     Choose,
     OpenMenu,
     EditText,
@@ -88,6 +94,24 @@ pub fn interaction_capability(
     parent_capabilities: &[SemanticCapability],
     parent_states: &[SemanticState],
 ) -> InteractionCapability {
+    let expanded = states.contains(&SemanticState::Expanded);
+    let expandable = states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "expandable"));
+    if expandable && is_current_action_target(states) {
+        let intent = if expanded {
+            UiIntent::Collapse
+        } else {
+            UiIntent::Expand
+        };
+        if resolve_action(role, actions, intent).is_ok() {
+            return if expanded {
+                InteractionCapability::Collapse
+            } else {
+                InteractionCapability::Expand
+            };
+        }
+    }
     if *role == SemanticRole::TextInput && capabilities.contains(&SemanticCapability::EditText) {
         return InteractionCapability::EditText;
     }
@@ -108,10 +132,16 @@ pub fn interaction_capability(
         };
     }
     let intent = match role {
-        SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
+        SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton
+            if is_current_action_target(states) =>
+        {
             UiIntent::Toggle
         }
-        SemanticRole::Button => UiIntent::Activate,
+        SemanticRole::ToggleButton | SemanticRole::CheckBox | SemanticRole::RadioButton => {
+            return InteractionCapability::None;
+        }
+        SemanticRole::Button if is_current_action_target(states) => UiIntent::Activate,
+        SemanticRole::Button => return InteractionCapability::None,
         SemanticRole::ListItem => {
             let enabled = states.iter().any(|state| {
                 matches!(state, SemanticState::Enabled)
@@ -134,10 +164,26 @@ pub fn interaction_capability(
             return InteractionCapability::None;
         }
         SemanticRole::MenuItem => {
+            if !is_current_action_target(states) {
+                return InteractionCapability::None;
+            }
             if resolve_action(role, actions, UiIntent::OpenMenu).is_ok() {
                 return InteractionCapability::OpenMenu;
             }
             UiIntent::Activate
+        }
+        SemanticRole::Tab => {
+            let multiselectable = parent_states.iter().chain(states).any(
+                |state| matches!(state, SemanticState::Other(value) if value == "multiselectable"),
+            );
+            if is_current_action_target(states)
+                && !multiselectable
+                && (resolve_action(role, actions, UiIntent::SwitchPage).is_ok()
+                    || parent_capabilities.contains(&SemanticCapability::SelectChildren))
+            {
+                return InteractionCapability::SwitchPage;
+            }
+            return InteractionCapability::None;
         }
         // Choice interactivity depends on exposed named options and their safe
         // selection strategies. It is assigned by the ChoiceCatalog, not by role.
@@ -155,6 +201,19 @@ pub fn interaction_capability(
 
 fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&'static str] {
     match (role, intent) {
+        (_, UiIntent::Expand) => &[
+            "expand",
+            "listitem.expand",
+            "toggle-expand",
+            "listitem.toggle-expand",
+        ],
+        (_, UiIntent::Collapse) => &[
+            "collapse",
+            "listitem.collapse",
+            "toggle-expand",
+            "listitem.toggle-expand",
+        ],
+        (SemanticRole::Tab, UiIntent::SwitchPage) => &["press", "activate", "click"],
         (SemanticRole::Button, UiIntent::Activate | UiIntent::Toggle) => {
             &["click", "press", "activate"]
         }
@@ -184,6 +243,29 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::ComboBox, UiIntent::ClosePopup) => &[],
         _ => &[],
     }
+}
+
+fn is_current_action_target(states: &[SemanticState]) -> bool {
+    if states.is_empty() {
+        return true;
+    }
+    let enabled = states.iter().any(|state| {
+        matches!(state, SemanticState::Enabled)
+            || matches!(state, SemanticState::Other(value) if value == "sensitive")
+    });
+    let visible = states.iter().any(
+        |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
+    );
+    let explicit_live_visibility = ["sensitive", "focusable"].into_iter().all(|expected| {
+        states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == expected))
+    });
+    let unavailable = states.iter().any(|state| {
+        matches!(state, SemanticState::ReadOnly)
+            || matches!(state, SemanticState::Other(value) if value == "defunct" || value == "disabled")
+    });
+    enabled && (visible || !explicit_live_visibility) && !unavailable
 }
 
 #[cfg(test)]
@@ -342,6 +424,37 @@ mod tests {
                 UiIntent::ClosePopup
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn expansion_requires_an_explicit_expansion_action_and_never_generic_toggle() {
+        let collapsed = [
+            SemanticState::Enabled,
+            SemanticState::Other("expandable".to_owned()),
+            SemanticState::Other("showing".to_owned()),
+        ];
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::TreeItem,
+                &collapsed,
+                &actions(&["Toggle"]),
+                &[],
+                &[],
+                &[],
+            ),
+            InteractionCapability::None
+        );
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::TreeItem,
+                &collapsed,
+                &actions(&["listitem.toggle-expand"]),
+                &[],
+                &[],
+                &[],
+            ),
+            InteractionCapability::Expand
         );
     }
 

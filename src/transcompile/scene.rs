@@ -83,6 +83,10 @@ pub enum SceneElementKind {
         label: String,
         selected: bool,
     },
+    Disclosure {
+        label: String,
+        expanded: bool,
+    },
     CommandHeader {
         label: String,
     },
@@ -129,6 +133,7 @@ impl SceneElement {
                     | SceneElementKind::Value { .. }
                     | SceneElementKind::DocumentSummary { .. }
                     | SceneElementKind::SelectionItem { .. }
+                    | SceneElementKind::Disclosure { .. }
                     | SceneElementKind::Command { .. }
             )
             || self
@@ -157,6 +162,7 @@ impl SceneElement {
             | SceneElementKind::Selector { label }
             | SceneElementKind::Value { label, .. }
             | SceneElementKind::SelectionItem { label, .. }
+            | SceneElementKind::Disclosure { label, .. }
             | SceneElementKind::CommandHeader { label }
             | SceneElementKind::OpaqueContent { label, .. }
             | SceneElementKind::Unsupported { label } => label,

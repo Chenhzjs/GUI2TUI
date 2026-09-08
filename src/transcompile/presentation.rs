@@ -406,30 +406,45 @@ impl SceneCompiler<'_> {
             return;
         }
         let label = node_label(node).unwrap_or_else(|| node.role.to_string());
-        let kind = match node.role {
-            SemanticRole::Button => SceneElementKind::Button { label },
-            SemanticRole::ToggleButton => SceneElementKind::Toggle {
+        let disclosure = region
+            .interactions
+            .iter()
+            .any(|interaction| matches!(interaction.intent, UiIntent::Expand | UiIntent::Collapse));
+        let kind = if disclosure {
+            SceneElementKind::Disclosure {
                 label,
-                pressed: node.states.contains(&SemanticState::Pressed)
-                    || node.states.contains(&SemanticState::Checked),
-            },
-            SemanticRole::CheckBox | SemanticRole::RadioButton => SceneElementKind::Checkbox {
-                label,
-                checked: node.states.contains(&SemanticState::Checked),
-            },
-            SemanticRole::ComboBox => SceneElementKind::Selector { label },
-            SemanticRole::ListItem => SceneElementKind::SelectionItem {
-                label,
-                selected: node.states.contains(&SemanticState::Selected),
-            },
-            SemanticRole::MenuItem => SceneElementKind::Command {
-                path: if region.command_path.is_empty() {
-                    label
-                } else {
-                    format!("{} › {label}", region.command_path.join(" › "))
+                expanded: node.states.contains(&SemanticState::Expanded),
+            }
+        } else {
+            match node.role {
+                SemanticRole::Button => SceneElementKind::Button { label },
+                SemanticRole::ToggleButton => SceneElementKind::Toggle {
+                    label,
+                    pressed: node.states.contains(&SemanticState::Pressed)
+                        || node.states.contains(&SemanticState::Checked),
                 },
-            },
-            _ => SceneElementKind::Unsupported { label },
+                SemanticRole::CheckBox | SemanticRole::RadioButton => SceneElementKind::Checkbox {
+                    label,
+                    checked: node.states.contains(&SemanticState::Checked),
+                },
+                SemanticRole::ComboBox => SceneElementKind::Selector { label },
+                SemanticRole::ListItem => SceneElementKind::SelectionItem {
+                    label,
+                    selected: node.states.contains(&SemanticState::Selected),
+                },
+                SemanticRole::Tab => SceneElementKind::SelectionItem {
+                    label,
+                    selected: node.states.contains(&SemanticState::Selected),
+                },
+                SemanticRole::MenuItem => SceneElementKind::Command {
+                    path: if region.command_path.is_empty() {
+                        label
+                    } else {
+                        format!("{} › {label}", region.command_path.join(" › "))
+                    },
+                },
+                _ => SceneElementKind::Unsupported { label },
+            }
         };
         self.push(
             kind,
@@ -527,6 +542,9 @@ fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> 
         InteractionCapability::Activate => Some(UiIntent::Activate),
         InteractionCapability::Toggle => Some(UiIntent::Toggle),
         InteractionCapability::Select => Some(UiIntent::Select),
+        InteractionCapability::Expand => Some(UiIntent::Expand),
+        InteractionCapability::Collapse => Some(UiIntent::Collapse),
+        InteractionCapability::SwitchPage => Some(UiIntent::SwitchPage),
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),
@@ -553,6 +571,9 @@ fn capability_for_intent(intent: UiIntent) -> InteractionCapability {
         UiIntent::Activate => InteractionCapability::Activate,
         UiIntent::Toggle => InteractionCapability::Toggle,
         UiIntent::Select => InteractionCapability::Select,
+        UiIntent::Expand => InteractionCapability::Expand,
+        UiIntent::Collapse => InteractionCapability::Collapse,
+        UiIntent::SwitchPage => InteractionCapability::SwitchPage,
         UiIntent::BeginChoice => InteractionCapability::Choose,
         UiIntent::OpenMenu => InteractionCapability::OpenMenu,
         UiIntent::BeginEdit => InteractionCapability::EditText,

@@ -1279,6 +1279,7 @@ fn interaction(element: &SceneElement) -> Option<HitInteraction> {
         | SceneElementKind::Toggle { .. }
         | SceneElementKind::Checkbox { .. }
         | SceneElementKind::SelectionItem { .. }
+        | SceneElementKind::Disclosure { .. }
         | SceneElementKind::Command { .. } => {
             Some(if element.capability() == InteractionCapability::None {
                 HitInteraction::Unavailable
@@ -1381,8 +1382,18 @@ fn element_lines_for_width(
             "    o Outline | / Content search".to_owned(),
         ],
         SceneElementKind::SelectionItem { label, selected } => vec![format!(
-            "{marker}{} {label}{unavailable}",
-            if *selected { "*" } else { "•" }
+            "{marker}{} {label}{}{unavailable}",
+            if *selected { "*" } else { "•" },
+            if element.capability() == InteractionCapability::SwitchPage {
+                "  [Enter: Switch page]"
+            } else {
+                ""
+            }
+        )],
+        SceneElementKind::Disclosure { label, expanded } => vec![format!(
+            "{marker}{} {label}  [Enter: {}]{unavailable}",
+            if *expanded { "▾" } else { "▸" },
+            if *expanded { "Collapse" } else { "Expand" }
         )],
         SceneElementKind::Command { path } => vec![format!("{marker}{path}{unavailable}")],
         SceneElementKind::OpaqueContent { label, dimensions } => vec![

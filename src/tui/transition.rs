@@ -166,6 +166,12 @@ impl TransitionCondition {
     ) -> Option<Self> {
         let node = cache.node(target)?;
         match intent {
+            UiIntent::Expand | UiIntent::Collapse => Some(Self::ExactNodeState {
+                locator: node.backend_locator.clone(),
+                state: SemanticState::Expanded,
+                present: intent == UiIntent::Expand,
+                refresh: ConditionRefresh::ExactNode,
+            }),
             UiIntent::Toggle
                 if matches!(
                     node.role,

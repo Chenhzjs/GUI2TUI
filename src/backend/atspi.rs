@@ -194,6 +194,10 @@ pub enum BackendError {
     MultiSelectionUnsupported(String),
     #[error("selection readback for {0} did not identify one exact current target")]
     SelectionReadbackAmbiguous(String),
+    #[error("page switching is unavailable for the current PageTabList {0}")]
+    PageSwitchUnsupported(String),
+    #[error("current-page readback for {0} did not identify one exact PageTab")]
+    PageSwitchReadbackAmbiguous(String),
     #[error("AT-SPI Table row selection is unavailable for {0}")]
     TableRowSelectionUnsupported(String),
     #[error("the exact current Table cell {target_id} cannot be mapped safely in {table_id}")]
@@ -2436,6 +2440,172 @@ impl AtspiBackend {
         Ok(selected_object_matches(target, node_id_from_ref(&selected)))
     }
 
+    /// Switch to one exact current PageTab. Selection-based implementations
+    /// use the same fresh locator-to-index resolution as collection Select;
+    /// action-based implementations still require a fresh target-specific
+    /// current-page proof before returning success.
+    pub async fn switch_current_page(
+        &self,
+        tab_list: &BackendLocator,
+        target: &BackendLocator,
+        action_name: Option<&str>,
+    ) -> Result<SelectionMutation, BackendError> {
+        let snapshot = self
+            .current_page_target(tab_list, target, action_name.is_some())
+            .await?;
+        if snapshot.current {
+            return Ok(SelectionMutation {
+                address: CurrentSelectionAddress::DirectChild(snapshot.index),
+                already_selected: true,
+            });
+        }
+        if let Some(action_name) = action_name {
+            self.do_action_by_name(&target.encode(), action_name)
+                .await?;
+            Ok(SelectionMutation {
+                address: CurrentSelectionAddress::DirectChild(snapshot.index),
+                already_selected: false,
+            })
+        } else {
+            self.select_current_item(tab_list, target, &SemanticRole::Tab, None)
+                .await
+        }
+    }
+
+    /// Freshly prove that an exact current PageTab is the current page.
+    pub async fn current_page_tab_is_current(
+        &self,
+        tab_list: &BackendLocator,
+        target: &BackendLocator,
+        action_selection: bool,
+    ) -> Result<bool, BackendError> {
+        Ok(self
+            .current_page_target(tab_list, target, action_selection)
+            .await?
+            .current)
+    }
+
+    async fn current_page_target(
+        &self,
+        tab_list: &BackendLocator,
+        target: &BackendLocator,
+        action_selection: bool,
+    ) -> Result<CurrentPageTarget, BackendError> {
+        let selection_target = self
+            .current_selection_target(tab_list, target, &SemanticRole::Tab)
+            .await?;
+        let tab_list_id = tab_list.encode();
+        let target_id = target.encode();
+        let tab_list_object = object_ref_from_id(tab_list)?;
+        let tab_list_proxy = tab_list_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(tab_list_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "read current PageTabList role",
+            &tab_list_id,
+            tab_list_proxy.get_role(),
+        )
+        .await?;
+        if SemanticRole::from(role) != SemanticRole::TabList {
+            return Err(BackendError::PageSwitchUnsupported(tab_list_id));
+        }
+
+        if selection_target.interfaces.contains(Interface::Selection) {
+            let current = self
+                .current_item_is_selected(tab_list, target, &SemanticRole::Tab, false)
+                .await?;
+            return Ok(CurrentPageTarget {
+                index: selection_target.index,
+                current,
+            });
+        }
+        if !action_selection {
+            return Err(BackendError::PageSwitchUnsupported(tab_list_id));
+        }
+
+        let target_object = object_ref_from_id(target)?;
+        let target_proxy = target_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(target_id.clone(), error))?;
+        let target_states = dbus_operation(
+            self.operation_timeout,
+            "read current PageTab states",
+            &target_id,
+            target_proxy.get_state(),
+        )
+        .await?;
+        if target_states.contains(State::Selected) {
+            return Ok(CurrentPageTarget {
+                index: selection_target.index,
+                current: true,
+            });
+        }
+
+        // Some public AT-SPI PageTab implementations expose the current page
+        // through a composite PageTabList contract: the exact current target
+        // is focused and the list's current-page label equals one unique
+        // current child label. Neither focus nor a name is accepted alone,
+        // and this evidence never identifies or rebinds a target locator.
+        let target_name = dbus_operation(
+            self.operation_timeout,
+            "read current PageTab name",
+            &target_id,
+            target_proxy.name(),
+        )
+        .await?;
+        let current_page_name = dbus_operation(
+            self.operation_timeout,
+            "read PageTabList current-page name",
+            &tab_list_id,
+            tab_list_proxy.name(),
+        )
+        .await?;
+        if target_name.trim().is_empty() || current_page_name != target_name {
+            return Ok(CurrentPageTarget {
+                index: selection_target.index,
+                current: false,
+            });
+        }
+        let children = dbus_operation(
+            self.operation_timeout,
+            "read current PageTabList children for current-page proof",
+            &tab_list_id,
+            tab_list_proxy.get_children(),
+        )
+        .await?;
+        let mut matching_names = 0_usize;
+        for child in children {
+            let Some(child_locator) = node_id_from_ref(&child) else {
+                continue;
+            };
+            let child_id = child_locator.encode();
+            let child_proxy = child
+                .as_accessible_proxy(self.connection.connection())
+                .await
+                .map_err(|error| BackendError::ObjectUnavailable(child_id.clone(), error))?;
+            let child_name = dbus_operation(
+                self.operation_timeout,
+                "read PageTab child name for uniqueness",
+                &child_id,
+                child_proxy.name(),
+            )
+            .await?;
+            if child_name == target_name {
+                matching_names = matching_names.saturating_add(1);
+            }
+        }
+        if matching_names != 1 {
+            return Err(BackendError::PageSwitchReadbackAmbiguous(tab_list_id));
+        }
+        Ok(CurrentPageTarget {
+            index: selection_target.index,
+            current: target_states.contains(State::Focused),
+        })
+    }
+
     /// Select the Table row containing one exact current realized cell. The
     /// row number is freshly derived from public Table structure.
     pub async fn select_current_table_row(
@@ -3239,6 +3409,11 @@ struct CurrentSelectionTarget {
     index: usize,
     selected: bool,
     interfaces: InterfaceSet,
+}
+
+struct CurrentPageTarget {
+    index: usize,
+    current: bool,
 }
 
 fn current_item_states_are_available(states: &StateSet) -> bool {

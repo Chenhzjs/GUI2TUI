@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     semantic::{
         RelationalSemanticGraph, RuntimeNodeId, SemanticCapability, SemanticNode, SemanticRole,
+        SemanticState,
     },
     tui::action::{InteractionCapability, UiIntent, interaction_capability},
 };
@@ -147,7 +148,9 @@ impl Analyzer {
         if is_command_container(node) {
             return self.command_set(node, parent_capabilities, parent_states, command_path);
         }
-        if node.role == SemanticRole::List {
+        if node.role == SemanticRole::List
+            || (node.role == SemanticRole::TabList && page_tab_list_is_interactive(node))
+        {
             return self.selection_region(node);
         }
         if node.role == SemanticRole::StatusBar {
@@ -302,6 +305,10 @@ impl Analyzer {
         let mut index = 0;
         while index < node.children.len() {
             let child = &node.children[index];
+            if is_explicitly_noncurrent(child) {
+                index += 1;
+                continue;
+            }
             if self.relations.consumed_labels.contains(&child.runtime_id)
                 && child.children.is_empty()
             {
@@ -679,10 +686,51 @@ fn is_direct_control(node: &SemanticNode) -> bool {
             | SemanticRole::TextInput
             | SemanticRole::ComboBox
             | SemanticRole::ListItem
+            | SemanticRole::TreeItem
             | SemanticRole::MenuItem
             | SemanticRole::Table
     ) || (node.role == SemanticRole::Slider
         && node.capabilities.contains(&SemanticCapability::Value))
+}
+
+fn page_tab_list_is_interactive(node: &SemanticNode) -> bool {
+    node.capabilities
+        .contains(&SemanticCapability::SelectChildren)
+        || node.children.iter().any(|child| {
+            child.role == SemanticRole::Tab
+                && interaction_capability(
+                    &child.role,
+                    &child.states,
+                    &child.actions,
+                    &child.capabilities,
+                    &node.capabilities,
+                    &node.states,
+                ) == InteractionCapability::SwitchPage
+        })
+}
+
+fn is_explicitly_noncurrent(node: &SemanticNode) -> bool {
+    if node
+        .states
+        .iter()
+        .any(|state| matches!(state, SemanticState::Other(value) if value == "hidden" || value == "defunct"))
+    {
+        return true;
+    }
+    // Absence of Showing/Visible is meaningful only when this live object also
+    // exposes the usual interactive AT-SPI state contract. Synthetic or older
+    // semantic sources may legitimately provide Enabled alone without any
+    // visibility state, so that absence must remain unknown rather than being
+    // converted into Hidden.
+    let has_widget_state = ["sensitive", "focusable"].into_iter().all(|expected| {
+        node.states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == expected))
+    });
+    let current_visible = node.states.iter().any(
+        |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
+    );
+    has_widget_state && !current_visible
 }
 
 fn is_command_container(node: &SemanticNode) -> bool {
@@ -728,6 +776,9 @@ fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> 
         InteractionCapability::Activate => Some(UiIntent::Activate),
         InteractionCapability::Toggle => Some(UiIntent::Toggle),
         InteractionCapability::Select => Some(UiIntent::Select),
+        InteractionCapability::Expand => Some(UiIntent::Expand),
+        InteractionCapability::Collapse => Some(UiIntent::Collapse),
+        InteractionCapability::SwitchPage => Some(UiIntent::SwitchPage),
         InteractionCapability::Choose => Some(UiIntent::BeginChoice),
         InteractionCapability::OpenMenu => Some(UiIntent::OpenMenu),
         InteractionCapability::EditText => Some(UiIntent::BeginEdit),

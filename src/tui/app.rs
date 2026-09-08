@@ -32,7 +32,7 @@ use crate::{
 };
 
 use super::{
-    action::{InteractionCapability, UiIntent},
+    action::{InteractionCapability, UiIntent, resolve_action},
     choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
     content_view::{ContentViewCommand, ContentViewMode, ContentViewState, move_index},
     edit::{EditCommand, EditSession, key_to_edit_command},
@@ -1324,6 +1324,9 @@ impl TuiApplication {
             UiIntent::Activate
             | UiIntent::Toggle
             | UiIntent::Select
+            | UiIntent::Expand
+            | UiIntent::Collapse
+            | UiIntent::SwitchPage
             | UiIntent::OpenMenu
             | UiIntent::IncreaseValue
             | UiIntent::DecreaseValue => self.execute_focused(intent).await,
@@ -2100,7 +2103,7 @@ impl TuiApplication {
                     target_cell_locator: target_locator.clone(),
                 };
                 if self
-                    .execute_verified_selection(target_cell, label, operation)
+                    .execute_verified_selection(target_cell, label, operation, UiIntent::Select)
                     .await
                 {
                     self.restore_current_table_position(&table_locator, &target_locator);
@@ -2316,13 +2319,14 @@ impl TuiApplication {
             .flatten();
         if matches!(
             backend_operation,
-            BackendOperation::SelectCurrentItem { .. }
+            BackendOperation::SelectCurrentItem { .. } | BackendOperation::SwitchCurrentPage { .. }
         ) {
             if self
                 .execute_verified_selection(
                     runtime_id,
                     element_label(&element).to_owned(),
                     backend_operation,
+                    intent,
                 )
                 .await
             {
@@ -2409,7 +2413,11 @@ impl TuiApplication {
         if let BackendOperation::InvokeAction { locator, action } = &backend_operation
             && matches!(
                 intent,
-                UiIntent::Activate | UiIntent::Toggle | UiIntent::OpenMenu
+                UiIntent::Activate
+                    | UiIntent::Toggle
+                    | UiIntent::Expand
+                    | UiIntent::Collapse
+                    | UiIntent::OpenMenu
             )
         {
             if self
@@ -2433,7 +2441,8 @@ impl TuiApplication {
                 .await
                 .map(|_| ()),
             BackendOperation::SelectCurrentItem { .. }
-            | BackendOperation::SelectCurrentTableRow { .. } => {
+            | BackendOperation::SelectCurrentTableRow { .. }
+            | BackendOperation::SwitchCurrentPage { .. } => {
                 unreachable!("verified selection operations are handled above")
             }
             BackendOperation::SetTextContents { .. } => {
@@ -2507,10 +2516,26 @@ impl TuiApplication {
             }
         };
         let description = describe_operation(intent, &backend_operation);
+        if matches!(
+            backend_operation,
+            BackendOperation::SwitchCurrentPage { .. }
+        ) {
+            if self
+                .execute_verified_selection(runtime_id, label.clone(), backend_operation, intent)
+                .await
+            {
+                *self.recent_commands.entry(runtime_id).or_default() += 1;
+            }
+            return;
+        }
         if let BackendOperation::InvokeAction { locator, action } = &backend_operation
             && matches!(
                 intent,
-                UiIntent::Activate | UiIntent::Toggle | UiIntent::OpenMenu
+                UiIntent::Activate
+                    | UiIntent::Toggle
+                    | UiIntent::Expand
+                    | UiIntent::Collapse
+                    | UiIntent::OpenMenu
             )
         {
             if self
@@ -2536,6 +2561,9 @@ impl TuiApplication {
             BackendOperation::SelectCurrentItem { .. }
             | BackendOperation::SelectCurrentTableRow { .. } => {
                 unreachable!("command palette does not execute collection selection")
+            }
+            BackendOperation::SwitchCurrentPage { .. } => {
+                unreachable!("verified page operations are handled above")
             }
             BackendOperation::SetTextContents { .. } => {
                 unreachable!("command palette never edits text")
@@ -2623,7 +2651,12 @@ impl TuiApplication {
         let operation_name = describe_operation(UiIntent::Select, &operation);
         if matches!(operation, BackendOperation::SelectCurrentItem { .. }) {
             if self
-                .execute_verified_selection(option.runtime_id, option.label.clone(), operation)
+                .execute_verified_selection(
+                    option.runtime_id,
+                    option.label.clone(),
+                    operation,
+                    UiIntent::Select,
+                )
                 .await
             {
                 let restore_runtime = overlay.restore_runtime();
@@ -2642,7 +2675,8 @@ impl TuiApplication {
                 .await
                 .map(|_| ()),
             BackendOperation::SelectCurrentItem { .. }
-            | BackendOperation::SelectCurrentTableRow { .. } => {
+            | BackendOperation::SelectCurrentTableRow { .. }
+            | BackendOperation::SwitchCurrentPage { .. } => {
                 unreachable!("verified selection operations are handled above")
             }
             BackendOperation::SetTextContents { .. } => unreachable!("choice never edits text"),
@@ -3294,6 +3328,7 @@ impl TuiApplication {
         runtime_id: RuntimeNodeId,
         label: String,
         operation: BackendOperation,
+        intent: UiIntent,
     ) -> bool {
         let target_locator = match &operation {
             BackendOperation::SelectCurrentItem { target_locator, .. } => target_locator,
@@ -3301,6 +3336,7 @@ impl TuiApplication {
                 target_cell_locator,
                 ..
             } => target_cell_locator,
+            BackendOperation::SwitchCurrentPage { target_locator, .. } => target_locator,
             _ => return false,
         }
         .clone();
@@ -3314,18 +3350,18 @@ impl TuiApplication {
         ) {
             Ok(authority) => authority,
             Err(outcome) => {
-                self.status = transition_status(outcome, &label, UiIntent::Select);
+                self.status = transition_status(outcome, &label, intent);
                 return false;
             }
         };
         if let Err(outcome) =
             authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
         {
-            self.status = transition_status(outcome, &label, UiIntent::Select);
+            self.status = transition_status(outcome, &label, intent);
             return false;
         }
         if let Err(outcome) = self.validate_current_selection_operation(&operation) {
-            self.status = transition_status(outcome, &label, UiIntent::Select);
+            self.status = transition_status(outcome, &label, intent);
             return false;
         }
 
@@ -3362,6 +3398,19 @@ impl TuiApplication {
             } => {
                 self.backend
                     .select_current_table_row(table_locator, target_cell_locator)
+                    .await
+            }
+            BackendOperation::SwitchCurrentPage {
+                tab_list_locator,
+                target_locator,
+                action,
+            } => {
+                self.backend
+                    .switch_current_page(
+                        tab_list_locator,
+                        target_locator,
+                        action.as_ref().map(|action| action.name.as_str()),
+                    )
                     .await
             }
             _ => unreachable!("selection helper requires a selection operation"),
@@ -3414,6 +3463,19 @@ impl TuiApplication {
                 } => {
                     self.backend
                         .current_table_row_is_selected(table_locator, target_cell_locator)
+                        .await
+                }
+                BackendOperation::SwitchCurrentPage {
+                    tab_list_locator,
+                    target_locator,
+                    action,
+                } => {
+                    self.backend
+                        .current_page_tab_is_current(
+                            tab_list_locator,
+                            target_locator,
+                            action.is_some(),
+                        )
                         .await
                 }
                 _ => unreachable!("selection helper requires a selection operation"),
@@ -3480,9 +3542,9 @@ impl TuiApplication {
             already_selected = mutation.already_selected,
             authoritative_checks,
             event_wakeups,
-            "current semantic selection observation completed"
+            "current semantic target observation completed"
         );
-        let status = transition_status(outcome, &label, UiIntent::Select);
+        let status = transition_status(outcome, &label, intent);
         if outcome != TransitionOutcome::ApplicationGone {
             self.full_reload(Some(status)).await;
         } else {
@@ -3574,6 +3636,47 @@ impl TuiApplication {
                 }
                 Ok(())
             }
+            BackendOperation::SwitchCurrentPage {
+                tab_list_locator,
+                target_locator,
+                action,
+            } => {
+                let tab_list_id = self
+                    .cache
+                    .runtime_id(tab_list_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let target_id = self
+                    .cache
+                    .runtime_id(target_locator)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let tab_list = self
+                    .cache
+                    .node(tab_list_id)
+                    .ok_or(TransitionOutcome::Stale)?;
+                let target = self.cache.node(target_id).ok_or(TransitionOutcome::Stale)?;
+                let operation_still_advertised = action.as_ref().map_or_else(
+                    || {
+                        tab_list
+                            .capabilities
+                            .contains(&SemanticCapability::SelectChildren)
+                    },
+                    |action| target.actions.contains(action),
+                );
+                let multiselectable = tab_list.states.iter().chain(&target.states).any(
+                    |state| matches!(state, SemanticState::Other(value) if value == "multiselectable"),
+                );
+                if tab_list.role != SemanticRole::TabList
+                    || target.role != SemanticRole::Tab
+                    || target.parent != Some(tab_list_id)
+                    || !operation_still_advertised
+                    || multiselectable
+                    || !self.scopes.allows_node(tab_list_id)
+                    || !self.scopes.allows_node(target_id)
+                {
+                    return Err(TransitionOutcome::Stale);
+                }
+                Ok(())
+            }
             _ => Err(TransitionOutcome::Ambiguous),
         }
     }
@@ -3632,6 +3735,45 @@ impl TuiApplication {
         {
             self.status = transition_status(outcome, &label, intent);
             return false;
+        }
+        if matches!(intent, UiIntent::Expand | UiIntent::Collapse) {
+            let desired_expanded = intent == UiIntent::Expand;
+            let fresh = match self.backend.refresh_node(&locator, false).await {
+                Ok(node) => node,
+                Err(_) => {
+                    self.full_reload(None).await;
+                    self.status = transition_status(TransitionOutcome::Stale, &label, intent);
+                    return false;
+                }
+            };
+            let still_expandable = fresh
+                .states
+                .iter()
+                .any(|state| matches!(state, SemanticState::Other(value) if value == "expandable"));
+            let action_still_matches = resolve_action(&fresh.role, &fresh.actions, intent)
+                .is_ok_and(|current| current.name.eq_ignore_ascii_case(&action.name));
+            let current_expanded = fresh.states.contains(&SemanticState::Expanded);
+            if self.cache.refresh_node(fresh).is_err() {
+                self.full_reload(None).await;
+                self.status = transition_status(TransitionOutcome::Stale, &label, intent);
+                return false;
+            }
+            self.rebuild_view_preserving_focus().await;
+            if let Err(outcome) =
+                authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+            {
+                self.status = transition_status(outcome, &label, intent);
+                return false;
+            }
+            if current_expanded == desired_expanded {
+                let status = transition_status(TransitionOutcome::Confirmed, &label, intent);
+                self.full_reload(Some(status)).await;
+                return true;
+            }
+            if !still_expandable || !action_still_matches {
+                self.status = transition_status(TransitionOutcome::Stale, &label, intent);
+                return false;
+            }
         }
 
         let condition =
@@ -3733,9 +3875,18 @@ impl TuiApplication {
             return false;
         }
         if result.report.outcome != TransitionOutcome::ApplicationGone {
-            self.status = transition_status(result.report.outcome, &label, intent);
+            let status = transition_status(result.report.outcome, &label, intent);
+            if matches!(intent, UiIntent::Expand | UiIntent::Collapse) {
+                self.full_reload(Some(status)).await;
+            } else {
+                self.status = status;
+            }
         }
-        result.invocation_accepted || result.report.outcome == TransitionOutcome::Confirmed
+        if matches!(intent, UiIntent::Expand | UiIntent::Collapse) {
+            result.report.outcome == TransitionOutcome::Confirmed
+        } else {
+            result.invocation_accepted || result.report.outcome == TransitionOutcome::Confirmed
+        }
     }
 
     async fn observe_transition_action(
@@ -4609,6 +4760,9 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
     match element.capability() {
         InteractionCapability::Toggle => UiIntent::Toggle,
         InteractionCapability::Select => UiIntent::Select,
+        InteractionCapability::Expand => UiIntent::Expand,
+        InteractionCapability::Collapse => UiIntent::Collapse,
+        InteractionCapability::SwitchPage => UiIntent::SwitchPage,
         InteractionCapability::Choose => UiIntent::BeginChoice,
         InteractionCapability::OpenMenu => UiIntent::OpenMenu,
         InteractionCapability::EditText => UiIntent::BeginEdit,
@@ -4621,6 +4775,9 @@ fn intent_for_element(element: &SceneElement) -> UiIntent {
 fn operation_verb(intent: UiIntent) -> &'static str {
     match intent {
         UiIntent::Select => "Selected",
+        UiIntent::Expand => "Expanded",
+        UiIntent::Collapse => "Collapsed",
+        UiIntent::SwitchPage => "Switched to",
         UiIntent::BeginChoice => "Opened choice overlay",
         UiIntent::OpenMenu => "Opened menu",
         UiIntent::ClosePopup => "Closed popup",
@@ -4690,6 +4847,13 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             debug_assert_eq!(intent, UiIntent::Select);
             "verified current Table row selection".to_owned()
         }
+        BackendOperation::SwitchCurrentPage { action, .. } => {
+            debug_assert_eq!(intent, UiIntent::SwitchPage);
+            action.as_ref().map_or_else(
+                || "verified current page selection".to_owned(),
+                |action| format!("verified {}", action.name),
+            )
+        }
         BackendOperation::SetTextContents { .. } => "EditableText.SetTextContents".to_owned(),
         BackendOperation::SetComplexTextContents { .. } => {
             "EditableText.SetTextContents + complete Text read-back".to_owned()
@@ -4728,7 +4892,9 @@ fn selection_error_is_stale(error: &BackendError) -> bool {
 fn selection_error_is_ambiguous(error: &BackendError) -> bool {
     matches!(
         error,
-        BackendError::MultiSelectionUnsupported(_) | BackendError::SelectionReadbackAmbiguous(_)
+        BackendError::MultiSelectionUnsupported(_)
+            | BackendError::SelectionReadbackAmbiguous(_)
+            | BackendError::PageSwitchReadbackAmbiguous(_)
     )
 }
 
@@ -4738,8 +4904,7 @@ fn selection_operation_error_status(error: &BackendError) -> (String, bool) {
     }
     if selection_error_is_ambiguous(error) {
         return (
-            "Selection is unavailable for this collection; current interface is unchanged"
-                .to_owned(),
+            "Current target cannot be verified; choose from the current interface".to_owned(),
             false,
         );
     }
@@ -4750,11 +4915,15 @@ fn selection_operation_error_status(error: &BackendError) -> (String, bool) {
         ),
         BackendError::SelectionTargetUnavailable(_)
         | BackendError::SelectionUnsupported(_)
+        | BackendError::PageSwitchUnsupported(_)
         | BackendError::TableRowSelectionUnsupported(_) => (
-            "Current item is not safely selectable; current interface is unchanged".to_owned(),
+            "Current target is unavailable; choose from the current interface".to_owned(),
             false,
         ),
-        _ => (format!("Selection could not be confirmed: {error}"), false),
+        _ => (
+            "Current target could not be confirmed; current interface is unchanged".to_owned(),
+            false,
+        ),
     }
 }
 
@@ -5163,6 +5332,9 @@ fn build_contextual_view(
                     InteractionCapability::Activate
                         | InteractionCapability::Toggle
                         | InteractionCapability::Select
+                        | InteractionCapability::Expand
+                        | InteractionCapability::Collapse
+                        | InteractionCapability::SwitchPage
                         | InteractionCapability::OpenMenu
                 ) && !commands.validates_current_target(
                     binding.runtime_id,
@@ -5225,6 +5397,9 @@ mod tests {
         let default_intent = match capability {
             InteractionCapability::Toggle => UiIntent::Toggle,
             InteractionCapability::Select => UiIntent::Select,
+            InteractionCapability::Expand => UiIntent::Expand,
+            InteractionCapability::Collapse => UiIntent::Collapse,
+            InteractionCapability::SwitchPage => UiIntent::SwitchPage,
             InteractionCapability::Choose => UiIntent::BeginChoice,
             InteractionCapability::OpenMenu => UiIntent::OpenMenu,
             InteractionCapability::EditText => UiIntent::BeginEdit,
