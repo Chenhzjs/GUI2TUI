@@ -303,7 +303,12 @@ layout reconstruction.
 - v0.4.0 RC and public release: **NOT PLANNED under the current pre-1.0 policy**
 - v0.5 Task & Interaction Completeness Discovery: **COMPLETE**; conclusion
   **A — TASK-COMPLETENESS MILESTONE JUSTIFIED**
-- Recommended next work: **0.5A Verified Current Collection Selection**,
+- v0.5A Verified Current Collection Selection: **COMPLETE / VALIDATED**.
+  Selection targets exact current semantic objects, not durable child or row
+  indices. Indices are temporary backend addressing derived from fresh public
+  structure, and success requires fresh target-specific selected-object or
+  selected-row readback.
+- Recommended next work: **0.5B Hierarchy Reveal and Page Continuation**,
   **NOT YET AUTHORIZED**
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -324,8 +329,9 @@ The [v0.4 milestone handoff](validation/v0.4/milestone/HANDOFF.md) indexes the
 qualification basis and records the internal close. The current task matrix,
 1.0 baseline, and derived bounded phases are in the
 [v0.5 Discovery](planning/v0.5-task-interaction-completeness.md) and
-[v0.5 roadmap](planning/v0.5-roadmap.md). Discovery completion authorizes
-neither 0.5A nor release work.
+[v0.5 roadmap](planning/v0.5-roadmap.md). The completed 0.5A evidence is in the
+[current collection selection handoff](validation/v0.5/current-collection-selection/HANDOFF.md).
+No later phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -336,8 +342,8 @@ Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
-v0.5 Discovery is complete, but no implementation phase starts without
-explicit authorization.
+v0.5 Discovery and 0.5A are complete, but no later implementation phase starts
+without explicit authorization.
 
 ## 21. Glossary
 
