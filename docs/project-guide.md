@@ -155,12 +155,19 @@ siblings, and manual continuation from the refreshed scene is sufficient.
 
 ## 9. Semantic Operations
 
-`UiIntent` describes user intent (`Activate`, `Toggle`, `Select`, editing,
-navigation, reading, and so on). `SemanticOperation` is the explicit operation
-over a runtime node. Action resolution is role-aware and matches advertised
-AT-SPI action names; an empty or incompatible action list is unsupported.
-Choices use explicit node-action or parent-selection strategies. Anonymous
-actions, guessed indexes, and keyboard sequences are not semantic operations.
+`UiIntent` describes user intent (`Activate`, `Toggle`, `Select`, `Expand`,
+`Collapse`, `SwitchPage`, editing, navigation, reading, and so on).
+`SemanticOperation` is the explicit operation over a runtime node. Action
+resolution is role-aware and matches advertised AT-SPI action names; an empty
+or incompatible action list is unsupported. A hierarchy reveal needs both an
+exact current explicit expansion action and fresh desired `Expanded`-state
+readback: generic `Toggle` is never synonymous with Expand or Collapse. A
+page switch targets an exact current `PageTab`, not a tab position; its fresh
+target-specific current-page proof may use either parent Selection or a
+compatible exact tab action, but focus or a name alone never establishes
+success. Choices use explicit node-action or parent-selection strategies.
+Anonymous actions, guessed indexes, and keyboard sequences are not semantic
+operations.
 For qualified dynamic actions, the short-lived transition observer is adjacent
 to the operation rather than a workflow engine: it checks a small internal
 semantic condition, returns to the normal `TuiScene`, and leaves the next
@@ -286,7 +293,7 @@ layout reconstruction.
 
 - Public release: **v0.3.0**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
-  DISCOVERY COMPLETE**
+  DISCOVERY, 0.5A, AND 0.5B COMPLETE**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -308,8 +315,13 @@ layout reconstruction.
   indices. Indices are temporary backend addressing derived from fresh public
   structure, and success requires fresh target-specific selected-object or
   selected-row readback.
-- Recommended next work: **0.5B Hierarchy Reveal and Page Continuation**,
-  **NOT YET AUTHORIZED**
+- v0.5B Hierarchy Reveal and Page Continuation: **COMPLETE / VALIDATED**.
+  Qualified public disclosure actions confirm the requested current Expanded
+  state before v0.4 rebuilds the scene; generic Toggle remains unsupported.
+  Exact current PageTabs switch only with fresh target-specific current-page
+  evidence, never a retained tab index, focus alone, or a name alone.
+- Recommended next work: **0.5C File and Folder Choice Tasks**, **NOT YET
+  AUTHORIZED**
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -330,7 +342,8 @@ qualification basis and records the internal close. The current task matrix,
 1.0 baseline, and derived bounded phases are in the
 [v0.5 Discovery](planning/v0.5-task-interaction-completeness.md) and
 [v0.5 roadmap](planning/v0.5-roadmap.md). The completed 0.5A evidence is in the
-[current collection selection handoff](validation/v0.5/current-collection-selection/HANDOFF.md).
+[current collection selection handoff](validation/v0.5/current-collection-selection/HANDOFF.md),
+and 0.5B evidence is in the [hierarchy/page continuation handoff](validation/v0.5/hierarchy-page-continuation/HANDOFF.md).
 No later phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
@@ -342,8 +355,8 @@ Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
-v0.5 Discovery and 0.5A are complete, but no later implementation phase starts
-without explicit authorization.
+v0.5 Discovery, 0.5A, and 0.5B are complete, but no later implementation
+phase starts without explicit authorization.
 
 ## 21. Glossary
 
