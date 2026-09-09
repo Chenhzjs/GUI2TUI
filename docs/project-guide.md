@@ -299,7 +299,7 @@ layout reconstruction.
 
 - Public release: **v0.3.0**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
-  DISCOVERY, 0.5A, 0.5B, AND 0.5C COMPLETE**
+  FUNCTIONAL DEVELOPMENT COMPLETE / MILESTONE QUALIFICATION PENDING**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -332,8 +332,13 @@ layout reconstruction.
   remains authoritative for chooser state: the backing filesystem never
   supplies missing GUI semantics, absent file/directory type is not guessed,
   and a partial listing remains partial.
-- Recommended next work: **0.5D Common Task Baseline Qualification**, **NOT YET
-  AUTHORIZED**
+- v0.5D Common Task Baseline Qualification: **COMPLETE / VALIDATED**. The
+  bounded 1.0 task baseline completes or degrades honestly by composing current
+  verified semantic operations; primitive truth remains conservative even
+  when later authoritative application semantics prove overall task success.
+- v0.5 functional development: **COMPLETE**.
+- Recommended next work: **v0.5 Milestone Qualification / Close**, **NOT YET
+  AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -356,7 +361,8 @@ qualification basis and records the internal close. The current task matrix,
 [v0.5 roadmap](planning/v0.5-roadmap.md). The completed 0.5A evidence is in the
 [current collection selection handoff](validation/v0.5/current-collection-selection/HANDOFF.md),
 0.5B evidence is in the [hierarchy/page continuation handoff](validation/v0.5/hierarchy-page-continuation/HANDOFF.md),
-and 0.5C evidence is in the [file/folder choice handoff](validation/v0.5/file-folder-choice/HANDOFF.md).
+0.5C evidence is in the [file/folder choice handoff](validation/v0.5/file-folder-choice/HANDOFF.md),
+and 0.5D evidence is in the [common-task baseline handoff](validation/v0.5/common-task-baseline/HANDOFF.md).
 No later phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
@@ -368,8 +374,9 @@ Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
-v0.5 Discovery and 0.5A through 0.5C are complete, but no later implementation
-phase starts without explicit authorization.
+v0.5 functional development is complete through validated 0.5D, but milestone
+qualification/close and every later milestone still require explicit
+authorization.
 
 ## 21. Glossary
 
