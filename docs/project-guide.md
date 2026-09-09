@@ -168,6 +168,12 @@ compatible exact tab action, but focus or a name alone never establishes
 success. Choices use explicit node-action or parent-selection strategies.
 Anonymous actions, guessed indexes, and keyboard sequences are not semantic
 operations.
+Task completion composes these verified current semantic operations; it does
+not require a task-specific runtime. In file/folder choosers, only current
+public Accessibility structure, state, operations, and application-visible
+results establish chooser truth. The backing filesystem never fills missing
+GUI semantics, absent file/directory type is not guessed, and a partial
+accessible listing remains partial.
 For qualified dynamic actions, the short-lived transition observer is adjacent
 to the operation rather than a workflow engine: it checks a small internal
 semantic condition, returns to the normal `TuiScene`, and leaves the next
@@ -293,7 +299,7 @@ layout reconstruction.
 
 - Public release: **v0.3.0**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
-  DISCOVERY, 0.5A, AND 0.5B COMPLETE**
+  DISCOVERY, 0.5A, 0.5B, AND 0.5C COMPLETE**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -320,7 +326,13 @@ layout reconstruction.
   state before v0.4 rebuilds the scene; generic Toggle remains unsupported.
   Exact current PageTabs switch only with fresh target-specific current-page
   evidence, never a retained tab index, focus alone, or a name alone.
-- Recommended next work: **0.5C File and Folder Choice Tasks**, **NOT YET
+- v0.5C File and Folder Choice Tasks: **COMPLETE / VALIDATED**. Open File and
+  Choose Folder compose verified current Table selection and exact generic
+  actions with v0.4 modal/current-scene continuation. Public Accessibility
+  remains authoritative for chooser state: the backing filesystem never
+  supplies missing GUI semantics, absent file/directory type is not guessed,
+  and a partial listing remains partial.
+- Recommended next work: **0.5D Common Task Baseline Qualification**, **NOT YET
   AUTHORIZED**
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -343,7 +355,8 @@ qualification basis and records the internal close. The current task matrix,
 [v0.5 Discovery](planning/v0.5-task-interaction-completeness.md) and
 [v0.5 roadmap](planning/v0.5-roadmap.md). The completed 0.5A evidence is in the
 [current collection selection handoff](validation/v0.5/current-collection-selection/HANDOFF.md),
-and 0.5B evidence is in the [hierarchy/page continuation handoff](validation/v0.5/hierarchy-page-continuation/HANDOFF.md).
+0.5B evidence is in the [hierarchy/page continuation handoff](validation/v0.5/hierarchy-page-continuation/HANDOFF.md),
+and 0.5C evidence is in the [file/folder choice handoff](validation/v0.5/file-folder-choice/HANDOFF.md).
 No later phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
@@ -355,7 +368,7 @@ Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
-v0.5 Discovery, 0.5A, and 0.5B are complete, but no later implementation
+v0.5 Discovery and 0.5A through 0.5C are complete, but no later implementation
 phase starts without explicit authorization.
 
 ## 21. Glossary
