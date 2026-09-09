@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::semantic::{
     CollectionCompleteness, RuntimeNodeId, SemanticCache, SemanticRole, collection_completeness,
 };
@@ -34,6 +36,22 @@ pub struct SemanticTableModel {
 
 impl SemanticTableModel {
     pub fn analyze(cache: &SemanticCache, owner: RuntimeNodeId) -> Option<Self> {
+        Self::analyze_inner(cache, owner, None)
+    }
+
+    pub fn analyze_with_positions(
+        cache: &SemanticCache,
+        owner: RuntimeNodeId,
+        current_positions: &HashMap<RuntimeNodeId, (usize, usize)>,
+    ) -> Option<Self> {
+        Self::analyze_inner(cache, owner, Some(current_positions))
+    }
+
+    fn analyze_inner(
+        cache: &SemanticCache,
+        owner: RuntimeNodeId,
+        current_positions: Option<&HashMap<RuntimeNodeId, (usize, usize)>>,
+    ) -> Option<Self> {
         let table = cache.node(owner)?;
         if table.role != SemanticRole::Table {
             return None;
@@ -52,8 +70,16 @@ impl SemanticTableModel {
                     append_cell(cache, *cell_id, row, column, &mut cells, &mut headers);
                 }
             } else if node.role == SemanticRole::Cell {
-                let index = cells.len();
-                append_cell(cache, *child, 0, index, &mut cells, &mut headers);
+                if let Some((row, column)) = current_positions
+                    .and_then(|positions| positions.get(child))
+                    .copied()
+                {
+                    realized_rows = realized_rows.max(row + 1);
+                    append_cell(cache, *child, row, column, &mut cells, &mut headers);
+                } else if current_positions.is_none() {
+                    let index = cells.len();
+                    append_cell(cache, *child, 0, index, &mut cells, &mut headers);
+                }
             }
         }
         let columns = cells
@@ -130,11 +156,7 @@ fn append_cell(
     if node.role != SemanticRole::Cell {
         return;
     }
-    let label = node
-        .name
-        .clone()
-        .or_else(|| node.value.clone())
-        .unwrap_or_else(|| "[empty]".to_owned());
+    let label = cell_label(cache, id).unwrap_or_else(|| "[empty]".to_owned());
     if node.debug.atspi_role.contains("header") {
         headers.push(label.clone());
     }
@@ -149,6 +171,20 @@ fn append_cell(
             .states
             .contains(&crate::semantic::SemanticState::Selected),
     });
+}
+
+fn cell_label(cache: &SemanticCache, id: RuntimeNodeId) -> Option<String> {
+    let node = cache.node(id)?;
+    node.name
+        .clone()
+        .filter(|label| !label.trim().is_empty())
+        .or_else(|| node.value.clone())
+        .filter(|label| !label.trim().is_empty())
+        .or_else(|| {
+            node.children
+                .iter()
+                .find_map(|child| cell_label(cache, *child))
+        })
 }
 
 #[cfg(test)]
@@ -207,5 +243,35 @@ mod tests {
         let model = SemanticTableModel::analyze(&cache, cache.root_id()).unwrap();
         assert_eq!(model.rows, None);
         assert_eq!(model.completeness, CollectionCompleteness::PartialRealized);
+    }
+
+    #[test]
+    fn flat_table_uses_current_public_positions_and_nested_cell_text() {
+        let mut table = node(1, SemanticRole::Table, "Files");
+        let mut alpha = node(2, SemanticRole::Cell, "");
+        alpha
+            .children
+            .push(node(3, SemanticRole::Cell, "alpha.txt"));
+        let size = node(4, SemanticRole::Cell, "5 bytes");
+        let mut beta = node(5, SemanticRole::Cell, "");
+        beta.children.push(node(6, SemanticRole::Cell, "beta.txt"));
+        table.children.extend([alpha, size, beta]);
+        let cache = SemanticCache::from_snapshot(table).unwrap();
+        let direct_cells = cache.node(cache.root_id()).unwrap().children.clone();
+        let positions = [
+            (direct_cells[0], (0, 0)),
+            (direct_cells[1], (0, 1)),
+            (direct_cells[2], (1, 0)),
+        ]
+        .into_iter()
+        .collect();
+
+        let model = SemanticTableModel::analyze_with_positions(&cache, cache.root_id(), &positions)
+            .unwrap();
+
+        assert_eq!(model.cells.len(), 3);
+        assert_eq!(model.cells[0].label, "alpha.txt");
+        assert_eq!((model.cells[2].row, model.cells[2].column), (1, 0));
+        assert_eq!(model.cells[2].label, "beta.txt");
     }
 }

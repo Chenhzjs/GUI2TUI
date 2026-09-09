@@ -230,6 +230,9 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
+        // Table content view may expose this exact public action for the
+        // current TableCell. It does not imply a file/directory kind.
+        (SemanticRole::Cell, UiIntent::Activate) => &["activate"],
         // `click`/`press` are accepted only after the relational analyzer has
         // identified the unique action-bearing disclosure child of a ComboBox.
         (SemanticRole::ComboBox, UiIntent::OpenMenu) => {
@@ -245,7 +248,7 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
     }
 }
 
-fn is_current_action_target(states: &[SemanticState]) -> bool {
+pub(crate) fn is_current_action_target(states: &[SemanticState]) -> bool {
     if states.is_empty() {
         return true;
     }

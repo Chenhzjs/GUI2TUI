@@ -76,6 +76,7 @@ pub struct ContentRender {
     pub full_search: Option<(SearchState, SearchProgress)>,
     pub structure_lines: Vec<String>,
     pub table_row_selection: bool,
+    pub table_cell_activation: bool,
 }
 
 pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
@@ -92,8 +93,16 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         match content.mode {
             ContentViewMode::Reader => "? Help · j/k Scroll · / Search · o Outline · Esc Back",
             ContentViewMode::Search => "? Help · Ctrl-F Search more · Enter Go · Esc Back",
+            ContentViewMode::Table
+                if content.table_row_selection && content.table_cell_activation =>
+            {
+                "? Help · Arrows Cells · Enter Select row · a Activate cell · Esc Back"
+            }
             ContentViewMode::Table if content.table_row_selection => {
                 "? Help · Arrows Cells · Enter Select row · Esc Back"
+            }
+            ContentViewMode::Table if content.table_cell_activation => {
+                "? Help · Arrows Cells · a Activate cell · Esc Back"
             }
             ContentViewMode::Table => "? Help · Arrows Cells · Esc Back",
             ContentViewMode::Outline => "? Help · ↑/↓ Headings · Enter Go · Esc Back",
@@ -284,10 +293,14 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
         ContentViewMode::Table => (
             format!(" Table — {} ", content.title),
             content.structure_lines,
-            if content.table_row_selection {
-                "↑/↓/←/→ Navigate semantic cells | Enter Select current row | Esc Reader"
+            if content.table_row_selection && content.table_cell_activation {
+                "↑/↓/←/→ Navigate semantic cells | Enter Select row | a Activate cell | Esc Back"
+            } else if content.table_row_selection {
+                "↑/↓/←/→ Navigate semantic cells | Enter Select current row | Esc Back"
+            } else if content.table_cell_activation {
+                "↑/↓/←/→ Navigate semantic cells | a Activate cell | Esc Back"
             } else {
-                "↑/↓/←/→ Navigate semantic cells | Esc Reader"
+                "↑/↓/←/→ Navigate semantic cells | Esc Back"
             },
         ),
     };

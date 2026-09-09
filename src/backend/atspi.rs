@@ -2684,6 +2684,29 @@ impl AtspiBackend {
         ))
     }
 
+    /// Resolve one exact current TableCell to its public row/column position.
+    /// The returned integers are presentation/backend addressing only; the
+    /// exact cell locator remains the semantic identity.
+    pub async fn current_table_cell_position(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<(usize, usize), BackendError> {
+        let (row, column) = self
+            .revalidate_current_table_cell_position(table, target_cell)
+            .await?;
+        Ok((
+            usize::try_from(row).map_err(|_| BackendError::TableRowTargetNotCurrent {
+                table_id: table.encode(),
+                target_id: target_cell.encode(),
+            })?,
+            usize::try_from(column).map_err(|_| BackendError::TableRowTargetNotCurrent {
+                table_id: table.encode(),
+                target_id: target_cell.encode(),
+            })?,
+        ))
+    }
+
     async fn current_selection_target(
         &self,
         collection: &BackendLocator,
@@ -2843,6 +2866,64 @@ impl AtspiBackend {
         {
             return Err(BackendError::SelectionTargetUnavailable(target_id));
         }
+        let (row, _) = self
+            .revalidate_current_table_cell_position(table, target_cell)
+            .await?;
+        Ok(row)
+    }
+
+    async fn revalidate_current_table_cell_position(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<(i32, i32), BackendError> {
+        let table_id = table.encode();
+        let target_id = target_cell.encode();
+        let table_object = object_ref_from_id(table)?;
+        let table_accessible = table_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
+        let table_interfaces = dbus_operation(
+            self.operation_timeout,
+            "read current Table interfaces",
+            &table_id,
+            table_accessible.get_interfaces(),
+        )
+        .await?;
+        if !table_interfaces.contains(Interface::Table) {
+            return Err(BackendError::TableRowTargetNotCurrent {
+                table_id,
+                target_id,
+            });
+        }
+        let target_object = object_ref_from_id(target_cell)?;
+        let target_accessible = target_object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(target_id.clone(), error))?;
+        let target_role = dbus_operation(
+            self.operation_timeout,
+            "read current Table target role",
+            &target_id,
+            target_accessible.get_role(),
+        )
+        .await?;
+        let target_interfaces = dbus_operation(
+            self.operation_timeout,
+            "read current Table target interfaces",
+            &target_id,
+            target_accessible.get_interfaces(),
+        )
+        .await?;
+        if SemanticRole::from(target_role) != SemanticRole::Cell
+            || !target_interfaces.contains(Interface::TableCell)
+        {
+            return Err(BackendError::TableRowTargetNotCurrent {
+                table_id,
+                target_id,
+            });
+        }
         let table_cell = TableCellProxy::builder(self.connection.connection())
             .destination(target_cell.bus_name())
             .and_then(|builder| builder.path(target_cell.object_path()))
@@ -2904,7 +2985,7 @@ impl AtspiBackend {
                 target_id,
             });
         }
-        Ok(row)
+        Ok((row, column))
     }
 
     async fn selected_table_rows(&self, table: &BackendLocator) -> Result<Vec<i32>, BackendError> {

@@ -32,7 +32,7 @@ use crate::{
 };
 
 use super::{
-    action::{InteractionCapability, UiIntent, resolve_action},
+    action::{InteractionCapability, UiIntent, is_current_action_target, resolve_action},
     choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
     content_view::{ContentViewCommand, ContentViewMode, ContentViewState, move_index},
     edit::{EditCommand, EditSession, key_to_edit_command},
@@ -1223,6 +1223,15 @@ impl TuiApplication {
             } else {
                 Vec::new()
             };
+            let table_cell_activation = view
+                .table
+                .as_ref()
+                .and_then(|table| table.position.cell)
+                .and_then(|cell| self.cache.node(cell))
+                .is_some_and(|cell| {
+                    is_current_action_target(&cell.states)
+                        && resolve_action(&cell.role, &cell.actions, UiIntent::Activate).is_ok()
+                });
             Some(ContentRender {
                 title: model
                     .and_then(|model| model.metadata.title.clone())
@@ -1253,6 +1262,7 @@ impl TuiApplication {
                     .map(|search| (search.state.clone(), search.progress)),
                 structure_lines,
                 table_row_selection: view.table.as_ref().is_some_and(|table| table.row_selection),
+                table_cell_activation,
             })
         });
         let inline_content = self
@@ -1806,7 +1816,31 @@ impl TuiApplication {
             self.status = current_selection_unavailable_status().to_owned();
             return;
         }
-        let Some(table) = self.content.table(current_root).cloned() else {
+        let current_cells = current
+            .children
+            .iter()
+            .filter_map(|child| {
+                self.cache
+                    .node(*child)
+                    .filter(|node| node.role == SemanticRole::Cell)
+                    .map(|node| (*child, node.backend_locator.clone()))
+            })
+            .collect::<Vec<_>>();
+        let mut current_positions = HashMap::new();
+        for (runtime_id, cell_locator) in current_cells {
+            if let Ok(position) = self
+                .backend
+                .current_table_cell_position(&locator, &cell_locator)
+                .await
+            {
+                current_positions.insert(runtime_id, position);
+            }
+        }
+        let Some(table) = crate::content::SemanticTableModel::analyze_with_positions(
+            &self.cache,
+            current_root,
+            &current_positions,
+        ) else {
             self.status = "Current Table exposes no accessible rows".to_owned();
             return;
         };
@@ -1865,6 +1899,7 @@ impl TuiApplication {
                 let Some(view) = self.content_view.take() else {
                     return;
                 };
+                let table_returns_to_scene = view.table_returns_to_scene;
                 if let Some(scene_id) = view.restore_scene
                     && self.scene.element(scene_id).is_some()
                 {
@@ -1873,7 +1908,11 @@ impl TuiApplication {
                     self.focus
                         .reconcile_identity(&self.scene, view.restore_runtime, None);
                 }
-                self.status = "Reader closed; document focus restored".to_owned();
+                self.status = if table_returns_to_scene {
+                    "Table closed; current scene focus restored".to_owned()
+                } else {
+                    "Reader closed; document focus restored".to_owned()
+                };
             }
             ContentViewCommand::MoveBlocks(delta) => {
                 let Some(view) = self.content_view.as_mut() else {
@@ -2061,12 +2100,21 @@ impl TuiApplication {
                 }
             }
             ContentViewCommand::SelectCurrentTableRow => {
-                let Some((table_owner, target_cell)) = self
+                let Some((table_owner, target_cell, label)) = self
                     .content_view
                     .as_ref()
                     .and_then(|view| view.table.as_ref())
                     .filter(|table| table.row_selection)
-                    .and_then(|table| table.position.cell.map(|cell| (table.owner, cell)))
+                    .and_then(|table| {
+                        let target = table.position.cell?;
+                        let label = table
+                            .cells
+                            .iter()
+                            .find(|cell| cell.source == target)
+                            .map(|cell| cell.label.clone())
+                            .unwrap_or_else(|| "current row".to_owned());
+                        Some((table.owner, target, label))
+                    })
                 else {
                     self.status =
                         "Current Table row is not safely selectable; continue reading".to_owned();
@@ -2093,11 +2141,6 @@ impl TuiApplication {
                 }
                 let table_locator = table.backend_locator.clone();
                 let target_locator = cell.backend_locator.clone();
-                let label = cell
-                    .name
-                    .clone()
-                    .or_else(|| cell.value.clone())
-                    .unwrap_or_else(|| "current row".to_owned());
                 let operation = BackendOperation::SelectCurrentTableRow {
                     table_locator: table_locator.clone(),
                     target_cell_locator: target_locator.clone(),
@@ -2106,10 +2149,82 @@ impl TuiApplication {
                     .execute_verified_selection(target_cell, label, operation, UiIntent::Select)
                     .await
                 {
-                    self.restore_current_table_position(&table_locator, &target_locator);
+                    self.content_view = None;
                 }
             }
+            ContentViewCommand::ActivateCurrentTableCell => {
+                self.activate_current_table_cell().await;
+            }
         }
+    }
+
+    async fn activate_current_table_cell(&mut self) {
+        let Some((table_owner, target_cell, label)) = self
+            .content_view
+            .as_ref()
+            .and_then(|view| view.table.as_ref())
+            .and_then(|table| {
+                let target = table.position.cell?;
+                let label = table
+                    .cells
+                    .iter()
+                    .find(|cell| cell.source == target)
+                    .map(|cell| cell.label.clone())
+                    .unwrap_or_else(|| "current cell".to_owned());
+                Some((table.owner, target, label))
+            })
+        else {
+            self.status = "Current Table cell is no longer available".to_owned();
+            return;
+        };
+        let Some(table) = self.cache.node(table_owner) else {
+            self.status = current_command_unavailable_status().to_owned();
+            return;
+        };
+        let Some(cell) = self.cache.node(target_cell) else {
+            self.status = current_command_unavailable_status().to_owned();
+            return;
+        };
+        if table.role != SemanticRole::Table
+            || cell.role != SemanticRole::Cell
+            || !is_current_action_target(&cell.states)
+            || !self.scopes.allows_node(table_owner)
+            || !self.scopes.allows_node(target_cell)
+        {
+            self.status = current_command_unavailable_status().to_owned();
+            return;
+        }
+        let table_locator = table.backend_locator.clone();
+        let target_locator = cell.backend_locator.clone();
+        if self
+            .backend
+            .current_table_cell_position(&table_locator, &target_locator)
+            .await
+            .is_err()
+        {
+            self.status = current_command_unavailable_status().to_owned();
+            return;
+        }
+        let operation = match resolve_cached_node_operation(
+            &self.cache,
+            SemanticOperation::ActivateNode(target_cell),
+        ) {
+            Ok(BackendOperation::InvokeAction { locator, action }) => (locator, action),
+            _ => {
+                self.status = "Current Table cell exposes no safe Activate action".to_owned();
+                return;
+            }
+        };
+        let _ = self
+            .invoke_action_with_transition(
+                target_cell,
+                UiIntent::Activate,
+                operation.0,
+                operation.1,
+                label,
+            )
+            .await;
+        self.content_view = None;
     }
 
     pub async fn progress_content_operations(&mut self) {
@@ -3678,33 +3793,6 @@ impl TuiApplication {
                 Ok(())
             }
             _ => Err(TransitionOutcome::Ambiguous),
-        }
-    }
-
-    fn restore_current_table_position(
-        &mut self,
-        table_locator: &BackendLocator,
-        target_locator: &BackendLocator,
-    ) {
-        let Some(table_id) = self.cache.runtime_id(table_locator) else {
-            return;
-        };
-        let Some(target_id) = self.cache.runtime_id(target_locator) else {
-            return;
-        };
-        let Some(mut table) = self.content.table(table_id).cloned() else {
-            return;
-        };
-        let Some(cell) = table.cells.iter().find(|cell| cell.source == target_id) else {
-            return;
-        };
-        table.position = crate::content::TablePosition {
-            row: cell.row,
-            column: cell.column,
-            cell: Some(target_id),
-        };
-        if let Some(view) = self.content_view.as_mut() {
-            view.table = Some(table);
         }
     }
 

@@ -31,6 +31,7 @@ pub struct ContentViewState {
     pub full_search: Option<ContentSearchSession>,
     pub virtual_collection: Option<VirtualCollectionModel>,
     pub table: Option<SemanticTableModel>,
+    pub table_returns_to_scene: bool,
     pub restore_scene: Option<SceneElementId>,
     pub restore_runtime: Option<RuntimeNodeId>,
 }
@@ -52,6 +53,7 @@ pub enum ContentViewCommand {
     OpenStructure,
     StructureMove { rows: isize, columns: isize },
     SelectCurrentTableRow,
+    ActivateCurrentTableCell,
 }
 
 impl ContentViewState {
@@ -73,6 +75,7 @@ impl ContentViewState {
             full_search: None,
             virtual_collection: None,
             table: None,
+            table_returns_to_scene: false,
             restore_scene,
             restore_runtime,
         }
@@ -95,6 +98,7 @@ impl ContentViewState {
             full_search: None,
             virtual_collection: None,
             table: Some(table),
+            table_returns_to_scene: true,
             restore_scene,
             restore_runtime,
         }
@@ -174,6 +178,7 @@ impl ContentViewState {
                 _ => ContentViewCommand::Continue,
             },
             ContentViewMode::Table => match event.code {
+                KeyCode::Esc if self.table_returns_to_scene => ContentViewCommand::Close,
                 KeyCode::Esc => {
                     self.mode = ContentViewMode::Reader;
                     ContentViewCommand::Continue
@@ -197,6 +202,7 @@ impl ContentViewState {
                 KeyCode::Enter if self.table.as_ref().is_some_and(|table| table.row_selection) => {
                     ContentViewCommand::SelectCurrentTableRow
                 }
+                KeyCode::Char('a') => ContentViewCommand::ActivateCurrentTableCell,
                 _ => ContentViewCommand::Continue,
             },
         }
@@ -312,9 +318,20 @@ mod tests {
             ContentViewCommand::SelectCurrentTableRow
         );
         assert_eq!(
+            state.handle_key(key(KeyCode::Char('a'))),
+            ContentViewCommand::ActivateCurrentTableCell
+        );
+        let table = state.table.clone().unwrap();
+        assert_eq!(
             state.handle_key(key(KeyCode::Esc)),
             ContentViewCommand::Continue
         );
         assert_eq!(state.mode, ContentViewMode::Reader);
+
+        let mut direct = ContentViewState::for_table(table, None, None);
+        assert_eq!(
+            direct.handle_key(key(KeyCode::Esc)),
+            ContentViewCommand::Close
+        );
     }
 }
