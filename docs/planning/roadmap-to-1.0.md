@@ -26,8 +26,8 @@ generic semantic tasks.
 | v0.2 | Spatial Reconstruction | **COMPLETED / PUBLICLY RELEASED** |
 | v0.3 | Verified Capability Recovery | **COMPLETED / PUBLICLY RELEASED** |
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.5 | Task & Interaction Completeness | **FUNCTIONAL DEVELOPMENT COMPLETE / MILESTONE QUALIFICATION PENDING** |
-| v0.6 | Runtime Continuity & Multi-Surface Robustness | **PLANNED / NOT AUTHORIZED** |
+| v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
+| v0.6 | Runtime Continuity & Multi-Surface Robustness | **PLANNED / NEXT DISCOVERY RECOMMENDED / NOT AUTHORIZED** |
 | v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
@@ -284,9 +284,11 @@ by newly interactive control count.
 ### Recommended next task
 
 The [v0.5 Task & Interaction Completeness Discovery](v0.5-task-interaction-completeness.md)
-and all four derived functional phases are complete. The
-[v0.5 roadmap](v0.5-roadmap.md) recommends a separately authorized internal
-Milestone Qualification / close next; it has not started automatically.
+and all four derived functional phases are complete, and the
+[v0.5 milestone handoff](../validation/v0.5/milestone/HANDOFF.md) records the
+qualified internal close. The next recommended task is a separately authorized
+v0.6 Runtime Continuity & Multi-Surface Robustness Discovery; it has not
+started automatically.
 
 ## 5. v0.5 — Task & Interaction Completeness
 
@@ -304,10 +306,9 @@ task engine was found.
 
 The detailed task matrix, negative evidence, 1.0 baseline, and four bounded
 phases are recorded in the [v0.5 Discovery](v0.5-task-interaction-completeness.md)
-and [v0.5 roadmap](v0.5-roadmap.md). Functional development is complete;
-Milestone Qualification / close and every
-later implementation phase remain **NOT AUTHORIZED** until explicit user
-approval.
+and [v0.5 roadmap](v0.5-roadmap.md). Functional development is complete and
+the internal milestone is qualified. v0.6 Discovery and every later phase
+remain **NOT AUTHORIZED** until explicit user approval.
 
 ### Candidate interaction families
 
@@ -744,11 +745,11 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 ## 15. Immediate next decision
 
-v0.4 is complete and milestone-qualified. v0.5 Discovery is complete with
-conclusion A. After user review, the recommended next technical task is
-**0.5A — Verified Current Collection Selection**. It is not authorized by this
-roadmap update. v0.6, v0.7, 1.0 integration, v1.0.0 RC, and public release
-likewise remain direction only until separately authorized.
+v0.4 and v0.5 are complete, milestone-qualified internal milestones. The
+recommended next technical task is **v0.6 — Runtime Continuity & Multi-Surface
+Robustness Discovery**. It is not authorized by this roadmap update. v0.7,
+1.0 integration, v1.0.0 RC, and public release likewise remain direction only
+until separately authorized.
 
 ## 16. References
 
@@ -768,6 +769,8 @@ likewise remain direction only until separately authorized.
   current task matrix, live evidence, and 1.0 baseline.
 - [v0.5 roadmap](v0.5-roadmap.md) — derived bounded phases; none are
   automatically authorized.
+- [v0.5 milestone qualification](../validation/v0.5/milestone/HANDOFF.md) —
+  internal milestone close and evidence index.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no
