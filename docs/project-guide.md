@@ -338,8 +338,13 @@ layout reconstruction.
   when later authoritative application semantics prove overall task success.
 - v0.5 functional development: **COMPLETE**.
 - v0.5 milestone qualification: **QUALIFIED**.
-- Recommended next work: **v0.6 Runtime Continuity & Multi-Surface Robustness
-  Discovery**, **NOT YET AUTHORIZED**.
+- v0.6 Runtime Continuity & Multi-Surface Robustness Discovery: **COMPLETE**;
+  conclusion **A — EXISTING AUTHORITY MODEL SUFFICIENT; BOUNDED RUNTIME
+  HARDENING REQUIRED**. The current session/generation/exact-locator identity
+  layers are sufficient with small lifecycle hardening; no new runtime epoch
+  identity or surface manager is justified.
+- Recommended next work: **v0.6A Runtime Epoch and Late-Work Isolation**,
+  **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -366,7 +371,11 @@ qualification basis and records the internal close. The current task matrix,
 0.5D evidence is in the [common-task baseline handoff](validation/v0.5/common-task-baseline/HANDOFF.md),
 and the formal internal close is in the
 [v0.5 milestone handoff](validation/v0.5/milestone/HANDOFF.md).
-No later phase or release work is automatically authorized.
+The current runtime model, live lifecycle evidence, bounded 1.0 continuity
+baseline, and architecture conclusion are in the
+[v0.6 Discovery](planning/v0.6-runtime-continuity.md); the five derived phases
+are in the [v0.6 roadmap](planning/v0.6-roadmap.md). No implementation phase or
+release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -377,8 +386,9 @@ Compound interaction evidence did not justify speculative orchestration.
 Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
-v0.5 is complete and milestone-qualified internally. v0.6 Discovery and every
-later milestone still require explicit authorization.
+v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
+complete; v0.6A and every later implementation milestone still require
+explicit authorization.
 
 ## 21. Glossary
 
