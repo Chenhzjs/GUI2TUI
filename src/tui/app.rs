@@ -8,8 +8,8 @@ use ratatui::Frame;
 
 use crate::{
     backend::{
-        AtspiBackend, BackendError, BootstrapStrategy, EventDelivery, EventSubscription,
-        InspectOptions,
+        ApplicationRef, AtspiBackend, BackendError, BootstrapStrategy, EventDelivery,
+        EventSubscription, InspectOptions,
     },
     content::{
         ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget,
@@ -70,7 +70,6 @@ pub struct TuiApplication {
     modality_cancel: crate::modality::CancellationToken,
     materialized_artifacts: Vec<crate::modality::materialize::MaterializedArtifact>,
     backend: AtspiBackend,
-    app_selector: String,
     application_locator: crate::semantic::BackendLocator,
     inspect_options: InspectOptions,
     bootstrap_strategy: BootstrapStrategy,
@@ -131,6 +130,23 @@ struct ActionObservationResult {
 impl TuiApplication {
     pub fn is_available(&self) -> bool {
         self.application_available && self.backend_available
+    }
+
+    pub fn transport_available(&self) -> bool {
+        self.backend_available
+    }
+
+    /// The application selector is a top-level user action. Keep ordinary
+    /// scene use available while refusing to steal text or overlay input.
+    pub fn accepts_application_selector_shortcut(&self) -> bool {
+        !self.is_available()
+            || (self.help_visible.is_none()
+                && !self.runtime_status_visible
+                && self.modality_view.is_none()
+                && self.edit_session.is_none()
+                && self.command_palette.is_none()
+                && self.choice_overlay.is_none()
+                && self.content_view.is_none())
     }
     fn desired_inline_materialization_extent(&self) -> usize {
         inline_materialization_budget(self.viewport_height, self.viewport.offset).visible_blocks
@@ -271,17 +287,18 @@ impl TuiApplication {
         );
     }
 
-    /// Explicit user selection of the same name. Never reconciles old/new
-    /// caches, content, quarantine, scopes or command/choice bindings.
-    async fn open_fresh_generation(&mut self) {
-        // Application restart invalidates object locators, not a healthy
-        // accessibility-bus connection. Reuse it; otherwise every generation
-        // leaves another zbus executor thread/fd until the process runtime
-        // shuts down. A real bus loss follows the separate reconnect path.
-        let backend = self.backend.clone();
-        match Self::new(
+    /// Replace the application-owned view from one exact item in a fresh
+    /// public enumeration. Descriptive names never enter this authority path.
+    pub async fn select_fresh_application(
+        &mut self,
+        backend: AtspiBackend,
+        application: ApplicationRef,
+    ) {
+        self.application_gone();
+        let retained_backend = backend.clone();
+        match Self::new_selected(
             backend,
-            self.app_selector.clone(),
+            application,
             self.inspect_options,
             self.settle_delay,
             self.bootstrap_strategy,
@@ -305,23 +322,16 @@ impl TuiApplication {
                 tracing::debug!(
                     target: "gui2tui::product",
                     status = %self.runtime_status(),
-                    "opened fresh application generation"
+                    "user selected fresh application generation"
                 );
             }
-            Err(_) => {
-                self.status =
-                    "Application is not available yet. F5 retries explicitly; q quits.".into()
+            Err(error) => {
+                self.backend = retained_backend;
+                self.backend_available = true;
+                self.status = format!(
+                    "Selected application is no longer available. Choose a current application: {error}"
+                );
             }
-        }
-    }
-
-    pub async fn select_fresh_application(&mut self, name: String) {
-        self.application_gone();
-        self.app_selector = name;
-        if self.backend_available {
-            self.open_fresh_generation().await;
-        } else {
-            self.reconnect_backend().await;
         }
     }
 
@@ -651,10 +661,38 @@ impl TuiApplication {
         initial_terminal_size: (u16, u16),
         external_text_handler_available: bool,
     ) -> Result<Self, BackendError> {
-        let started = Instant::now();
         let applications = backend.applications().await?;
         let application =
             AtspiBackend::select_application(&applications, Some(&app_selector), None)?.clone();
+        Self::new_selected(
+            backend,
+            application,
+            inspect_options,
+            settle_delay,
+            bootstrap_strategy,
+            event_buffer_capacity,
+            presentation_mode,
+            spatial_layout,
+            initial_terminal_size,
+            external_text_handler_available,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn new_selected(
+        backend: AtspiBackend,
+        application: ApplicationRef,
+        inspect_options: InspectOptions,
+        settle_delay: Duration,
+        bootstrap_strategy: BootstrapStrategy,
+        event_buffer_capacity: usize,
+        presentation_mode: PresentationMode,
+        spatial_layout: bool,
+        initial_terminal_size: (u16, u16),
+        external_text_handler_available: bool,
+    ) -> Result<Self, BackendError> {
+        let started = Instant::now();
         let application_locator = application.backend_locator.clone();
         let mut event_subscription = backend
             .subscribe_events(&application, event_buffer_capacity)
@@ -758,7 +796,6 @@ impl TuiApplication {
             modality_cancel: Default::default(),
             materialized_artifacts: Vec::new(),
             backend,
-            app_selector,
             application_locator,
             inspect_options,
             bootstrap_strategy,
@@ -1474,7 +1511,9 @@ impl TuiApplication {
         }
         if !self.application_available {
             if key.code == KeyCode::F(5) {
-                self.open_fresh_generation().await;
+                self.status =
+                    "Choose a current application with b or F5; the previous name is not recovery authority."
+                        .into();
             }
             return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc);
         }
@@ -3402,7 +3441,7 @@ impl TuiApplication {
         let started = Instant::now();
         match load_snapshot(
             &self.backend,
-            &self.app_selector,
+            &self.application_locator,
             self.inspect_options,
             self.bootstrap_strategy,
         )
@@ -4365,10 +4404,9 @@ impl TuiApplication {
         if !self.application_available {
             return;
         }
-        self.runtime.state = crate::runtime::SessionState::Degraded;
-        self.backend_available = false;
         self.runtime.record_backend_loss();
-        self.runtime.invalidate_application();
+        self.application_gone();
+        self.backend_available = false;
         self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
         self.reconnect_backend().await;
     }
@@ -4381,41 +4419,38 @@ impl TuiApplication {
             let Ok(backend) = AtspiBackend::connect(timeout).await else {
                 continue;
             };
-            let Ok(mut fresh) = Self::new(
-                backend,
-                self.app_selector.clone(),
-                self.inspect_options,
-                self.settle_delay,
-                self.bootstrap_strategy,
-                self.event_subscription.capacity(),
-                self.presentation_mode,
-                self.spatial_layout,
-                (
-                    self.viewport_width.saturating_add(2),
-                    self.viewport_height.saturating_add(3),
-                ),
-                self.external_text_handler_available,
-            )
-            .await
-            else {
+            let Ok(applications) = backend.applications().await else {
                 continue;
             };
-            fresh.configure_modality_client(self.modality_socket.clone());
-            let mut runtime = std::mem::take(&mut self.runtime);
-            runtime.invalidate_application();
-            runtime.open_application(fresh.application_locator.clone());
-            runtime.record_backend_reconnect();
-            fresh.runtime = runtime;
-            fresh.backend_available = true;
-            fresh.status =
-                "Accessibility backend reconnected; opened a fresh application generation".into();
-            *self = fresh;
+            self.backend = backend;
+            self.backend_available = true;
+            self.application_available = false;
+            self.event_stream_available = false;
+            self.runtime.record_backend_reconnect();
+            self.status = if applications.is_empty() {
+                "Accessibility connection restored; no current applications are available. Press b or F5 to choose after one appears."
+                    .into()
+            } else {
+                "Accessibility connection restored; choose a current application with b or F5."
+                    .into()
+            };
+            tracing::debug!(
+                target: "gui2tui::product",
+                applications = applications.len(),
+                status = %self.runtime_status(),
+                "transport restored without semantic reauthorization"
+            );
             return;
         }
         self.event_stream_available = false;
         self.status =
             "Desktop accessibility service unavailable. Existing view is read-only. F5: retry; b: applications; d: diagnostics; q: quit."
                 .into();
+        tracing::debug!(
+            target: "gui2tui::product",
+            status = %self.runtime_status(),
+            "bounded transport recovery exhausted"
+        );
     }
 
     /// Cheap lifecycle check used by the terminal loop and operation observer.
@@ -4924,12 +4959,15 @@ impl Drop for TuiApplication {
 
 async fn load_snapshot(
     backend: &AtspiBackend,
-    selector: &str,
+    application_locator: &BackendLocator,
     options: InspectOptions,
     strategy: BootstrapStrategy,
 ) -> Result<crate::backend::BootstrapResult, BackendError> {
     let applications = backend.applications().await?;
-    let application = AtspiBackend::select_application(&applications, Some(selector), None)?;
+    let application = applications
+        .iter()
+        .find(|application| &application.backend_locator == application_locator)
+        .ok_or_else(|| BackendError::ApplicationNotFound(application_locator.encode()))?;
     backend
         .bootstrap_application(application, options, strategy)
         .await

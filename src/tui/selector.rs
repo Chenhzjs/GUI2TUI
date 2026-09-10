@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+use crate::semantic::BackendLocator;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SelectorIntent {
     Next,
@@ -16,8 +18,17 @@ pub enum SelectorIntent {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectorTarget {
-    Running(String),
+    Running(RunningApplication),
     Launcher(String),
+}
+
+/// One exact application from the current selector enumeration. The index is
+/// display-only; the locator is the authority returned by an explicit choice.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunningApplication {
+    pub index: usize,
+    pub name: String,
+    pub locator: BackendLocator,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,14 +55,18 @@ pub struct ApplicationSelector {
 }
 
 impl ApplicationSelector {
-    pub fn new(applications: Vec<String>) -> Self {
+    pub fn new(applications: Vec<RunningApplication>) -> Self {
         Self {
             entries: applications
                 .into_iter()
-                .map(|name| SelectorEntry {
-                    label: format!("[running] {name}"),
-                    search_key: name.clone(),
-                    target: SelectorTarget::Running(name),
+                .map(|application| SelectorEntry {
+                    label: format!(
+                        "[running #{index}] {name}",
+                        index = application.index,
+                        name = application.name
+                    ),
+                    search_key: application.name.clone(),
+                    target: SelectorTarget::Running(application),
                 })
                 .collect(),
             query: String::new(),
@@ -66,7 +81,7 @@ impl ApplicationSelector {
         self.entries.is_empty()
     }
 
-    pub fn with_launchers(applications: Vec<String>, launchers: Vec<String>) -> Self {
+    pub fn with_launchers(applications: Vec<RunningApplication>, launchers: Vec<String>) -> Self {
         let mut selector = Self::new(applications);
         selector
             .entries
@@ -95,7 +110,7 @@ impl ApplicationSelector {
 
     pub fn replace(
         &mut self,
-        applications: Vec<String>,
+        applications: Vec<RunningApplication>,
         launchers: Vec<String>,
         message: Option<String>,
     ) {
@@ -299,10 +314,19 @@ mod tests {
 
     use super::*;
 
+    fn application(index: usize, name: &str) -> RunningApplication {
+        RunningApplication {
+            index,
+            name: name.to_owned(),
+            locator: BackendLocator::new(format!(":1.{index}"), "/app"),
+        }
+    }
+
     #[test]
     fn selector_filter_shortcuts_and_refresh_preserve_selection() {
         use crossterm::event::KeyModifiers;
-        let mut selector = ApplicationSelector::new(vec!["GTK".into(), "Browser".into()]);
+        let mut selector =
+            ApplicationSelector::new(vec![application(1, "GTK"), application(2, "Browser")]);
         for character in ['/', 'r'] {
             assert!(
                 selector.filter_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
@@ -310,20 +334,28 @@ mod tests {
         }
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Browser".into()))
+            Some(&SelectorTarget::Running(application(2, "Browser")))
         );
         selector.filter_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        selector.replace(vec!["Other".into(), "Browser".into()], Vec::new(), None);
+        selector.replace(
+            vec![application(3, "Other"), application(2, "Browser")],
+            Vec::new(),
+            None,
+        );
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Browser".into()))
+            Some(&SelectorTarget::Running(application(2, "Browser")))
         );
     }
 
     #[test]
     fn selector_scroll_keeps_last_item_visible() {
         let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
-        let mut selector = ApplicationSelector::new((0..30).map(|i| format!("App{i}")).collect());
+        let mut selector = ApplicationSelector::new(
+            (0..30)
+                .map(|index| application(index + 1, &format!("App{index}")))
+                .collect(),
+        );
         selector.handle(SelectorIntent::Previous);
         terminal.draw(|frame| selector.render(frame)).unwrap();
         assert!(selector.hit_regions.iter().any(|region| region.index == 29));
@@ -331,20 +363,21 @@ mod tests {
 
     #[test]
     fn selector_navigation_wraps_and_opens_the_selected_application() {
-        let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
+        let mut selector =
+            ApplicationSelector::new(vec![application(1, "GTK"), application(2, "Qt")]);
         selector.handle(SelectorIntent::Previous);
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Qt".into()))
+            Some(&SelectorTarget::Running(application(2, "Qt")))
         );
         selector.handle(SelectorIntent::Next);
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("GTK".into()))
+            Some(&SelectorTarget::Running(application(1, "GTK")))
         );
         assert_eq!(
             selector.handle(SelectorIntent::Open),
-            Some(SelectorTarget::Running("GTK".to_owned()))
+            Some(SelectorTarget::Running(application(1, "GTK")))
         );
     }
 
@@ -352,28 +385,48 @@ mod tests {
     fn selector_terminal_hit_testing_opens_the_clicked_row() {
         let backend = TestBackend::new(40, 8);
         let mut terminal = Terminal::new(backend).unwrap();
-        let mut selector = ApplicationSelector::new(vec!["GTK".to_owned(), "Qt".to_owned()]);
+        let mut selector =
+            ApplicationSelector::new(vec![application(1, "GTK"), application(2, "Qt")]);
         terminal.draw(|frame| selector.render(frame)).unwrap();
 
         assert_eq!(
             selector.click(2, 2),
-            Some(SelectorTarget::Running("Qt".to_owned()))
+            Some(SelectorTarget::Running(application(2, "Qt")))
         );
         assert_eq!(
             selector.selected_target(),
-            Some(&SelectorTarget::Running("Qt".into()))
+            Some(&SelectorTarget::Running(application(2, "Qt")))
         );
         assert!(selector.click(39, 7).is_none());
     }
 
     #[test]
     fn selector_exposes_registered_launchers_distinctly() {
-        let mut selector =
-            ApplicationSelector::with_launchers(vec!["GTK".into()], vec!["chromium".into()]);
+        let mut selector = ApplicationSelector::with_launchers(
+            vec![application(1, "GTK")],
+            vec!["chromium".into()],
+        );
         selector.handle(SelectorIntent::Next);
         assert_eq!(
             selector.handle(SelectorIntent::Open),
             Some(SelectorTarget::Launcher("chromium".into()))
+        );
+    }
+
+    #[test]
+    fn duplicate_names_remain_distinct_exact_current_choices() {
+        let first = application(1, "Editor");
+        let second = application(2, "Editor");
+        let mut selector = ApplicationSelector::new(vec![first.clone(), second.clone()]);
+
+        assert_eq!(
+            selector.selected_target(),
+            Some(&SelectorTarget::Running(first))
+        );
+        selector.handle(SelectorIntent::Next);
+        assert_eq!(
+            selector.handle(SelectorIntent::Open),
+            Some(SelectorTarget::Running(second))
         );
     }
 }

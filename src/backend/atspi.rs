@@ -949,11 +949,23 @@ impl AtspiBackend {
 
         let selector = name.ok_or(BackendError::NoApplications)?;
         let selector_lower = selector.to_lowercase();
-        if let Some(exact) = applications
+        let exact: Vec<_> = applications
             .iter()
-            .find(|app| app.name.to_lowercase() == selector_lower)
-        {
-            return Ok(exact);
+            .filter(|app| app.name.to_lowercase() == selector_lower)
+            .collect();
+        match exact.as_slice() {
+            [app] => return Ok(app),
+            [] => {}
+            _ => {
+                return Err(BackendError::AmbiguousApplication {
+                    selector: selector.to_owned(),
+                    matches: exact
+                        .iter()
+                        .map(|app| format!("#{} {}", app.index, app.name))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            }
         }
 
         let matches: Vec<_> = applications
@@ -967,7 +979,7 @@ impl AtspiBackend {
                 selector: selector.to_owned(),
                 matches: matches
                     .iter()
-                    .map(|app| app.name.as_str())
+                    .map(|app| format!("#{} {}", app.index, app.name))
                     .collect::<Vec<_>>()
                     .join(", "),
             }),
@@ -4063,6 +4075,21 @@ mod tests {
         let apps = applications();
         assert!(matches!(
             AtspiBackend::select_application(&apps, Some("gnome"), None),
+            Err(BackendError::AmbiguousApplication { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_exact_application_names() {
+        let mut apps = applications();
+        apps.push(ApplicationRef {
+            index: 4,
+            name: "Firefox".to_owned(),
+            backend_locator: BackendLocator::new(":1.4", "/app/duplicate"),
+            object: ObjectRefOwned::default(),
+        });
+        assert!(matches!(
+            AtspiBackend::select_application(&apps, Some("firefox"), None),
             Err(BackendError::AmbiguousApplication { .. })
         ));
     }

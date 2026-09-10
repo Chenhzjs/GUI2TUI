@@ -47,6 +47,13 @@ dbus-run-session -- bash -euo pipefail -c '
 
     Xvfb "$DISPLAY" -screen 0 1280x800x24 >/tmp/gui2tui-v06a-xvfb.log 2>&1 &
     xvfb_pid=$!
+    for _ in $(seq 1 100); do
+        if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.05
+    done
+    xdpyinfo -display "$DISPLAY" >/dev/null
     dbus-update-activation-environment \
         DISPLAY XDG_SESSION_TYPE XDG_RUNTIME_DIR NO_AT_BRIDGE
     gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \

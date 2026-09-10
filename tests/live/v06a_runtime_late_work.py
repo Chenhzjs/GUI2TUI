@@ -123,6 +123,37 @@ def wait_tree(application: str, needle: str) -> str:
     return wait_for(current, message=f"{application} exposing {needle!r}")
 
 
+def choose_fresh_application(
+    child: pexpect.spawn, application: str, product_log: pathlib.Path, message: str
+) -> None:
+    ready = product_log.read_text(encoding="utf-8").count(
+        "fresh application selector ready"
+    )
+    selected = product_log.read_text(encoding="utf-8").count(
+        "user selected fresh application generation"
+    )
+    child.send(b"\x1b[15~")
+    wait_for(
+        lambda: product_log.read_text(encoding="utf-8").count(
+            "fresh application selector ready"
+        )
+        > ready,
+        timeout=15,
+        message=f"{message} selector",
+    )
+    child.send(b"/")
+    child.send(application.encode())
+    child.send(b"\r\r")
+    wait_for(
+        lambda: product_log.read_text(encoding="utf-8").count(
+            "user selected fresh application generation"
+        )
+        > selected,
+        timeout=15,
+        message=message,
+    )
+
+
 qt_process = None
 qt_tui = None
 gtk_process = None
@@ -162,13 +193,7 @@ try:
         if "application generation invalidated" in line
     )
     assert '"active_operations":0' in invalidation, invalidation
-    qt_tui.send(b"\x1b[15~")  # F5: explicit fresh generation
-    wait_for(
-        lambda: "opened fresh application generation"
-        in log.read_text(encoding="utf-8"),
-        timeout=15,
-        message="fresh G2 binding",
-    )
+    choose_fresh_application(qt_tui, QT_APP, log, "fresh G2 binding")
     command(qt_tui, "Fresh toggle")
     fresh = wait_tree(QT_APP, "Status: fresh=True")
     assert re.search(r'CheckBox "Fresh toggle".*\bchecked\b', fresh), fresh
@@ -263,12 +288,11 @@ try:
         assert stat.S_ISREG(artifact.lstat().st_mode)
         assert artifact.lstat().st_mode & 0o077 == 0
         assert "handler candidate C" in artifact.read_text(encoding="utf-8")
-        gtk_tui.send(b"\x1b[15~")
-        wait_for(
-            lambda: "opened fresh application generation"
-            in product_log.read_text(encoding="utf-8"),
-            timeout=15,
-            message="external-text fresh G2 binding",
+        choose_fresh_application(
+            gtk_tui,
+            GTK_APP,
+            product_log,
+            "external-text fresh G2 binding",
         )
         gtk_tui.send(b"e")
         fresh_external = wait_tree(GTK_APP, "handler candidate C")

@@ -18,20 +18,36 @@ use crossterm::{
 };
 use futures_lite::StreamExt;
 use gui2tui::{
-    backend::{AtspiBackend, BootstrapStrategy, InspectOptions},
+    backend::{ApplicationRef, AtspiBackend, BootstrapStrategy, InspectOptions},
     runtime::signals::{RuntimeSignal, RuntimeSignals},
     transcompile::PresentationMode,
     tui::{
         app::TuiApplication,
         input::mouse_to_intent,
         selector::{
-            ApplicationSelector, SelectorIntent, SelectorTarget, key_to_selector_intent,
-            mouse_click,
+            ApplicationSelector, RunningApplication, SelectorIntent, SelectorTarget,
+            key_to_selector_intent, mouse_click,
         },
     },
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tracing_subscriber::EnvFilter;
+
+#[derive(Clone)]
+struct SelectedApplication {
+    backend: AtspiBackend,
+    application: ApplicationRef,
+}
+
+struct SelectorSnapshot {
+    backend: AtspiBackend,
+    applications: Vec<ApplicationRef>,
+}
+
+enum InitialApplication {
+    Named(String),
+    Enumerated(SelectedApplication),
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -609,10 +625,10 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
         panic!("controlled Phase 4A terminal restoration failpoint");
     }
 
-    let app_selector = match cli.app {
-        Some(name) => name,
+    let initial_application = match cli.app {
+        Some(name) => InitialApplication::Named(name),
         None => {
-            let Some(name) = run_selector(
+            let Some(application) = run_selector(
                 &mut terminal,
                 &mut signals,
                 &mut terminal_events,
@@ -624,31 +640,51 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
             else {
                 return Ok(());
             };
-            name
+            InitialApplication::Enumerated(application)
         }
     };
 
-    let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Desktop accessibility service unavailable. Run gui2tui doctor; use the same desktop session/user.")?;
-
     terminal.draw(|frame| frame.render_widget(ratatui::widgets::Paragraph::new("Loading the application's accessible interface... Large applications may take a few seconds."), frame.area()))?;
     let initial_terminal = terminal.size()?;
-    let mut app = TuiApplication::new(
-        backend,
-        app_selector,
-        InspectOptions {
-            verbose: false,
-            max_depth: cli.max_depth,
-            max_nodes: cli.max_nodes,
-        },
-        Duration::from_millis(cli.settle_ms),
-        cli.bootstrap,
-        config.runtime.event_queue_capacity,
-        cli.presentation,
-        matches!(cli.layout, LayoutMode::Spatial),
-        (initial_terminal.width, initial_terminal.height),
-        config.interaction.complex_text.is_some(),
-    )
-    .await?;
+    let inspect_options = InspectOptions {
+        verbose: false,
+        max_depth: cli.max_depth,
+        max_nodes: cli.max_nodes,
+    };
+    let initial_size = (initial_terminal.width, initial_terminal.height);
+    let mut app = match initial_application {
+        InitialApplication::Named(name) => {
+            let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Desktop accessibility service unavailable. Run gui2tui doctor; use the same desktop session/user.")?;
+            TuiApplication::new(
+                backend,
+                name,
+                inspect_options,
+                Duration::from_millis(cli.settle_ms),
+                cli.bootstrap,
+                config.runtime.event_queue_capacity,
+                cli.presentation,
+                matches!(cli.layout, LayoutMode::Spatial),
+                initial_size,
+                config.interaction.complex_text.is_some(),
+            )
+            .await?
+        }
+        InitialApplication::Enumerated(selected) => {
+            TuiApplication::new_selected(
+                selected.backend,
+                selected.application,
+                inspect_options,
+                Duration::from_millis(cli.settle_ms),
+                cli.bootstrap,
+                config.runtime.event_queue_capacity,
+                cli.presentation,
+                matches!(cli.layout, LayoutMode::Spatial),
+                initial_size,
+                config.interaction.complex_text.is_some(),
+            )
+            .await?
+        }
+    };
 
     app.configure_modality_client(cli.modality_socket);
 
@@ -714,10 +750,39 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                 redraw = true;
                 match terminal_event? {
                     Event::Key(key) => {
-                        if !app.is_available() && key.code == crossterm::event::KeyCode::Char('b') {
-                                if let Some(name) = run_selector(&mut terminal, &mut signals, &mut terminal_events, timeout, config.terminal.mouse, &mut config).await? {
-                                    app.select_fresh_application(name).await;
-                                }
+                        let selector_requested = app.accepts_application_selector_shortcut()
+                            && (key.code == crossterm::event::KeyCode::Char('b')
+                                || (!app.is_available()
+                                    && app.transport_available()
+                                    && key.code == crossterm::event::KeyCode::F(5)));
+                        if selector_requested {
+                            tracing::debug!(
+                                target: "gui2tui::product",
+                                current_available = app.is_available(),
+                                transport_available = app.transport_available(),
+                                "fresh application selection requested"
+                            );
+                            if let Some(selected) = run_selector(
+                                &mut terminal,
+                                &mut signals,
+                                &mut terminal_events,
+                                timeout,
+                                config.terminal.mouse,
+                                &mut config,
+                            )
+                            .await?
+                            {
+                                app.select_fresh_application(
+                                    selected.backend,
+                                    selected.application,
+                                )
+                                .await;
+                            }
+                            tracing::debug!(
+                                target: "gui2tui::product",
+                                current_available = app.is_available(),
+                                "fresh application selector closed"
+                            );
                             continue;
                         }
                         if !app.is_available() && key.code == crossterm::event::KeyCode::Char('d') {
@@ -802,10 +867,18 @@ async fn run_selector(
     timeout: Duration,
     mouse_enabled: bool,
     config: &mut gui2tui::product::config::Config,
-) -> Result<Option<String>, io::Error> {
+) -> Result<Option<SelectedApplication>, io::Error> {
     let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
     let mut selector = ApplicationSelector::with_launchers(Vec::new(), launchers.clone());
-    refresh_selector(&mut selector, timeout, &launchers).await;
+    let mut snapshot = None;
+    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers).await;
+    tracing::debug!(
+        target: "gui2tui::product",
+        applications = snapshot
+            .as_ref()
+            .map_or(0, |current| current.applications.len()),
+        "fresh application selector ready"
+    );
     loop {
         terminal.draw(|frame| selector.render(frame))?;
         let event = tokio::select! {
@@ -824,7 +897,7 @@ async fn run_selector(
                     key.code,
                     crossterm::event::KeyCode::Char('r') | crossterm::event::KeyCode::F(5)
                 ) {
-                    refresh_selector(&mut selector, timeout, &launchers).await;
+                    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers).await;
                     continue;
                 }
                 if key.code == crossterm::event::KeyCode::Char('d') {
@@ -840,6 +913,7 @@ async fn run_selector(
                             terminal,
                             events,
                             &mut selector,
+                            &mut snapshot,
                             target,
                             config,
                             timeout,
@@ -860,6 +934,7 @@ async fn run_selector(
                         terminal,
                         events,
                         &mut selector,
+                        &mut snapshot,
                         target,
                         config,
                         timeout,
@@ -879,15 +954,35 @@ async fn resolve_selector_target(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     events: &mut EventStream,
     selector: &mut ApplicationSelector,
+    snapshot: &mut Option<SelectorSnapshot>,
     target: SelectorTarget,
     config: &mut gui2tui::product::config::Config,
     timeout: Duration,
-) -> io::Result<Option<String>> {
+) -> io::Result<Option<SelectedApplication>> {
     let SelectorTarget::Launcher(id) = target else {
-        let SelectorTarget::Running(name) = target else {
+        let SelectorTarget::Running(application) = target else {
             unreachable!()
         };
-        return Ok(Some(name));
+        let Some(current) = snapshot.as_ref() else {
+            selector.set_message(
+                "Application enumeration expired; refresh and choose a current application",
+            );
+            return Ok(None);
+        };
+        let Some(exact) = current
+            .applications
+            .iter()
+            .find(|candidate| candidate.backend_locator == application.locator)
+            .cloned()
+        else {
+            selector
+                .set_message("Selected application is no longer current; refresh and choose again");
+            return Ok(None);
+        };
+        return Ok(Some(SelectedApplication {
+            backend: current.backend.clone(),
+            application: exact,
+        }));
     };
     terminal.draw(|frame| {
         frame.render_widget(
@@ -918,7 +1013,28 @@ async fn resolve_selector_target(
                     ));
                 }
             }
-            Ok(Some(outcome.application_name))
+            let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
+            refresh_selector(selector, snapshot, timeout, &launchers).await;
+            let selected = snapshot.as_ref().and_then(|current| {
+                AtspiBackend::select_application(
+                    &current.applications,
+                    Some(&outcome.application_name),
+                    None,
+                )
+                .ok()
+                .cloned()
+                .map(|application| SelectedApplication {
+                    backend: current.backend.clone(),
+                    application,
+                })
+            });
+            if selected.is_none() {
+                selector.set_message(format!(
+                    "Application '{}' started; choose its exact current entry",
+                    outcome.application_name
+                ));
+            }
+            Ok(selected)
         }
         Err(error) => {
             selector.set_message(error);
@@ -973,20 +1089,40 @@ async fn wait_for_launcher(
 
 async fn refresh_selector(
     selector: &mut ApplicationSelector,
+    snapshot: &mut Option<SelectorSnapshot>,
     timeout: Duration,
     launchers: &[String],
 ) {
     let result = tokio::time::timeout(timeout, async {
-        AtspiBackend::connect(timeout).await?.applications().await
+        let backend = AtspiBackend::connect(timeout).await?;
+        let applications = backend.applications().await?;
+        Ok::<_, gui2tui::backend::BackendError>(SelectorSnapshot {
+            backend,
+            applications,
+        })
     })
     .await;
     match result {
-        Ok(Ok(apps)) => selector.replace(
-            apps.into_iter().map(|app| app.name).collect(),
-            launchers.to_vec(),
-            None,
-        ),
-        _ => selector.replace(Vec::new(), launchers.to_vec(), Some("Desktop accessibility service unavailable. Registered launchers still require a working AT-SPI session; press d for diagnostics.".into())),
+        Ok(Ok(current)) => {
+            selector.replace(
+                current
+                    .applications
+                    .iter()
+                    .map(|application| RunningApplication {
+                        index: application.index,
+                        name: application.name.clone(),
+                        locator: application.backend_locator.clone(),
+                    })
+                    .collect(),
+                launchers.to_vec(),
+                None,
+            );
+            *snapshot = Some(current);
+        }
+        _ => {
+            *snapshot = None;
+            selector.replace(Vec::new(), launchers.to_vec(), Some("Desktop accessibility service unavailable. Registered launchers still require a working AT-SPI session; press d for diagnostics.".into()));
+        }
     }
 }
 
