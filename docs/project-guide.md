@@ -155,6 +155,17 @@ readback contract. `BackendLocator` remains exact object authority within the
 generation; neither a retained `RuntimeNodeId` nor descriptive similarity can
 authorize a replacement object.
 
+Transport recovery restores AT-SPI communication, not application authority.
+After transport loss or explicit application reselection, GUI2TUI keeps the
+same `RuntimeSessionId` but establishes a fresh `ApplicationGenerationId`,
+cache, event subscription, scope, focus, scene, and bindings from one exact
+item in a current public enumeration. A descriptive application name can
+filter an initial/current selection, but cannot prove continuity or reactivate
+old bindings. If exact survival cannot be proven, including after an
+accessibility-bus lifecycle change or ambiguous duplicate names, the user must
+choose a fresh current application. Recovery reconstructs current truth and
+never replays an interrupted semantic operation.
+
 Realization changes which current semantic elements are available; it does
 not create historical ownership or operation identity. Current hierarchy may
 use only freshly exposed public containment/relations. A relation target read
@@ -359,8 +370,13 @@ layout reconstruction.
   authority; late work cannot mutate, confirm, publish, or overwrite into a
   newer generation, and exact target locators prevent same-generation
   replacement migration.
-- Recommended next work: seek explicit authorization for **v0.6B Transport and
-  Application Recovery**; it is **NOT YET AUTHORIZED**.
+- v0.6B Transport and Application Recovery: **COMPLETE / VALIDATED**.
+  Transport recovery remains bounded and does not reauthorize a remembered
+  name; every recovered or reselected view uses a fresh generation and exact
+  current-enumeration binding, while ambiguous duplicate names require fresh
+  user choice.
+- Recommended next work: seek explicit authorization for **v0.6C Surface,
+  Event, Cache, and Resource Continuity**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -392,8 +408,10 @@ baseline, and architecture conclusion are in the
 [v0.6 Discovery](planning/v0.6-runtime-continuity.md); the five derived phases
 are in the [v0.6 roadmap](planning/v0.6-roadmap.md), and the completed bounded
 late-work evidence is in the
-[0.6A handoff](validation/v0.6/runtime-epoch-late-work/HANDOFF.md). No later
-implementation phase or release work is automatically authorized.
+[0.6A handoff](validation/v0.6/runtime-epoch-late-work/HANDOFF.md). The
+completed transport/application recovery evidence is in the
+[0.6B handoff](validation/v0.6/transport-application-recovery/HANDOFF.md). No
+later implementation phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -405,8 +423,8 @@ Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
-complete and 0.6A is validated; v0.6B and every later implementation milestone
-still require explicit authorization.
+complete, and 0.6A and 0.6B are validated; v0.6C and every later implementation
+phase still require explicit authorization.
 
 ## 21. Glossary
 
