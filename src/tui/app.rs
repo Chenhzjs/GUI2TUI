@@ -264,7 +264,11 @@ impl TuiApplication {
         self.materialized_artifacts.clear();
         self.hit_map = HitMap::default();
         self.status = "Application is no longer available. Tasks discarded. F5: search again; b: applications; d: diagnostics; q: quit.".into();
-        tracing::debug!(status = %self.runtime_status(), "application generation invalidated");
+        tracing::debug!(
+            target: "gui2tui::product",
+            status = %self.runtime_status(),
+            "application generation invalidated"
+        );
     }
 
     /// Explicit user selection of the same name. Never reconciles old/new
@@ -298,7 +302,11 @@ impl TuiApplication {
                 runtime.open_application(fresh.application_locator.clone());
                 fresh.runtime = runtime;
                 *self = fresh;
-                tracing::debug!(status = %self.runtime_status(), "opened fresh application generation");
+                tracing::debug!(
+                    target: "gui2tui::product",
+                    status = %self.runtime_status(),
+                    "opened fresh application generation"
+                );
             }
             Err(_) => {
                 self.status =
@@ -3027,11 +3035,15 @@ impl TuiApplication {
         self.synchronize_after_external_handler().await;
         match handler {
             HandlerOutcome::Unchanged => {
-                let _ = self.runtime.complete(&session.ticket);
+                if !self.complete_external_text_ticket(&mut session, false, "unchanged") {
+                    return;
+                }
                 self.status = "External text unchanged; GUI was not mutated".to_owned();
             }
             HandlerOutcome::Failed { reason, modified } => {
-                let _ = self.runtime.complete(&session.ticket);
+                if !self.complete_external_text_ticket(&mut session, modified, "handler-failed") {
+                    return;
+                }
                 self.status = if modified {
                     preserved_status(&mut session, &format!("{reason}; GUI was not mutated"))
                 } else {
@@ -3049,7 +3061,9 @@ impl TuiApplication {
                     || self.scopes.scope_for_node(session.target) != Some(session.scope)
                     || !self.scopes.allows_node(session.target)
                 {
-                    let _ = self.runtime.complete(&session.ticket);
+                    if !self.complete_external_text_ticket(&mut session, true, "stale-target") {
+                        return;
+                    }
                     self.status = preserved_status(
                         &mut session,
                         "External text target became stale; GUI was not mutated",
@@ -3064,7 +3078,9 @@ impl TuiApplication {
                 {
                     Ok(current) => current,
                     Err(_) => {
-                        let _ = self.runtime.complete(&session.ticket);
+                        if !self.complete_external_text_ticket(&mut session, true, "read-failed") {
+                            return;
+                        }
                         self.status = preserved_status(
                             &mut session,
                             "External text target is unavailable or unverified; GUI was not mutated",
@@ -3073,7 +3089,9 @@ impl TuiApplication {
                     }
                 };
                 if current != session.original {
-                    let _ = self.runtime.complete(&session.ticket);
+                    if !self.complete_external_text_ticket(&mut session, true, "conflict") {
+                        return;
+                    }
                     self.status = preserved_status(
                         &mut session,
                         "External text conflict detected; GUI was not overwritten",
@@ -3089,7 +3107,13 @@ impl TuiApplication {
                 let operation = match resolve_backend_operation(&self.scene, operation) {
                     Ok(operation) => operation,
                     Err(error) => {
-                        let _ = self.runtime.complete(&session.ticket);
+                        if !self.complete_external_text_ticket(
+                            &mut session,
+                            true,
+                            "resolution-failed",
+                        ) {
+                            return;
+                        }
                         self.status = preserved_status(
                             &mut session,
                             &format!("External text write became unavailable: {error}"),
@@ -3109,7 +3133,9 @@ impl TuiApplication {
                     .backend
                     .replace_complete_plain_multiline_text(&locator, &expected, &text)
                     .await;
-                let _ = self.runtime.complete(&session.ticket);
+                if !self.complete_external_text_ticket(&mut session, true, "write-finished") {
+                    return;
+                }
                 match result {
                     Ok(mutation) if mutation.resulting == mutation.requested => {
                         self.full_reload(Some(format!(
@@ -3148,6 +3174,32 @@ impl TuiApplication {
                         self.full_reload(Some(self.status.clone())).await;
                     }
                 }
+            }
+        }
+    }
+
+    /// External candidate/result handling has one final authority gate. If the
+    /// ticket retired while the handler or backend was running, preserve a
+    /// modified candidate when requested but leave the current generation's
+    /// user-visible status untouched.
+    fn complete_external_text_ticket(
+        &mut self,
+        session: &mut ExternalTextSession,
+        preserve_candidate: bool,
+        stage: &'static str,
+    ) -> bool {
+        match self.runtime.complete(&session.ticket) {
+            Ok(()) => true,
+            Err(completion) => {
+                let candidate_preserved = preserve_candidate && session.preserve().is_some();
+                tracing::debug!(
+                    ?completion,
+                    operation_id = session.ticket.operation_id(),
+                    candidate_preserved,
+                    stage,
+                    "retired external text result discarded before publication"
+                );
+                false
             }
         }
     }
@@ -3428,6 +3480,11 @@ impl TuiApplication {
                     self.cache.full_snapshot_count()
                 );
                 self.ensure_focus_visible();
+                tracing::debug!(
+                    target: "gui2tui::product",
+                    full_snapshots = self.cache.full_snapshot_count(),
+                    "full semantic refresh completed"
+                );
             }
             Err(error) if application_is_gone(&error) => {
                 self.application_gone();
@@ -3533,7 +3590,13 @@ impl TuiApplication {
         let mutation = match invocation {
             Ok(mutation) => mutation,
             Err(error) => {
-                let _ = self.runtime.complete(&ticket);
+                if let Err(completion) = self.runtime.complete(&ticket) {
+                    tracing::debug!(
+                        ?completion,
+                        "retired selection invocation result discarded before publication"
+                    );
+                    return false;
+                }
                 let (status, refresh) = selection_operation_error_status(&error);
                 self.status = status;
                 if refresh {
@@ -3603,7 +3666,13 @@ impl TuiApplication {
                     break TransitionOutcome::Ambiguous;
                 }
                 Err(error) => {
-                    let _ = self.runtime.complete(&ticket);
+                    if let Err(completion) = self.runtime.complete(&ticket) {
+                        tracing::debug!(
+                            ?completion,
+                            "retired selection verification result discarded before publication"
+                        );
+                        return false;
+                    }
                     let (status, refresh) = selection_operation_error_status(&error);
                     self.status = status;
                     if refresh {
@@ -3645,11 +3714,14 @@ impl TuiApplication {
                 }
             }
         };
-        let outcome = match self.runtime.complete(&ticket) {
-            Ok(()) => outcome,
-            Err(crate::runtime::RuntimeError::StaleIdentity) => TransitionOutcome::Stale,
-            Err(_) => TransitionOutcome::Cancelled,
-        };
+        if let Err(completion) = self.runtime.complete(&ticket) {
+            tracing::debug!(
+                ?completion,
+                ?outcome,
+                "retired selection outcome discarded before publication"
+            );
+            return false;
+        }
         tracing::debug!(
             target: "gui2tui::product",
             ?outcome,
@@ -3883,9 +3955,15 @@ impl TuiApplication {
                 .backend
                 .do_action_by_name(&locator.encode(), &action.name)
                 .await;
-            let ticket_result = self.runtime.complete(&ticket);
+            if let Err(completion) = self.runtime.complete(&ticket) {
+                tracing::debug!(
+                    ?completion,
+                    "retired action result discarded before publication"
+                );
+                return false;
+            }
             return match result {
-                Ok(_) if ticket_result.is_ok() => {
+                Ok(_) => {
                     self.full_reload(None).await;
                     self.status =
                         transition_status(TransitionOutcome::Unverifiable, &label, intent);
@@ -3899,10 +3977,6 @@ impl TuiApplication {
                         "semantic transition observation completed"
                     );
                     true
-                }
-                Ok(_) => {
-                    self.status = crate::runtime::RuntimeError::StaleIdentity.to_string();
-                    false
                 }
                 Err(error) => {
                     let (status, refresh) = operation_error_status(&error);
@@ -3923,7 +3997,7 @@ impl TuiApplication {
             let encoded = locator.encode();
             tokio::spawn(async move { backend.do_action_by_name(&encoded, &action.name).await })
         };
-        let mut result = self
+        let result = self
             .observe_transition_action(&observation, &mut invocation)
             .await;
         if !invocation.is_finished() {
@@ -3933,16 +4007,13 @@ impl TuiApplication {
             // be retired without affecting the GUI-owned surface.
             invocation.abort();
         }
-        if let Err(error) = self.runtime.complete(&ticket)
-            && !matches!(
-                result.report.outcome,
-                TransitionOutcome::ApplicationGone | TransitionOutcome::Cancelled
-            )
-        {
-            result.report.outcome = match error {
-                crate::runtime::RuntimeError::StaleIdentity => TransitionOutcome::Stale,
-                _ => TransitionOutcome::Cancelled,
-            };
+        if let Err(completion) = self.runtime.complete(&ticket) {
+            tracing::debug!(
+                ?completion,
+                outcome = ?result.report.outcome,
+                "retired transition result discarded before publication"
+            );
+            return false;
         }
 
         tracing::debug!(
@@ -4001,7 +4072,6 @@ impl TuiApplication {
                 rejection: None,
             };
         }
-
         loop {
             let remaining = observation.remaining();
             if remaining.is_zero() {
@@ -4091,29 +4161,77 @@ impl TuiApplication {
                             rejection: None,
                         };
                     };
-                    match delivery {
-                        EventDelivery::Event(first) => {
-                            event_wakeups = event_wakeups.saturating_add(1);
-                            let batch_window = Duration::from_millis(40).min(observation.remaining());
-                            if !batch_window.is_zero() {
-                                tokio::time::sleep(batch_window).await;
+                    // An application-exit event may race the operation's
+                    // observer. Retire the exact captured application before
+                    // applying that event, because event handling may perform
+                    // a broader refresh that is no longer authorized for this
+                    // operation generation.
+                    self.check_application_available().await;
+                    if let Some(evaluation) = observation.authority_evaluation(&self.runtime) {
+                        authoritative_checks = authoritative_checks.saturating_add(1);
+                        let outcome = terminal_transition_outcome(evaluation)
+                            .unwrap_or(TransitionOutcome::ApplicationGone);
+                        return ActionObservationResult {
+                            report: TransitionObservation::report(
+                                outcome,
+                                authoritative_checks,
+                                event_wakeups,
+                                invocation_wakeups,
+                            ),
+                            invocation_accepted,
+                            rejection: None,
+                        };
+                    }
+                    let event_processing = async {
+                        match delivery {
+                            EventDelivery::Event(first) => {
+                                event_wakeups = event_wakeups.saturating_add(1);
+                                let batch_window =
+                                    Duration::from_millis(40).min(observation.remaining());
+                                if !batch_window.is_zero() {
+                                    tokio::time::sleep(batch_window).await;
+                                }
+                                let mut events = vec![first];
+                                while let Ok(event) = self.event_subscription.try_recv() {
+                                    events.push(event);
+                                }
+                                if let Some(EventDelivery::ResyncRequired { dropped }) =
+                                    self.event_subscription.take_resync()
+                                {
+                                    self.resynchronize_after_overflow(dropped).await;
+                                } else {
+                                    self.apply_event_batch(events, None).await;
+                                }
                             }
-                            let mut events = vec![first];
-                            while let Ok(event) = self.event_subscription.try_recv() {
-                                events.push(event);
-                            }
-                            if let Some(EventDelivery::ResyncRequired { dropped }) =
-                                self.event_subscription.take_resync()
-                            {
+                            EventDelivery::ResyncRequired { dropped } => {
+                                event_wakeups = event_wakeups.saturating_add(1);
                                 self.resynchronize_after_overflow(dropped).await;
-                            } else {
-                                self.apply_event_batch(events, None).await;
                             }
                         }
-                        EventDelivery::ResyncRequired { dropped } => {
-                            event_wakeups = event_wakeups.saturating_add(1);
-                            self.resynchronize_after_overflow(dropped).await;
-                        }
+                    };
+                    if tokio::time::timeout(observation.remaining(), event_processing)
+                        .await
+                        .is_err()
+                    {
+                        self.check_application_available().await;
+                        authoritative_checks = authoritative_checks.saturating_add(1);
+                        let evaluation = observation.evaluate(
+                            &self.runtime,
+                            &self.cache,
+                            &self.scopes,
+                        );
+                        let outcome = terminal_transition_outcome(evaluation)
+                            .unwrap_or(TransitionOutcome::Timeout);
+                        return ActionObservationResult {
+                            report: TransitionObservation::report(
+                                outcome,
+                                authoritative_checks,
+                                event_wakeups,
+                                invocation_wakeups,
+                            ),
+                            invocation_accepted,
+                            rejection: None,
+                        };
                     }
                     authoritative_checks = authoritative_checks.saturating_add(1);
                     let evaluation = self.evaluate_transition_authoritatively(observation).await;
@@ -4129,6 +4247,10 @@ impl TuiApplication {
                             rejection: None,
                         };
                     }
+                    tracing::debug!(
+                        target: "gui2tui::product",
+                        "semantic transition event batch settled without confirmation"
+                    );
                 }
                 _ = tokio::time::sleep(remaining) => {
                     authoritative_checks = authoritative_checks.saturating_add(1);
@@ -4157,6 +4279,15 @@ impl TuiApplication {
         if let Some(evaluation) = observation.authority_evaluation(&self.runtime) {
             return evaluation;
         }
+        // The observer owns the mutable application while a backend action is
+        // in flight, so the outer runtime liveness tick cannot retire a dead
+        // application concurrently. Reuse the exact selected-application
+        // locator probe here before any potentially broad fresh read. A
+        // same-named replacement cannot satisfy this check.
+        self.check_application_available().await;
+        if let Some(evaluation) = observation.authority_evaluation(&self.runtime) {
+            return evaluation;
+        }
         // Event-applied cache state is never sufficient for confirmation.
         // Every decision below follows a fresh backend read at the condition's
         // narrowest safe refresh boundary.
@@ -4167,15 +4298,21 @@ impl TuiApplication {
                     .exact_locator()
                     .expect("exact-node transition condition has locator")
                     .clone();
-                match self.backend.refresh_node(&locator, false).await {
-                    Ok(node) => {
+                match tokio::time::timeout(
+                    self.backend.operation_timeout(),
+                    self.backend.refresh_node(&locator, false),
+                )
+                .await
+                {
+                    Ok(Ok(node)) => {
                         if self.cache.refresh_node(node).is_ok() {
                             self.rebuild_view_preserving_focus().await;
                         } else {
                             self.full_reload(None).await;
                         }
                     }
-                    Err(_) => self.full_reload(None).await,
+                    Ok(Err(_)) => return TransitionEvaluation::Stale,
+                    Err(_) => return TransitionEvaluation::Pending,
                 }
             }
             ConditionRefresh::FullApplication => self.full_reload(None).await,
@@ -4281,12 +4418,27 @@ impl TuiApplication {
                 .into();
     }
 
-    /// Cheap lifecycle check used by the terminal loop. It never walks an
-    /// application tree; it only verifies that the selected AT-SPI root still
-    /// exists in the desktop registry.
+    /// Cheap lifecycle check used by the terminal loop and operation observer.
+    /// It never walks an application tree: the exact locator owner is checked
+    /// first, then the selected root is verified in the desktop registry.
     pub async fn check_application_available(&mut self) {
         if !self.application_available {
             return;
+        }
+        match self
+            .backend
+            .locator_owner_available(&self.application_locator)
+            .await
+        {
+            Ok(false) => {
+                self.application_gone();
+                return;
+            }
+            Ok(true) => {}
+            Err(error) => {
+                tracing::debug!(%error, "exact application owner liveness probe failed");
+                return;
+            }
         }
         let alive = match self.backend.applications().await {
             Ok(applications) => applications

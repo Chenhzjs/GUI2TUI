@@ -238,6 +238,12 @@ impl RuntimeSession {
         );
         Ok(ticket)
     }
+    /// Retires one operation and grants its final publication authority.
+    ///
+    /// Callers must pass this gate before publishing any result derived from
+    /// asynchronous work. A backend return is not enough: a cancelled ticket
+    /// or a ticket owned by a retired application generation has no authority
+    /// to confirm, overwrite status, or install derived state.
     pub fn complete(&mut self, ticket: &OperationTicket) -> Result<(), RuntimeError> {
         if ticket.session != self.id || Some(ticket.generation) != self.generation {
             self.metrics.rejected_late_results += 1;
@@ -354,6 +360,26 @@ mod tests {
         assert_eq!(s.complete(&t), Err(RuntimeError::Cancelled));
         s.open_application(app());
         assert_eq!(s.complete(&t), Err(RuntimeError::StaleIdentity));
+    }
+
+    #[test]
+    fn explicitly_cancelled_ticket_cannot_publish_and_releases_capacity() {
+        let mut session = RuntimeSession::default();
+        session.open_application(app());
+        let cancellation = CancellationToken::default();
+        let ticket = session
+            .begin(OperationKind::TransitionObservation, cancellation.clone())
+            .unwrap();
+
+        cancellation.cancel();
+
+        assert_eq!(session.complete(&ticket), Err(RuntimeError::Cancelled));
+        assert_eq!(session.status()["active_operations"], 0);
+        assert!(
+            session
+                .begin(OperationKind::TransitionObservation, Default::default())
+                .is_ok()
+        );
     }
     #[test]
     fn detach_keeps_generation_and_no_endpoint_is_legal() {

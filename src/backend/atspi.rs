@@ -532,6 +532,31 @@ impl AtspiBackend {
         Ok(applications)
     }
 
+    /// Check whether the exact unique D-Bus owner captured by a backend
+    /// locator still exists. The AT-SPI registry can briefly retain a dead
+    /// application object, so registry membership alone is not a sufficient
+    /// operation-liveness signal during application replacement.
+    pub async fn locator_owner_available(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<bool, BackendError> {
+        let bus = zbus::fdo::DBusProxy::new(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let name = zbus::names::BusName::try_from(locator.bus_name())
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        tokio::time::timeout(self.operation_timeout, bus.name_has_owner(name))
+            .await
+            .map_err(|_| {
+                timeout_error(
+                    self.operation_timeout,
+                    "check exact locator owner",
+                    locator.encode(),
+                )
+            })?
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))
+    }
+
     /// Read screen-space component bounds for a presentation-side spatial
     /// probe. Callers are responsible for applying a bounded candidate budget;
     /// this method does not mutate semantic identity or capabilities.

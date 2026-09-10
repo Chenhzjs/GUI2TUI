@@ -580,6 +580,61 @@ mod tests {
     }
 
     #[test]
+    fn retired_generation_cannot_confirm_even_if_late_state_matches() {
+        let (mut runtime, mut cache, scopes) = setup("/target");
+        let locator = BackendLocator::new(":1.2", "/target");
+        let target = cache.runtime_id(&locator).unwrap();
+        let authority = OperationAuthority::capture(
+            &runtime,
+            &BackendLocator::new(":1.2", "/app"),
+            target,
+            &locator,
+            &cache,
+            &scopes,
+        )
+        .unwrap();
+        let cancellation = CancellationToken::default();
+        let ticket = runtime
+            .begin(
+                crate::runtime::OperationKind::TransitionObservation,
+                cancellation.clone(),
+            )
+            .unwrap();
+        let observation = TransitionObservation::new(
+            authority,
+            TransitionCondition::ExactNodeState {
+                locator: locator.clone(),
+                state: SemanticState::Checked,
+                present: true,
+                refresh: ConditionRefresh::ExactNode,
+            },
+            Duration::from_secs(1),
+            cancellation,
+        );
+
+        runtime.open_application(BackendLocator::new(":1.3", "/app"));
+        let mut late = node("/target", SemanticRole::CheckBox, "Stable");
+        late.states.push(SemanticState::Checked);
+        cache.refresh_node(late).unwrap();
+
+        assert_eq!(
+            observation.evaluate(&runtime, &cache, &scopes),
+            TransitionEvaluation::Stale
+        );
+        assert_eq!(
+            runtime.complete(&ticket),
+            Err(crate::runtime::RuntimeError::StaleIdentity)
+        );
+        let fresh = runtime
+            .begin(
+                crate::runtime::OperationKind::TransitionObservation,
+                CancellationToken::default(),
+            )
+            .unwrap();
+        assert_eq!(runtime.complete(&fresh), Ok(()));
+    }
+
+    #[test]
     fn exact_temporary_surface_can_confirm_hidden_or_removed() {
         let mut app = node("/app", SemanticRole::Application, "App");
         let mut window = node("/window", SemanticRole::Window, "Main");
