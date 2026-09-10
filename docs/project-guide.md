@@ -144,6 +144,17 @@ exact locator and intent and are revalidated against current visibility,
 scope, and semantics before execution; a binding from a hidden or disappeared
 temporary surface cannot remain operation-authoritative.
 
+`ApplicationGenerationId` is the application-authority epoch inside a
+`RuntimeSession`. Work started under a retired generation may finish
+internally, but it cannot mutate, confirm, publish, or overwrite into a newer
+generation. Cancellation removes publication authority even if the underlying
+backend work later returns. Successful asynchronous operation publication
+therefore requires a still-current final operation ticket as well as the
+operation-specific exact-locator, scope, capability, and authoritative
+readback contract. `BackendLocator` remains exact object authority within the
+generation; neither a retained `RuntimeNodeId` nor descriptive similarity can
+authorize a replacement object.
+
 Realization changes which current semantic elements are available; it does
 not create historical ownership or operation identity. Current hierarchy may
 use only freshly exposed public containment/relations. A relation target read
@@ -343,8 +354,13 @@ layout reconstruction.
   HARDENING REQUIRED**. The current session/generation/exact-locator identity
   layers are sufficient with small lifecycle hardening; no new runtime epoch
   identity or surface manager is justified.
-- Recommended next work: **v0.6A Runtime Epoch and Late-Work Isolation**,
-  **NOT YET AUTHORIZED**.
+- v0.6A Runtime Epoch and Late-Work Isolation: **COMPLETE / VALIDATED**.
+  Generation invalidation and cancellation retire operation publication
+  authority; late work cannot mutate, confirm, publish, or overwrite into a
+  newer generation, and exact target locators prevent same-generation
+  replacement migration.
+- Recommended next work: seek explicit authorization for **v0.6B Transport and
+  Application Recovery**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -374,8 +390,10 @@ and the formal internal close is in the
 The current runtime model, live lifecycle evidence, bounded 1.0 continuity
 baseline, and architecture conclusion are in the
 [v0.6 Discovery](planning/v0.6-runtime-continuity.md); the five derived phases
-are in the [v0.6 roadmap](planning/v0.6-roadmap.md). No implementation phase or
-release work is automatically authorized.
+are in the [v0.6 roadmap](planning/v0.6-roadmap.md), and the completed bounded
+late-work evidence is in the
+[0.6A handoff](validation/v0.6/runtime-epoch-late-work/HANDOFF.md). No later
+implementation phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -387,8 +405,8 @@ Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
-complete; v0.6A and every later implementation milestone still require
-explicit authorization.
+complete and 0.6A is validated; v0.6B and every later implementation milestone
+still require explicit authorization.
 
 ## 21. Glossary
 
