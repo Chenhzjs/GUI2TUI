@@ -635,6 +635,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                 timeout,
                 config.terminal.mouse,
                 &mut config,
+                None,
             )
             .await?
             else {
@@ -762,6 +763,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                                 transport_available = app.transport_available(),
                                 "fresh application selection requested"
                             );
+                            let selection_transport = app.selection_transport();
                             if let Some(selected) = run_selector(
                                 &mut terminal,
                                 &mut signals,
@@ -769,6 +771,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                                 timeout,
                                 config.terminal.mouse,
                                 &mut config,
+                                selection_transport,
                             )
                             .await?
                             {
@@ -857,6 +860,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
             redraw = true;
         }
     }
+    app.shutdown().await;
     Ok(())
 }
 
@@ -867,11 +871,12 @@ async fn run_selector(
     timeout: Duration,
     mouse_enabled: bool,
     config: &mut gui2tui::product::config::Config,
+    transport: Option<AtspiBackend>,
 ) -> Result<Option<SelectedApplication>, io::Error> {
     let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
     let mut selector = ApplicationSelector::with_launchers(Vec::new(), launchers.clone());
     let mut snapshot = None;
-    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers).await;
+    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers, transport).await;
     tracing::debug!(
         target: "gui2tui::product",
         applications = snapshot
@@ -897,7 +902,9 @@ async fn run_selector(
                     key.code,
                     crossterm::event::KeyCode::Char('r') | crossterm::event::KeyCode::F(5)
                 ) {
-                    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers).await;
+                    let transport = snapshot.as_ref().map(|current| current.backend.clone());
+                    refresh_selector(&mut selector, &mut snapshot, timeout, &launchers, transport)
+                        .await;
                     continue;
                 }
                 if key.code == crossterm::event::KeyCode::Char('d') {
@@ -1014,7 +1021,8 @@ async fn resolve_selector_target(
                 }
             }
             let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
-            refresh_selector(selector, snapshot, timeout, &launchers).await;
+            let transport = snapshot.as_ref().map(|current| current.backend.clone());
+            refresh_selector(selector, snapshot, timeout, &launchers, transport).await;
             let selected = snapshot.as_ref().and_then(|current| {
                 AtspiBackend::select_application(
                     &current.applications,
@@ -1092,9 +1100,13 @@ async fn refresh_selector(
     snapshot: &mut Option<SelectorSnapshot>,
     timeout: Duration,
     launchers: &[String],
+    transport: Option<AtspiBackend>,
 ) {
     let result = tokio::time::timeout(timeout, async {
-        let backend = AtspiBackend::connect(timeout).await?;
+        let backend = match transport {
+            Some(backend) => backend,
+            None => AtspiBackend::connect(timeout).await?,
+        };
         let applications = backend.applications().await?;
         Ok::<_, gui2tui::backend::BackendError>(SelectorSnapshot {
             backend,

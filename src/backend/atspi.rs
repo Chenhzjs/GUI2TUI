@@ -298,6 +298,7 @@ pub struct EventSubscription {
     resync_required: Arc<AtomicBool>,
     dropped: Arc<AtomicU64>,
     notify: Arc<tokio::sync::Notify>,
+    producer: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Default)]
@@ -388,8 +389,37 @@ pub struct RelationEnrichmentMetrics {
 }
 
 impl EventSubscription {
-    pub fn close(&mut self) {
+    /// Retire the producer owned by this application view and observe its exit.
+    /// Receiver closure is an independent wakeup for the producer; abort is a
+    /// bounded fallback, never a semantic cancellation mechanism.
+    pub async fn shutdown(&mut self) -> bool {
         self.receiver.close();
+        let graceful = if let Some(mut producer) = self.producer.take() {
+            match tokio::time::timeout(Duration::from_millis(250), &mut producer).await {
+                Ok(result) => result.is_ok(),
+                Err(_) => {
+                    producer.abort();
+                    let _ = producer.await;
+                    false
+                }
+            }
+        } else {
+            true
+        };
+        while self.receiver.try_recv().is_ok() {}
+        self.resync_required.store(false, Ordering::Release);
+        self.dropped.store(0, Ordering::Release);
+        graceful
+    }
+
+    pub fn producer_owned(&self) -> bool {
+        self.producer.is_some()
+    }
+
+    pub fn producer_active(&self) -> bool {
+        self.producer
+            .as_ref()
+            .is_some_and(|producer| !producer.is_finished())
     }
 
     pub fn statistics(&self) -> serde_json::Value {
@@ -444,6 +474,15 @@ impl EventSubscription {
                 dropped: self.dropped.swap(0, Ordering::AcqRel),
             }
         })
+    }
+}
+
+impl Drop for EventSubscription {
+    fn drop(&mut self) {
+        self.receiver.close();
+        if let Some(producer) = self.producer.take() {
+            producer.abort();
+        }
     }
 }
 
@@ -1937,7 +1976,7 @@ impl AtspiBackend {
         let producer_notify = notify.clone();
         let statistics = Arc::new(EventQueueStatistics::default());
         let producer_statistics = statistics.clone();
-        tokio::spawn(async move {
+        let producer = tokio::spawn(async move {
             let events = MessageStream::from(&connection);
             futures_lite::pin!(events);
             loop {
@@ -2036,6 +2075,7 @@ impl AtspiBackend {
             resync_required,
             dropped,
             notify,
+            producer: Some(producer),
         })
     }
 
@@ -4001,6 +4041,7 @@ mod tests {
                 resync_required,
                 dropped,
                 notify,
+                producer: None,
             },
         )
     }
@@ -4439,6 +4480,33 @@ mod tests {
             subscription.recv().await,
             Some(EventDelivery::Event(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn application_view_shutdown_observes_event_producer_exit() {
+        let (sender, receiver) = tokio::sync::mpsc::channel(2);
+        let producer_sender = sender.clone();
+        let (exited_sender, exited_receiver) = tokio::sync::oneshot::channel();
+        let producer = tokio::spawn(async move {
+            producer_sender.closed().await;
+            let _ = exited_sender.send(());
+        });
+        let mut subscription = EventSubscription {
+            statistics: Arc::new(EventQueueStatistics::default()),
+            receiver,
+            resync_required: Arc::new(AtomicBool::new(false)),
+            dropped: Arc::new(AtomicU64::new(0)),
+            notify: Arc::new(tokio::sync::Notify::new()),
+            producer: Some(producer),
+        };
+        assert!(subscription.producer_owned());
+        assert!(subscription.producer_active());
+
+        assert!(subscription.shutdown().await);
+
+        assert!(!subscription.producer_owned());
+        assert!(exited_receiver.await.is_ok());
+        assert!(sender.send(test_event("/retired")).await.is_err());
     }
 
     #[test]

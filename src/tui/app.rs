@@ -136,6 +136,13 @@ impl TuiApplication {
         self.backend_available
     }
 
+    /// A healthy transport may be reused for a fresh public enumeration. This
+    /// carries no application authority; exact user selection still creates a
+    /// new generation and fresh bindings.
+    pub fn selection_transport(&self) -> Option<AtspiBackend> {
+        self.backend_available.then(|| self.backend.clone())
+    }
+
     /// The application selector is a top-level user action. Keep ordinary
     /// scene use available while refusing to steal text or overlay input.
     pub fn accepts_application_selector_shortcut(&self) -> bool {
@@ -201,10 +208,29 @@ impl TuiApplication {
         let mut status = self.runtime.status();
         status["event_queue_depth"] = self.event_subscription.queue_depth().into();
         status["event_queue_capacity"] = self.event_subscription.capacity().into();
+        status["event_producer_owned"] = self.event_subscription.producer_owned().into();
+        status["event_producer_active"] = self.event_subscription.producer_active().into();
         status["events"] = self.event_subscription.statistics();
         status["temporary_artifacts"] = self.materialized_artifacts.len().into();
         status["cache_nodes"] = self.cache.node_count().into();
+        status["cache_locators"] = self.cache.locator_count().into();
         status["full_snapshots"] = self.cache.full_snapshot_count().into();
+        status["scene_bindings"] = self
+            .scene
+            .elements
+            .iter()
+            .filter(|element| element.binding.is_some())
+            .count()
+            .into();
+        status["interaction_scopes"] = self.scopes.scopes().count().into();
+        status["scope_focus_history"] = self.scope_focus_history.len().into();
+        status["recent_commands"] = self.recent_commands.len().into();
+        let content_cache = self.content.cache_metrics();
+        status["content_cache"] = serde_json::json!({
+            "ranges": content_cache.ranges,
+            "bytes": content_cache.bytes,
+            "evictions": content_cache.evictions,
+        });
         status["focused_scene"] = self.focus.current().map(SceneElementId::get).into();
         status["focused_runtime"] = self
             .focus
@@ -257,9 +283,8 @@ impl TuiApplication {
         self.runtime.begin_terminal_reattach();
     }
 
-    fn application_gone(&mut self) {
+    async fn application_gone(&mut self) {
         self.application_available = false;
-        self.event_subscription.close();
         self.runtime.invalidate_application();
         self.modality_cancel.cancel();
         if let Some(task) = self.capture_task.take() {
@@ -277,13 +302,42 @@ impl TuiApplication {
         self.modality_view = None;
         self.choice_overlay = None;
         self.command_palette = None;
+        self.recent_commands.clear();
+        self.scope_focus_history.clear();
         self.materialized_artifacts.clear();
         self.hit_map = HitMap::default();
+        let event_producer_graceful = self.event_subscription.shutdown().await;
         self.status = "Application is no longer available. Tasks discarded. F5: search again; b: applications; d: diagnostics; q: quit.".into();
         tracing::debug!(
             target: "gui2tui::product",
+            event_producer_graceful,
             status = %self.runtime_status(),
             "application generation invalidated"
+        );
+    }
+
+    /// Retire application-owned asynchronous work before the Tokio runtime is
+    /// dropped. Terminal restoration remains owned by the product shell.
+    pub async fn shutdown(&mut self) {
+        self.application_available = false;
+        self.runtime.invalidate_application();
+        self.modality_cancel.cancel();
+        if let Some(task) = self.capture_task.take() {
+            task.abort();
+        }
+        if let Some(task) = self.modality_task.take() {
+            task.abort();
+        }
+        self.capture_ticket = None;
+        self.modality_ticket = None;
+        self.recent_commands.clear();
+        self.scope_focus_history.clear();
+        let event_producer_graceful = self.event_subscription.shutdown().await;
+        tracing::debug!(
+            target: "gui2tui::product",
+            event_producer_graceful,
+            status = %self.runtime_status(),
+            "application view shutdown completed"
         );
     }
 
@@ -294,7 +348,7 @@ impl TuiApplication {
         backend: AtspiBackend,
         application: ApplicationRef,
     ) {
-        self.application_gone();
+        self.application_gone().await;
         let retained_backend = backend.clone();
         match Self::new_selected(
             backend,
@@ -1494,7 +1548,11 @@ impl TuiApplication {
         }
         if key.code == KeyCode::F(12) {
             self.runtime_status_visible = !self.runtime_status_visible;
-            tracing::debug!(status = %self.runtime_status(), "runtime status requested");
+            tracing::debug!(
+                target: "gui2tui::product",
+                status = %self.runtime_status(),
+                "runtime status requested"
+            );
             return false;
         }
         if self.runtime_status_visible {
@@ -2492,7 +2550,7 @@ impl TuiApplication {
                 )
                 .await
             {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
                 if let Some(owner) = popup_owner {
                     self.close_popup_after_selection(owner).await;
                 }
@@ -2592,7 +2650,7 @@ impl TuiApplication {
                 )
                 .await
             {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
             }
             return;
         }
@@ -2617,7 +2675,7 @@ impl TuiApplication {
         };
         match result {
             Ok(_) => {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
                 let status = format!(
                     "{} \"{}\" via {}",
                     operation_verb(intent),
@@ -2686,7 +2744,7 @@ impl TuiApplication {
                 .execute_verified_selection(runtime_id, label.clone(), backend_operation, intent)
                 .await
             {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
             }
             return;
         }
@@ -2710,7 +2768,7 @@ impl TuiApplication {
                 )
                 .await
             {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
             }
             return;
         }
@@ -2739,7 +2797,7 @@ impl TuiApplication {
         };
         match result {
             Ok(()) => {
-                *self.recent_commands.entry(runtime_id).or_default() += 1;
+                self.record_recent_command(runtime_id);
                 self.update_from_action_events(format!(
                     "{} \"{}\" via {}",
                     operation_verb(intent),
@@ -3452,7 +3510,7 @@ impl TuiApplication {
                     .runtime
                     .validates_application(&bootstrap.root.backend_locator)
                 {
-                    self.application_gone();
+                    self.application_gone().await;
                     return;
                 }
                 let snapshot_ms = started.elapsed().as_millis();
@@ -3484,16 +3542,19 @@ impl TuiApplication {
                 self.choices = choices;
                 self.recollect_spatial_layout().await;
                 let restore_anchor = (self.scopes.active() != previous_scope)
-                    .then(|| self.scope_focus_history.get(&self.scopes.active()))
+                    .then(|| self.scope_focus_history.get(&self.scopes.active()).cloned())
                     .flatten();
                 let restore_runtime = restore_anchor
+                    .as_ref()
                     .map(|anchor| anchor.runtime_id)
                     .or(previous_runtime);
                 let restore_locator = restore_anchor
+                    .as_ref()
                     .map(|anchor| &anchor.locator)
                     .or(previous_locator.as_ref());
                 self.focus
                     .reconcile_identity(&self.scene, restore_runtime, restore_locator);
+                self.prune_runtime_history();
                 let restored_scene = self.focus.current();
                 let restored_runtime = restored_scene
                     .and_then(|id| self.scene.element(id))
@@ -3526,7 +3587,7 @@ impl TuiApplication {
                 );
             }
             Err(error) if application_is_gone(&error) => {
-                self.application_gone();
+                self.application_gone().await;
             }
             Err(error) => {
                 self.status = format!("Refresh failed: {error}");
@@ -4405,7 +4466,7 @@ impl TuiApplication {
             return;
         }
         self.runtime.record_backend_loss();
-        self.application_gone();
+        self.application_gone().await;
         self.backend_available = false;
         self.status = crate::runtime::RuntimeError::BackendUnavailable.to_string();
         self.reconnect_backend().await;
@@ -4466,7 +4527,7 @@ impl TuiApplication {
             .await
         {
             Ok(false) => {
-                self.application_gone();
+                self.application_gone().await;
                 return;
             }
             Ok(true) => {}
@@ -4487,7 +4548,7 @@ impl TuiApplication {
             }
         };
         if !alive {
-            self.application_gone();
+            self.application_gone().await;
         }
     }
 
@@ -4526,9 +4587,11 @@ impl TuiApplication {
             "Semantic tree resynchronized after event overflow ({dropped} dropped)"
         )))
         .await;
-        if let Some(EventDelivery::ResyncRequired { dropped }) =
+        let mut total_dropped = dropped;
+        let overlapping = if let Some(EventDelivery::ResyncRequired { dropped }) =
             self.event_subscription.take_resync()
         {
+            total_dropped = total_dropped.saturating_add(dropped);
             // A distinct flood overlapped the resync. Coalesce it into one more
             // correctness baseline rather than replaying an incomplete suffix.
             while self.event_subscription.try_recv().is_ok() {}
@@ -4536,6 +4599,7 @@ impl TuiApplication {
                 "Semantic tree resynchronized after overlapping overflow ({dropped} dropped)"
             )))
             .await;
+            true
         } else {
             let mut events = Vec::new();
             while let Ok(event) = self.event_subscription.try_recv() {
@@ -4548,7 +4612,17 @@ impl TuiApplication {
                 )
                 .await;
             }
-        }
+            false
+        };
+        tracing::debug!(
+            target: "gui2tui::product",
+            total_dropped,
+            overlapping,
+            cache_nodes = self.cache.node_count(),
+            active_scope = %self.scopes.active(),
+            status = %self.runtime_status(),
+            "event overflow converged through fresh semantic resynchronization"
+        );
     }
 
     async fn apply_event_batch(
@@ -4762,18 +4836,21 @@ impl TuiApplication {
             "materialized semantic arena for TUI view"
         );
         let restore_anchor = if self.scopes.active() != previous_scope {
-            self.scope_focus_history.get(&self.scopes.active())
+            self.scope_focus_history.get(&self.scopes.active()).cloned()
         } else {
             None
         };
         let restore_runtime = restore_anchor
+            .as_ref()
             .map(|anchor| anchor.runtime_id)
             .or(previous_runtime);
         let restore_locator = restore_anchor
+            .as_ref()
             .map(|anchor| &anchor.locator)
             .or(previous_locator.as_ref());
         self.focus
             .reconcile_identity(&self.scene, restore_runtime, restore_locator);
+        self.prune_runtime_history();
         let restored_scene = self.focus.current();
         let restored_runtime = restored_scene
             .and_then(|id| self.scene.element(id))
@@ -4826,6 +4903,25 @@ impl TuiApplication {
             self.viewport
                 .ensure_visible(top, height, self.viewport_height);
         }
+    }
+
+    fn prune_runtime_history(&mut self) {
+        self.commands.prune_recency(&mut self.recent_commands);
+        prune_scope_focus_history(&mut self.scope_focus_history, &self.scopes, &self.cache);
+        tracing::debug!(
+            target: "gui2tui::product",
+            interaction_scopes = self.scopes.scopes().count(),
+            scope_focus_history = self.scope_focus_history.len(),
+            current_commands = self.commands.search("", self.scopes.active(), true, &HashMap::new()).len(),
+            recent_commands = self.recent_commands.len(),
+            "bounded non-authoritative runtime history"
+        );
+    }
+
+    fn record_recent_command(&mut self, runtime_id: RuntimeNodeId) {
+        let uses = self.recent_commands.entry(runtime_id).or_default();
+        *uses = uses.saturating_add(1);
+        self.commands.prune_recency(&mut self.recent_commands);
     }
 
     async fn ensure_focused_relations(&mut self) {
@@ -4927,6 +5023,20 @@ fn inline_materialization_budget(
         lookahead_blocks,
         paragraph_ranges_per_source: visible_blocks.saturating_add(lookahead_blocks).min(128),
     }
+}
+
+fn prune_scope_focus_history(
+    history: &mut HashMap<InteractionScopeId, FocusAnchor>,
+    scopes: &InteractionScopes,
+    cache: &SemanticCache,
+) {
+    history.retain(|scope_id, anchor| {
+        scopes.scope(*scope_id).is_some()
+            && scopes.scope_for_node(anchor.runtime_id) == Some(*scope_id)
+            && cache
+                .node(anchor.runtime_id)
+                .is_some_and(|node| node.backend_locator == anchor.locator)
+    });
 }
 
 fn completed_search_status(
@@ -5751,6 +5861,83 @@ mod tests {
             )),
             UiIntent::BeginEdit
         );
+    }
+
+    #[test]
+    fn focus_history_retains_only_exact_current_scope_members() {
+        let mut application = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/app"),
+            index_in_parent: None,
+            role: SemanticRole::Application,
+            name: Some("App".into()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![],
+            actions: vec![],
+            capabilities: vec![],
+            children: vec![],
+            truncations: vec![],
+            debug: Default::default(),
+        };
+        let mut window = application.clone();
+        window.runtime_id = RuntimeNodeId::new(2);
+        window.backend_locator = BackendLocator::new(":1.2", "/window");
+        window.role = SemanticRole::Window;
+        window.name = Some("Window".into());
+        window.states = vec![SemanticState::Other("showing".into())];
+        let mut button = application.clone();
+        button.runtime_id = RuntimeNodeId::new(3);
+        button.backend_locator = BackendLocator::new(":1.2", "/button");
+        button.role = SemanticRole::Button;
+        button.name = Some("Current".into());
+        window.children.push(button);
+        application.children.push(window);
+        let cache = SemanticCache::from_snapshot(application).unwrap();
+        let scopes = InteractionScopes::analyze(
+            &cache,
+            &crate::semantic::RelationalSemanticGraph::new(&cache),
+        );
+        let window_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/window"))
+            .unwrap();
+        let button_id = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/button"))
+            .unwrap();
+        let window_scope = InteractionScopeId(window_id);
+        let vanished_id = (1..)
+            .map(RuntimeNodeId::new)
+            .find(|id| cache.node(*id).is_none())
+            .unwrap();
+        let vanished_scope = InteractionScopeId(vanished_id);
+        let mut history = HashMap::from([
+            (
+                window_scope,
+                FocusAnchor {
+                    scene_id: SceneElementId::new(3),
+                    runtime_id: button_id,
+                    locator: BackendLocator::new(":1.2", "/button"),
+                },
+            ),
+            (
+                vanished_scope,
+                FocusAnchor {
+                    scene_id: SceneElementId::new(99),
+                    runtime_id: vanished_id,
+                    locator: BackendLocator::new(":1.2", "/gone"),
+                },
+            ),
+        ]);
+
+        prune_scope_focus_history(&mut history, &scopes, &cache);
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[&window_scope].locator.object_path(), "/button");
+        history.get_mut(&window_scope).unwrap().locator =
+            BackendLocator::new(":1.2", "/replacement");
+        prune_scope_focus_history(&mut history, &scopes, &cache);
+        assert!(history.is_empty());
     }
 
     #[test]

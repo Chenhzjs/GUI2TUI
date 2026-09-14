@@ -145,6 +145,10 @@ impl SemanticCache {
         self.nodes.len()
     }
 
+    pub fn locator_count(&self) -> usize {
+        self.by_locator.len()
+    }
+
     pub fn nodes(&self) -> impl Iterator<Item = &CachedSemanticNode> {
         self.nodes.values()
     }

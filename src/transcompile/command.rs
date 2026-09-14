@@ -102,6 +102,16 @@ impl CommandHierarchy {
         })
     }
 
+    /// Command recency is presentation history, not authority. Keep only
+    /// sources represented by the freshly compiled current hierarchy so
+    /// vanished surfaces cannot make a long-lived generation grow forever.
+    pub fn prune_recency(&self, recent: &mut HashMap<RuntimeNodeId, u32>) {
+        let current: HashSet<_> = all_commands(&self.root)
+            .map(|command| command.source)
+            .collect();
+        recent.retain(|source, _| current.contains(source));
+    }
+
     pub fn search<'a>(
         &'a self,
         query: &str,
@@ -591,5 +601,32 @@ mod tests {
         let audit = hierarchy.audit(&cache);
         assert_eq!(audit.safe_leaves, 0);
         assert_eq!(audit.unsafe_or_unresolved, 1);
+    }
+
+    #[test]
+    fn command_recency_is_bounded_by_the_current_hierarchy() {
+        let (_cache, scopes, hierarchy) = hierarchy();
+        let current = hierarchy.search("", scopes.active(), true, &HashMap::new());
+        let retained = current[0].command.source;
+        let current_sources = all_commands(&hierarchy.root)
+            .map(|command| command.source)
+            .collect::<HashSet<_>>();
+        let mut recent = (1..)
+            .map(RuntimeNodeId::new)
+            .filter(|source| !current_sources.contains(source))
+            .take(100)
+            .map(|source| (source, 1))
+            .collect::<HashMap<_, _>>();
+        recent.insert(retained, 7);
+
+        hierarchy.prune_recency(&mut recent);
+
+        assert_eq!(recent, HashMap::from([(retained, 7)]));
+        assert!(hierarchy.validates_current_target(
+            current[0].command.source,
+            &current[0].command.backend_locator,
+            current[0].command.scope,
+            current[0].command.intent,
+        ));
     }
 }
