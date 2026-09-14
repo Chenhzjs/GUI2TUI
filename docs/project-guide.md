@@ -166,6 +166,16 @@ accessibility-bus lifecycle change or ambiguous duplicate names, the user must
 choose a fresh current application. Recovery reconstructs current truth and
 never replays an interrupted semantic operation.
 
+Application-owned event work retires with its current application view. Event
+queues remain bounded wakeups: overflow discards incomplete history and forces
+a fresh authoritative semantic read rather than replaying events as truth.
+Focus and command-recency history may improve presentation and navigation, but
+is pruned to current reachable semantic structure, cleared across application
+generation replacement, and never grants operation authority. Long-lived
+logical runtime state is therefore bounded by the current GUI plus explicitly
+bounded non-authoritative caches and history; allocator RSS need not return
+byte-for-byte to establish that ownership invariant.
+
 Realization changes which current semantic elements are available; it does
 not create historical ownership or operation identity. Current hierarchy may
 use only freshly exposed public containment/relations. A relation target read
@@ -375,8 +385,13 @@ layout reconstruction.
   name; every recovered or reselected view uses a fresh generation and exact
   current-enumeration binding, while ambiguous duplicate names require fresh
   user choice.
-- Recommended next work: seek explicit authorization for **v0.6C Surface,
-  Event, Cache, and Resource Continuity**; it is **NOT YET AUTHORIZED**.
+- v0.6C Surface, Event, Cache, and Resource Continuity: **COMPLETE /
+  VALIDATED**. Application-owned event work retires observably with its view;
+  bounded event overflow converges through fresh reads; focus and command
+  histories are bounded by current structure and never grant authority; and
+  repeated surface/application-view churn retains bounded logical resources.
+- Recommended next work: seek explicit authorization for **v0.6D External and
+  Terminal Lifecycle**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -410,8 +425,10 @@ are in the [v0.6 roadmap](planning/v0.6-roadmap.md), and the completed bounded
 late-work evidence is in the
 [0.6A handoff](validation/v0.6/runtime-epoch-late-work/HANDOFF.md). The
 completed transport/application recovery evidence is in the
-[0.6B handoff](validation/v0.6/transport-application-recovery/HANDOFF.md). No
-later implementation phase or release work is automatically authorized.
+[0.6B handoff](validation/v0.6/transport-application-recovery/HANDOFF.md), and
+the completed event/surface/resource evidence is in the
+[0.6C handoff](validation/v0.6/surface-event-resource-continuity/HANDOFF.md).
+No later implementation phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
