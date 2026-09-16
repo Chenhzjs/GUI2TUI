@@ -176,6 +176,19 @@ logical runtime state is therefore bounded by the current GUI plus explicitly
 bounded non-authoritative caches and history; allocator RSS need not return
 byte-for-byte to establish that ownership invariant.
 
+External work never extends semantic target authority. A configured handler
+may finish after its target or generation retires, but its result can only be
+kept as private recovery data; it cannot find or mutate a replacement target.
+GUI2TUI-owned candidate namespaces and files are private and explicitly
+bounded. Terminal state has one current owner: GUI2TUI stops consuming input
+before an external handler or suspension owns the terminal, restores raw mode,
+alternate screen, cursor, keyboard, and mouse state on every supported exit,
+and creates exactly one reader when it reacquires the terminal. Linux
+SIGTSTP/SIGCONT is supported with a fresh semantic refresh after resume.
+Ordinary panic unwind, SIGINT, and SIGTERM restore the terminal; SIGKILL,
+power loss, aborting panic, and process destruction have no userspace cleanup
+guarantee.
+
 Realization changes which current semantic elements are available; it does
 not create historical ownership or operation identity. Current hierarchy may
 use only freshly exposed public containment/relations. A relation target read
@@ -390,8 +403,13 @@ layout reconstruction.
   bounded event overflow converges through fresh reads; focus and command
   histories are bounded by current structure and never grant authority; and
   repeated surface/application-view churn retains bounded logical resources.
-- Recommended next work: seek explicit authorization for **v0.6D External and
-  Terminal Lifecycle**; it is **NOT YET AUTHORIZED**.
+- v0.6D External and Terminal Lifecycle: **COMPLETE / VALIDATED**. Supported
+  exits, signals, ordinary unwind panic, and Linux suspend/resume preserve
+  terminal ownership; external handlers pause TUI input and return to one
+  reader; completed children are reaped; stale results cannot write back; and
+  owned external/modality artifacts remain private and bounded.
+- Recommended next work: seek explicit authorization for **v0.6E Integrated
+  Runtime Continuity Qualification**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -427,7 +445,9 @@ late-work evidence is in the
 completed transport/application recovery evidence is in the
 [0.6B handoff](validation/v0.6/transport-application-recovery/HANDOFF.md), and
 the completed event/surface/resource evidence is in the
-[0.6C handoff](validation/v0.6/surface-event-resource-continuity/HANDOFF.md).
+[0.6C handoff](validation/v0.6/surface-event-resource-continuity/HANDOFF.md),
+and the completed external/terminal lifecycle evidence is in the
+[0.6D handoff](validation/v0.6/external-terminal-lifecycle/HANDOFF.md).
 No later implementation phase or release work is automatically authorized.
 
 ## 20. v0.3 Capability Recovery
@@ -440,8 +460,8 @@ Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
-complete, and 0.6A and 0.6B are validated; v0.6C and every later implementation
-phase still require explicit authorization.
+complete, and 0.6A through 0.6D are validated; 0.6E still requires explicit
+authorization.
 
 ## 21. Glossary
 
