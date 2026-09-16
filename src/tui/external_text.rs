@@ -3,7 +3,7 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
-    process::Command,
+    process::ExitStatus,
 };
 
 use crate::{
@@ -33,6 +33,20 @@ pub enum HandlerOutcome {
     Unchanged,
     Modified(String),
     Failed { reason: String, modified: bool },
+}
+
+pub struct ExternalTextHandler {
+    child: tokio::process::Child,
+}
+
+impl ExternalTextHandler {
+    pub async fn wait(&mut self) -> std::io::Result<ExitStatus> {
+        self.child.wait().await
+    }
+
+    pub fn id(&self) -> Option<u32> {
+        self.child.id()
+    }
 }
 
 impl ExternalTextSession {
@@ -76,12 +90,15 @@ impl ExternalTextSession {
         &self.label
     }
 
-    pub fn run_handler(&mut self, handler: &TextInteractionHandlerConfig) -> HandlerOutcome {
+    pub fn spawn_handler(
+        &self,
+        handler: &TextInteractionHandlerConfig,
+    ) -> Result<ExternalTextHandler, HandlerOutcome> {
         let Some(file) = self.file.as_ref() else {
-            return HandlerOutcome::Failed {
+            return Err(HandlerOutcome::Failed {
                 reason: "private interaction representation is unavailable".into(),
                 modified: false,
-            };
+            });
         };
         let path = file.path().to_path_buf();
         let args = handler.args.iter().map(|argument| {
@@ -91,15 +108,18 @@ impl ExternalTextSession {
                 std::ffi::OsStr::new(argument)
             }
         });
-        let status = match Command::new(&handler.program).args(args).status() {
-            Ok(status) => status,
-            Err(_) => {
-                return HandlerOutcome::Failed {
-                    reason: "configured text interaction handler could not be started".into(),
-                    modified: false,
-                };
-            }
-        };
+        let mut command = tokio::process::Command::new(&handler.program);
+        command.args(args).kill_on_drop(false);
+        match command.spawn() {
+            Ok(child) => Ok(ExternalTextHandler { child }),
+            Err(_) => Err(HandlerOutcome::Failed {
+                reason: "configured text interaction handler could not be started".into(),
+                modified: false,
+            }),
+        }
+    }
+
+    pub fn finish_handler(&mut self, status: std::io::Result<ExitStatus>) -> HandlerOutcome {
         let candidate = match self.read_candidate() {
             Ok(candidate) => candidate,
             Err(reason) => {
@@ -110,7 +130,7 @@ impl ExternalTextSession {
             }
         };
         let modified = candidate != self.original;
-        if !status.success() {
+        if !status.is_ok_and(|status| status.success()) {
             return HandlerOutcome::Failed {
                 reason: "configured text interaction handler exited unsuccessfully".into(),
                 modified,
@@ -146,6 +166,14 @@ impl ExternalTextSession {
     pub(crate) fn preserve(&mut self) -> Option<PathBuf> {
         let path = self.file.take()?.keep();
         let directory = self.directory.take()?.keep();
+        path.starts_with(&directory).then_some(path)
+    }
+
+    /// Preserve the private candidate when GUI2TUI stops without terminating
+    /// a still-running user-configured handler.
+    pub fn preserve_while_handler_continues(&mut self) -> Option<PathBuf> {
+        let path = self.file.take()?.keep();
+        let directory = self.directory.take()?.keep_until_expiry().ok()?;
         path.starts_with(&directory).then_some(path)
     }
 }

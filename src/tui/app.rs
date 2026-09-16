@@ -283,6 +283,19 @@ impl TuiApplication {
         self.runtime.begin_terminal_reattach();
     }
 
+    /// Suspension pauses terminal ownership, not application authority. Read
+    /// current public semantics again because the GUI may have changed while
+    /// this process was stopped.
+    pub async fn refresh_after_terminal_resume(&mut self) {
+        self.check_application_available().await;
+        if self.application_available {
+            self.full_reload(Some(
+                "Resumed; refreshed current application semantics".into(),
+            ))
+            .await;
+        }
+    }
+
     async fn application_gone(&mut self) {
         self.application_available = false;
         self.runtime.invalidate_application();

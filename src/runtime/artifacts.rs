@@ -14,6 +14,7 @@ use std::{
 };
 
 const MARKER: &str = "GUI2TUI-OWNED-ARTIFACTS-v1";
+const MAX_OWNED_NAMESPACES: usize = 256;
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Ownership {
@@ -22,6 +23,8 @@ struct Ownership {
     operation: u64,
     created_unix: u64,
     expires_unix: u64,
+    #[serde(default)]
+    recover_after_expiry: bool,
     files: Vec<String>,
 }
 fn now() -> u64 {
@@ -103,6 +106,19 @@ impl OwnedArtifactDirectory {
         operation: u64,
     ) -> io::Result<Self> {
         private_owned(root, true)?;
+        let namespaces = fs::read_dir(root)?
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("operation-")
+            })
+            .take(MAX_OWNED_NAMESPACES + 1)
+            .count();
+        if namespaces >= MAX_OWNED_NAMESPACES {
+            return Err(io::Error::other("owned artifact namespace limit"));
+        }
         let directory = tempfile::Builder::new()
             .prefix("operation-")
             .permissions(fs::Permissions::from_mode(0o700))
@@ -122,6 +138,7 @@ impl OwnedArtifactDirectory {
             operation,
             created_unix: now(),
             expires_unix: now().saturating_add(ttl_seconds.min(1800)),
+            recover_after_expiry: false,
             files: Vec::new(),
         };
         let this = Self {
@@ -211,6 +228,14 @@ impl OwnedArtifactDirectory {
         let path = directory.keep();
         drop(_lease);
         path
+    }
+
+    /// Preserve an artifact still used by a deliberately continuing external
+    /// child. Recovery skips it until its already-bounded expiry.
+    pub fn keep_until_expiry(mut self) -> io::Result<PathBuf> {
+        self.ownership.recover_after_expiry = true;
+        self.persist()?;
+        Ok(self.keep())
     }
 }
 
@@ -347,6 +372,9 @@ fn recover_one(directory: &Path) -> io::Result<bool> {
     {
         return Err(io::Error::other("invalid artifact ownership"));
     }
+    if ownership.recover_after_expiry && now() < ownership.expires_unix {
+        return Ok(false);
+    }
     // Validate ALL entries before deleting ANY entry. Foreign additions,
     // links and unregistered crash-gap files make recovery conservative.
     let mut present = Vec::new();
@@ -457,5 +485,33 @@ mod tests {
         drop(reaper);
         assert_eq!(recover_abandoned_in(root.path()).unwrap(), 1);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn continuing_handler_artifact_is_bounded_and_deferred_until_expiry() {
+        let root = test_root();
+        let owned =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 1)
+                .unwrap();
+        let path = owned.keep_until_expiry().unwrap();
+        assert_eq!(recover_in(root.path()).unwrap(), 0);
+        assert!(path.exists());
+
+        let mut expired =
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 2)
+                .unwrap();
+        expired.ownership.created_unix = now().saturating_sub(2);
+        expired.ownership.expires_unix = now().saturating_sub(1);
+        let expired_path = expired.keep_until_expiry().unwrap();
+        assert_eq!(recover_in(root.path()).unwrap(), 1);
+        assert!(!expired_path.exists());
+
+        for index in 1..MAX_OWNED_NAMESPACES {
+            fs::create_dir(root.path().join(format!("operation-bound-{index}"))).unwrap();
+        }
+        assert!(
+            OwnedArtifactDirectory::in_root(root.path(), 300, RuntimeSessionId::default(), 3,)
+                .is_err()
+        );
     }
 }

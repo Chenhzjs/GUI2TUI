@@ -23,6 +23,7 @@ use gui2tui::{
     transcompile::PresentationMode,
     tui::{
         app::TuiApplication,
+        external_text::HandlerOutcome,
         input::mouse_to_intent,
         selector::{
             ApplicationSelector, RunningApplication, SelectorIntent, SelectorTarget,
@@ -632,6 +633,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                 &mut terminal,
                 &mut signals,
                 &mut terminal_events,
+                &mut guard,
                 timeout,
                 config.terminal.mouse,
                 &mut config,
@@ -699,7 +701,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
     let mut content_tick = tokio::time::interval(Duration::from_millis(25));
     content_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut redraw = true;
-    loop {
+    'runtime: loop {
         if redraw && guard.attached {
             terminal.draw(|frame| app.render(frame))?;
         }
@@ -718,20 +720,42 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                             app.begin_terminal_reattach();
                             guard = TerminalGuard::attach(config.terminal.mouse)?;
                             tracing::debug!("terminal modes restored for reattachment");
+                            terminal_events = EventStream::new();
+                            input_available = true;
                             // Terminal::clear queries remote cursor position
                             // (DSR), which may block on a PTY without replies.
                             // Fullscreen resize invalidates buffers without DSR.
                             let (width, height) = crossterm::terminal::size()?;
                             terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
                             tracing::debug!("terminal frame invalidated for reattachment");
-                            // Discard buffered terminal input, never replay it
-                            // as semantic operations after reattachment.
-                            for _ in 0..128 {
-                                if futures_lite::future::poll_once(terminal_events.next()).await.is_none() { break; }
-                            }
                             app.set_terminal_attached(true);
                             redraw = true;
                         }
+                    }
+                    RuntimeSignal::Suspend => {
+                        // The single input stream is not polled while this
+                        // synchronous ownership transition is suspended.
+                        guard.detach();
+                        app.set_terminal_attached(false);
+                        gui2tui::runtime::signals::suspend_current_process()?;
+                        app.begin_terminal_reattach();
+                        guard = TerminalGuard::attach(config.terminal.mouse)?;
+                        terminal_events = EventStream::new();
+                        input_available = true;
+                        let (width, height) = crossterm::terminal::size()?;
+                        terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+                        app.set_terminal_attached(true);
+                        // Repaint the last authoritative scene immediately;
+                        // the following fresh read then converges any GUI
+                        // changes that happened while this process was stopped.
+                        terminal.draw(|frame| app.render(frame))?;
+                        app.refresh_after_terminal_resume().await;
+                        redraw = true;
+                    }
+                    RuntimeSignal::Resume => {
+                        // SIGCONT already resumes the synchronous SIGSTOP
+                        // transition. Reacquisition occurs before that call
+                        // returns, so a queued notification needs no action.
                     }
                 }
             },
@@ -768,6 +792,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                                 &mut terminal,
                                 &mut signals,
                                 &mut terminal_events,
+                                &mut guard,
                                 timeout,
                                 config.terminal.mouse,
                                 &mut config,
@@ -848,7 +873,69 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
             drop(terminal_events);
             guard.detach();
             app.set_terminal_attached(false);
-            let outcome = tokio::task::block_in_place(|| session.run_handler(&handler));
+            let mut shutdown_requested = false;
+            let mut forced_shutdown_during_handler = false;
+            let outcome = match session.spawn_handler(&handler) {
+                Ok(mut process) => {
+                    let child_id = process.id();
+                    let mut handler_liveness = tokio::time::interval(
+                        gui2tui::runtime::RuntimeLimits::default().lifecycle_probe,
+                    );
+                    handler_liveness
+                        .set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    loop {
+                        tokio::select! {
+                            status = process.wait() => break session.finish_handler(status),
+                            signal = signals.recv() => match signal {
+                                RuntimeSignal::Stop => {
+                                    if shutdown_requested {
+                                        let candidate_preserved = session
+                                            .preserve_while_handler_continues()
+                                            .is_some();
+                                        tracing::debug!(
+                                            child_id,
+                                            candidate_preserved,
+                                            "repeated shutdown request forced exit while configured handler continues"
+                                        );
+                                        forced_shutdown_during_handler = true;
+                                        break HandlerOutcome::Unchanged;
+                                    }
+                                    // A foreground editor shares this terminal
+                                    // job. Retire all semantic publication
+                                    // authority immediately, but keep the
+                                    // process alive to reap the editor rather
+                                    // than hanging it up and risking user data.
+                                    app.shutdown().await;
+                                    shutdown_requested = true;
+                                    tracing::debug!(
+                                        child_id,
+                                        "shutdown requested; external text authority retired while awaiting handler exit"
+                                    );
+                                }
+                                RuntimeSignal::Suspend => {
+                                    // The handler already owns the terminal;
+                                    // stopping GUI2TUI must not reclaim it.
+                                    gui2tui::runtime::signals::suspend_current_process()?;
+                                }
+                                RuntimeSignal::Detach
+                                | RuntimeSignal::Reattach
+                                | RuntimeSignal::Resume => {}
+                            },
+                            _ = handler_liveness.tick(), if !shutdown_requested => {
+                                app.check_application_available().await;
+                            }
+                        }
+                    }
+                }
+                Err(outcome) => outcome,
+            };
+            if forced_shutdown_during_handler {
+                break 'runtime;
+            }
+            if shutdown_requested {
+                app.finish_external_text_interaction(session, outcome).await;
+                break 'runtime;
+            }
             app.begin_terminal_reattach();
             guard = TerminalGuard::attach(config.terminal.mouse)?;
             terminal_events = EventStream::new();
@@ -864,10 +951,12 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_selector(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     signals: &mut RuntimeSignals,
     events: &mut EventStream,
+    guard: &mut TerminalGuard,
     timeout: Duration,
     mouse_enabled: bool,
     config: &mut gui2tui::product::config::Config,
@@ -888,10 +977,44 @@ async fn run_selector(
         terminal.draw(|frame| selector.render(frame))?;
         let event = tokio::select! {
             signal = signals.recv() => {
-                if matches!(signal, RuntimeSignal::Stop) { return Ok(None); }
+                match signal {
+                    RuntimeSignal::Stop => return Ok(None),
+                    RuntimeSignal::Detach => guard.detach(),
+                    RuntimeSignal::Reattach => {
+                        if !guard.attached {
+                            *guard = TerminalGuard::attach(mouse_enabled)?;
+                            *events = EventStream::new();
+                            let (width, height) = crossterm::terminal::size()?;
+                            terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+                        }
+                    }
+                    RuntimeSignal::Suspend => {
+                        guard.detach();
+                        gui2tui::runtime::signals::suspend_current_process()?;
+                        *guard = TerminalGuard::attach(mouse_enabled)?;
+                        *events = EventStream::new();
+                        let (width, height) = crossterm::terminal::size()?;
+                        terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+                        let transport = snapshot.as_ref().map(|current| current.backend.clone());
+                        refresh_selector(
+                            &mut selector,
+                            &mut snapshot,
+                            timeout,
+                            &launchers,
+                            transport,
+                        ).await;
+                    }
+                    RuntimeSignal::Resume => {}
+                }
                 continue;
             },
-            event = events.next() => match event { Some(event) => event?, None => return Ok(None) },
+            event = async {
+                if guard.attached {
+                    events.next().await
+                } else {
+                    std::future::pending().await
+                }
+            } => match event { Some(event) => event?, None => return Ok(None) },
         };
         match event {
             Event::Key(key) => {
