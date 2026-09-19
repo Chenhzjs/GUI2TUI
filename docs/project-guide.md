@@ -430,9 +430,18 @@ layout reconstruction.
   no X11-specific semantic dependency. Native Wayland and XWayland remain
   separately untested; cross-host Remote Companion is recommended deferred
   beyond the candidate 1.0 baseline.
-- v0.7A through 0.7E: **PLANNED / NOT AUTHORIZED**. The next decision is user
-  review of the candidate environment contract, followed by separately
-  authorized 0.7A if accepted.
+- v0.7A Environment Contract and Session Selection: **COMPLETE / VALIDATED**.
+  Explicit `--session desktop|managed` selects one connection environment
+  before D-Bus initialization; desktop never imports a managed descriptor,
+  managed never creates or falls back, and compatible implicit selection is
+  visible. Doctor separates topology, connection and zero-application state.
+  Session choice does not grant application authority.
+- User-confirmed 1.0 direction: local Linux X11 and managed Xvfb are core
+  targets; native Wayland/XWayland are priority validation targets; same-host
+  SSH TUI should be pursued; cross-host Remote Companion is deferred beyond
+  1.0. These are development targets, not claims of completed qualification.
+- v0.7B through 0.7E: **PLANNED / NOT AUTHORIZED**. The next recommended
+  direction is separately authorized 0.7B.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -478,7 +487,7 @@ The formal internal close and evidence index are in the
 release work are not automatically authorized. The current deployment
 architecture, evidence classifications and candidate 1.0 environment contract
 are in the [v0.7 Discovery](planning/v0.7-deployment-environment.md); the five
-bounded, not-yet-authorized phases are in the
+bounded phases and completed 0.7A result are in the
 [v0.7 roadmap](planning/v0.7-roadmap.md).
 
 ## 20. v0.3 Capability Recovery
@@ -492,8 +501,8 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. v0.7 Discovery is complete; implementation has not begun and every
-proposed phase requires separate explicit authorization.
+internally. v0.7 Discovery and 0.7A are complete; 0.7B–0.7E each require
+separate explicit authorization.
 
 ## 21. Glossary
 

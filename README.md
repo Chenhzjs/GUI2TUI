@@ -44,14 +44,15 @@ git clone https://github.com/Chenhzjs/GUI2TUI.git
 cd GUI2TUI
 cargo build --release
 
-./target/release/gui2tui doctor
-./target/release/gui2tui
+./target/release/gui2tui --session desktop doctor
+./target/release/gui2tui --session desktop
 ```
 
-The GUI application must already be running in a Linux desktop session whose
-AT-SPI bus is reachable. The terminal itself may be headless or connected over
-SSH to that same host. No config file, root privilege, full desktop environment,
-or companion viewer is required.
+The GUI application must already be running in the explicitly selected Linux
+session whose AT-SPI bus is reachable. `--session desktop` preserves the
+current process's desktop/session environment. Same-host SSH is a 1.0
+qualification target, not yet a formally supported deployment row. No config
+file, root privilege, or companion viewer is required.
 
 For a server without a physical desktop, configure a persistent managed Xvfb +
 D-Bus + AT-SPI session once:
@@ -60,17 +61,20 @@ D-Bus + AT-SPI session once:
 ./bin/gui2tui setup persistent
 ```
 
-Every later terminal for the same user automatically uses it; no shell profile,
-`source`, or extra helper command is required. Use `setup status`, `restart`, or
-`stop` to manage it. An isolated one-shell alternative is
+Select it explicitly with `--session managed`; no shell profile or `source` is
+required. Use `setup status`, `restart`, or `stop` to manage it. Omitting
+`--session` retains the historical compatible behavior—reuse a valid managed
+descriptor when present—but startup and Doctor now identify that choice.
+Explicit desktop selection is never overridden by the descriptor, and explicit
+managed selection never falls back. An isolated one-shell alternative is
 `gui2tui setup temporary`.
 
 To save and launch an application directly (instead of starting it in another
 shell first), register its executable once. The shortest form is:
 
 ```bash
-./bin/gui2tui app add mousepad
-./bin/gui2tui launch mousepad
+./bin/gui2tui --session managed app add mousepad
+./bin/gui2tui --session managed launch mousepad
 ```
 
 Run `./bin/gui2tui app add` with no executable for a fill-in setup wizard. For

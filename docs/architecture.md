@@ -1,5 +1,14 @@
 # GUI2TUI architecture
 
+Before the pipeline is constructed, the product selects exactly one
+same-host connection environment: the current process's desktop/session
+environment or an existing private GUI2TUI-managed headless descriptor.
+`--session desktop` never imports that descriptor; `--session managed` never
+falls back or creates one. This transport choice occurs before Tokio/D-Bus
+initialization and supplies the registry below. It does not create application
+authority: only a fresh enumeration and exact current application selection
+opens an `ApplicationGenerationId`.
+
     GUI toolkit / browser
             │
             ▼

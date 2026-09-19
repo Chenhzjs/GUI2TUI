@@ -38,10 +38,25 @@ On the tested Ubuntu environment, `dbus`, `at-spi2-core` and the GUI application
 provide session accessibility. The binary does not link against GTK/Qt.
 
 ```bash
-gui2tui doctor
-gui2tui                # application selector with responsive spatial scenes
-gui2tui --app NAME     # exact or unambiguous accessible application name
+gui2tui --session desktop doctor
+gui2tui --session desktop                # current desktop application selector
+gui2tui --session desktop --app NAME     # exact or unambiguous current application
 ```
+
+`--session desktop` uses only the desktop/session environment inherited by the
+current process. `--session managed` requires an existing valid managed
+headless descriptor created by `gui2tui setup persistent`. Session choice only
+selects the connection environment; it does not select or authorize an
+application.
+
+For compatibility, omitting `--session` still reuses a valid managed
+descriptor when one exists and otherwise uses the inherited desktop
+environment. Startup and Doctor identify the resulting topology. An invalid
+or stopped descriptor produces a warning and uses the inherited environment
+only in this unspecified compatibility mode. Explicit `--session managed`
+fails instead of falling back; explicit `--session desktop` never reads the
+descriptor. `GUI2TUI_NO_MANAGED_SESSION=1` remains a compatible opt-out, but
+new commands should prefer the explicit flag.
 
 `--app` selects an application that is already registered in the current
 AT-SPI session. It does not scan installed packages or start a binary. To save
@@ -98,21 +113,30 @@ gui2tui setup persistent
 ```
 
 The session remains alive after the setup terminal closes. Future `gui2tui`,
-`gui2tui inspect`, and applications started with `gui2tui launch` automatically
-attach through a current-user-owned mode-0700 state directory and mode-0600
-descriptor. No environment command needs to be sourced.
+`gui2tui inspect`, and applications started with `gui2tui launch` can select it
+through a current-user-owned mode-0700 state directory and mode-0600
+descriptor. No environment command needs to be sourced:
 
 ```bash
 gui2tui setup status
-gui2tui app add mousepad
-gui2tui launch mousepad
+gui2tui --session managed doctor
+gui2tui --session managed app add mousepad
+gui2tui --session managed launch mousepad
 gui2tui setup restart
 gui2tui setup stop
 ```
 
-Stopping removes the active descriptor and future invocations return to the
-terminal's normal desktop session. Set `GUI2TUI_NO_MANAGED_SESSION=1` for one
-explicit invocation that must ignore a running managed session.
+Stopping removes the active descriptor. A later explicit managed selection
+then reports that the descriptor is absent; it never creates a session or
+falls back. Use `--session desktop` for an invocation that must ignore a
+running managed session.
+
+Descriptor loading checks schema, bounded fields, current-user ownership,
+private permissions and the recorded supervisor. Connection probing then
+distinguishes an unavailable selected bus from a healthy registry containing
+zero applications. GUI2TUI does not delete an invalid descriptor during these
+checks; `setup status`, `restart`, and `stop` remain the explicit recovery
+commands.
 
 Strict Snap confinement cannot access the helper's private session bus. A Snap
 launcher is rejected before `exec` with an actionable error; use the normal

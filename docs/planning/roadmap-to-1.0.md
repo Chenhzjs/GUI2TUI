@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / IMPLEMENTATION NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / 0.7A COMPLETE / LATER PHASES NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -483,7 +483,7 @@ The decision must not remain ambiguous at the 1.0 boundary. It must be driven
 by the intended deployment contract and evidence, not by the existence of an
 architectural sketch.
 
-### Discovery result
+### Discovery and 0.7A result
 
 The completed [v0.7 Discovery](v0.7-deployment-environment.md) found that the
 current AT-SPI/D-Bus backend is a same-host, same-accessibility-session model.
@@ -492,14 +492,26 @@ evidence for a pre-emptive Wayland semantic-backend rewrite. Native Wayland
 and XWayland still require separate real-session qualification; optional
 static visual acquisition remains native-X11-only.
 
-The candidate 1.0 baseline is selected Ubuntu GNU/Linux environments on
-x86_64 and aarch64, covering an ordinary same-user X11 desktop and the bundled
-managed Xvfb topology. Same-host SSH is Limited pending an end-to-end PTY and
-session qualification. Cross-host local-TUI/remote-GUI operation and a Remote
-Companion are recommended Deferred beyond 1.0. The detailed support matrix,
-five bounded implementation phases and exit gates are in the
-[v0.7 roadmap](v0.7-roadmap.md). They require user review and separate
-authorization.
+The user-approved development direction makes same-user local Linux X11 and
+the bundled managed Xvfb topology core 1.0 support targets. Native Wayland and
+XWayland are separate priority validation targets that should be included if
+real evidence supports them; lack of global geometry alone cannot invalidate
+otherwise correct semantic interaction. Same-host SSH TUI should be pursued
+for 1.0 through the existing session-selection and terminal model. Cross-host
+local-TUI/remote-GUI operation and a Remote Companion are explicitly deferred
+until after 1.0.
+
+0.7A is complete. `--session desktop|managed` now selects one connection
+environment before D-Bus initialization. Explicit desktop never reads a
+managed descriptor; explicit managed requires an existing valid private
+descriptor and never creates or falls back. The unspecified compatibility
+mode retains historical managed-descriptor reuse, but reports the selected
+topology and safely uses the inherited environment when the descriptor is
+absent or unusable. Doctor reports topology separately from connection and
+zero-application state. Current registry enumeration and exact application
+selection remain the only path to application authority. The detailed
+contract, evidence and remaining separately authorized phases are in the
+[v0.7 roadmap](v0.7-roadmap.md).
 
 ### Platform boundary
 
@@ -770,11 +782,10 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-v0.7 Deployment & Environment Completeness Discovery is complete. The next
-decision is user review of its candidate 1.0 support contract and Remote
-Companion deferral, followed, if accepted, by explicit authorization of
-**0.7A — Environment Contract and Session Selection**. Every v0.7
-implementation phase, 1.0 integration, v1.0.0 RC, and public release remains
+v0.7 Discovery and **0.7A — Environment Contract and Session Selection** are
+complete. The next recommended direction is **0.7B — Installation and
+Diagnostic Completeness**, which is not authorized. 0.7C–0.7E, v0.7 milestone
+qualification, 1.0 integration, v1.0.0 RC, and public release also remain
 unauthorized.
 
 ## 16. References
@@ -806,8 +817,8 @@ unauthorized.
 - [v0.7 deployment/environment Discovery](v0.7-deployment-environment.md) —
   current deployment architecture, evidence, candidate support contract and
   remote-companion decision.
-- [v0.7 roadmap](v0.7-roadmap.md) — five planned bounded phases; all remain
-  not authorized.
+- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A contract/selection phase and
+  four remaining bounded phases, none automatically authorized.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no
