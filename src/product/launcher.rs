@@ -51,7 +51,9 @@ pub async fn ensure_running(
 ) -> Result<LaunchOutcome, String> {
     let backend = AtspiBackend::connect(backend_timeout)
         .await
-        .map_err(|_| "Desktop accessibility service unavailable; run gui2tui doctor".to_owned())?;
+        .map_err(|_| {
+            "Selected session accessibility service unavailable; run gui2tui doctor with the same --session choice".to_owned()
+        })?;
     if let Some(name) = find_match(
         backend
             .applications()

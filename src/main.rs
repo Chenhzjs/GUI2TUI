@@ -10,6 +10,7 @@ use gui2tui::{
         InspectOptions,
     },
     inspect::{FormatOptions, format_tree},
+    product::headless::SessionChoice,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -20,6 +21,10 @@ use tracing_subscriber::EnvFilter;
     about = "Inspect and activate semantic GUI controls exposed through Linux AT-SPI"
 )]
 struct Cli {
+    /// Connection environment. Omit to reuse a valid managed descriptor, otherwise use desktop.
+    #[arg(long, value_enum, value_name = "SESSION")]
+    session: Option<SessionChoice>,
+
     /// Explicitly capture one unresolved Image's screen region and save it on this host.
     #[arg(long, value_name = "NODE_ID", requires = "app", conflicts_with_all=["resolve_modality","dump_resource_reference","handoff_modality","dump_modalities","watch_events","probe_cache","probe_collection"])]
     materialize_modality: Option<String>,
@@ -221,8 +226,19 @@ struct Cli {
 }
 
 fn main() -> ExitCode {
-    if let Err(error) = gui2tui::product::headless::apply_at_process_start() {
-        eprintln!("warning: {error}");
+    let cli = Cli::parse();
+    let selection = match gui2tui::product::headless::select_at_process_start(cli.session) {
+        Ok(selection) => selection,
+        Err(error) => {
+            eprintln!("error: session selection failed: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if cli.reap_materialized.is_none() && !cli.modality_capabilities {
+        eprintln!("Session: {}", selection.summary());
+        if let Some(diagnostic) = selection.diagnostic.as_deref() {
+            eprintln!("warning: {diagnostic}");
+        }
     }
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -234,11 +250,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    runtime.block_on(async_main())
+    runtime.block_on(async_main(cli))
 }
 
-async fn async_main() -> ExitCode {
-    let cli = Cli::parse();
+async fn async_main(cli: Cli) -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),

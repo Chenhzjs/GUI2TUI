@@ -10,6 +10,65 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum SessionChoice {
+    /// Use only the desktop/session environment inherited by this process.
+    Desktop,
+    /// Use the existing GUI2TUI-managed headless session descriptor.
+    Managed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionTopology {
+    CurrentDesktop,
+    ManagedHeadless,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionSelectionSource {
+    Explicit,
+    EnvironmentOptOut,
+    NoDescriptor,
+    ManagedDescriptor,
+    InvalidDescriptorFallback,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionSelection {
+    pub topology: SessionTopology,
+    pub source: SessionSelectionSource,
+    pub diagnostic: Option<String>,
+}
+
+impl SessionSelection {
+    pub fn label(&self) -> &'static str {
+        match self.topology {
+            SessionTopology::CurrentDesktop => "Current desktop",
+            SessionTopology::ManagedHeadless => "Managed headless",
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        let source = match self.source {
+            SessionSelectionSource::Explicit => match self.topology {
+                SessionTopology::CurrentDesktop => "explicit --session desktop",
+                SessionTopology::ManagedHeadless => "explicit --session managed",
+            },
+            SessionSelectionSource::EnvironmentOptOut => {
+                "compatible default; managed attachment disabled by environment"
+            }
+            SessionSelectionSource::NoDescriptor => "compatible default; no managed descriptor",
+            SessionSelectionSource::ManagedDescriptor => {
+                "compatible default; existing managed descriptor"
+            }
+            SessionSelectionSource::InvalidDescriptorFallback => {
+                "compatible fallback; managed descriptor unusable"
+            }
+        };
+        format!("{} ({source})", self.label())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManagedSession {
@@ -46,7 +105,7 @@ pub fn descriptor_path() -> Result<PathBuf, String> {
 
 fn verify_private(path: &Path, directory: bool) -> Result<(), String> {
     let metadata = fs::symlink_metadata(path)
-        .map_err(|_| format!("Cannot inspect managed session path {}", path.display()))?;
+        .map_err(|_| "Cannot inspect managed session storage".to_owned())?;
     let correct_kind = if directory {
         metadata.is_dir()
     } else {
@@ -56,10 +115,10 @@ fn verify_private(path: &Path, directory: bool) -> Result<(), String> {
         || metadata.uid() != rustix::process::geteuid().as_raw()
         || metadata.mode() & 0o077 != 0
     {
-        return Err(format!(
-            "Managed session path {} must be current-user owned, private, and not a symlink",
-            path.display()
-        ));
+        return Err(
+            "Managed session storage must be current-user owned, private, and not a symlink"
+                .to_owned(),
+        );
     }
     Ok(())
 }
@@ -107,20 +166,19 @@ pub fn load() -> Result<Option<ManagedSession>, String> {
     Ok(Some(session))
 }
 
-/// Apply the managed session to this process and future child applications.
-///
-/// # Safety invariant
-/// Call this before constructing a Tokio runtime or starting any threads.
-pub fn apply_at_process_start() -> Result<bool, String> {
-    if std::env::var_os("GUI2TUI_NO_MANAGED_SESSION").is_some() {
-        return Ok(false);
-    }
-    let Some(session) = load()? else {
-        return Ok(false);
-    };
-    // SAFETY: both GUI2TUI entry points invoke this in their synchronous main,
-    // before Tokio, tracing, D-Bus connections, or any application thread.
+fn apply_desktop() {
+    // Keep explicit/default selection stable for private libexec children. This
+    // is a process-local environment change and never modifies the caller's
+    // shell or persistent configuration.
     unsafe {
+        std::env::set_var("GUI2TUI_NO_MANAGED_SESSION", "1");
+        std::env::remove_var("GUI2TUI_MANAGED_SESSION");
+    }
+}
+
+fn apply_managed(session: ManagedSession) {
+    unsafe {
+        std::env::remove_var("GUI2TUI_NO_MANAGED_SESSION");
         std::env::set_var("DISPLAY", session.display);
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", session.session_bus_address);
         std::env::set_var("XDG_SESSION_TYPE", "x11");
@@ -128,7 +186,73 @@ pub fn apply_at_process_start() -> Result<bool, String> {
         std::env::set_var("QT_LINUX_ACCESSIBILITY_ALWAYS_ON", "1");
         std::env::set_var("GUI2TUI_MANAGED_SESSION", "1");
     }
-    Ok(true)
+}
+
+/// Select and apply one connection environment to this process and its future
+/// child applications. This chooses transport only; it does not enumerate or
+/// authorize an application.
+///
+/// # Safety invariant
+/// Call this before constructing a Tokio runtime or starting any threads.
+pub fn select_at_process_start(choice: Option<SessionChoice>) -> Result<SessionSelection, String> {
+    match choice {
+        Some(SessionChoice::Desktop) => {
+            apply_desktop();
+            Ok(SessionSelection {
+                topology: SessionTopology::CurrentDesktop,
+                source: SessionSelectionSource::Explicit,
+                diagnostic: None,
+            })
+        }
+        Some(SessionChoice::Managed) => {
+            let session = load()?.ok_or_else(|| {
+                "Managed session descriptor does not exist; run `gui2tui setup persistent`"
+                    .to_owned()
+            })?;
+            apply_managed(session);
+            Ok(SessionSelection {
+                topology: SessionTopology::ManagedHeadless,
+                source: SessionSelectionSource::Explicit,
+                diagnostic: None,
+            })
+        }
+        None if std::env::var_os("GUI2TUI_NO_MANAGED_SESSION").is_some() => {
+            apply_desktop();
+            Ok(SessionSelection {
+                topology: SessionTopology::CurrentDesktop,
+                source: SessionSelectionSource::EnvironmentOptOut,
+                diagnostic: None,
+            })
+        }
+        None => match load() {
+            Ok(Some(session)) => {
+                apply_managed(session);
+                Ok(SessionSelection {
+                    topology: SessionTopology::ManagedHeadless,
+                    source: SessionSelectionSource::ManagedDescriptor,
+                    diagnostic: None,
+                })
+            }
+            Ok(None) => {
+                apply_desktop();
+                Ok(SessionSelection {
+                    topology: SessionTopology::CurrentDesktop,
+                    source: SessionSelectionSource::NoDescriptor,
+                    diagnostic: None,
+                })
+            }
+            Err(error) => {
+                apply_desktop();
+                Ok(SessionSelection {
+                    topology: SessionTopology::CurrentDesktop,
+                    source: SessionSelectionSource::InvalidDescriptorFallback,
+                    diagnostic: Some(format!(
+                        "Managed descriptor was not used: {error}. Run `gui2tui setup status` or select `--session managed` for a blocking check."
+                    )),
+                })
+            }
+        },
+    }
 }
 
 #[cfg(test)]

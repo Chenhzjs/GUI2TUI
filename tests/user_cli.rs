@@ -1,4 +1,5 @@
 use std::{
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::{Command, Output},
 };
@@ -109,6 +110,43 @@ fn doctor_json_failure_is_bounded_and_contents_free() {
             .unwrap()
             .iter()
             .any(|c| c["name"] == "session-bus" && c["level"] == "FAIL")
+    );
+}
+
+#[test]
+fn explicit_session_choice_controls_managed_descriptor_use() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = temp.path().join(".local/state/gui2tui/headless");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let descriptor = state.join("session.json");
+    std::fs::write(&descriptor, b"not-json\n").unwrap();
+    std::fs::set_permissions(&descriptor, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    let desktop = run(temp.path(), &["--session", "desktop", "config", "path"]);
+    assert!(desktop.status.success());
+    assert!(!String::from_utf8_lossy(&desktop.stderr).contains("descriptor"));
+
+    let managed = run(temp.path(), &["--session", "managed", "config", "path"]);
+    assert!(!managed.status.success());
+    assert!(
+        String::from_utf8_lossy(&managed.stderr).contains("Managed session descriptor is invalid")
+    );
+
+    let compatible = run(temp.path(), &["doctor", "--json"]);
+    let report: serde_json::Value = serde_json::from_slice(&compatible.stdout).unwrap();
+    let selection = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|check| check["name"] == "session-selection")
+        .unwrap();
+    assert_eq!(selection["level"], "WARN");
+    assert!(
+        selection["message"]
+            .as_str()
+            .unwrap()
+            .contains("Current desktop (compatible fallback; managed descriptor unusable)")
     );
 }
 #[test]

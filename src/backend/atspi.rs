@@ -127,27 +127,36 @@ impl SessionEnvironment {
     pub fn summary(&self) -> String {
         format!(
             "XDG_SESSION_TYPE={}, DBUS_SESSION_BUS_ADDRESS={}, DISPLAY={}, WAYLAND_DISPLAY={}",
-            shown(&self.xdg_session_type),
-            shown(&self.dbus_session_bus_address),
-            shown(&self.display),
-            shown(&self.wayland_display)
+            session_type(&self.xdg_session_type),
+            presence(&self.dbus_session_bus_address),
+            presence(&self.display),
+            presence(&self.wayland_display)
         )
     }
 }
 
-fn shown(value: &Option<String>) -> &str {
-    value.as_deref().unwrap_or("<unset>")
+fn presence(value: &Option<String>) -> &'static str {
+    if value.is_some() { "<set>" } else { "<unset>" }
+}
+
+fn session_type(value: &Option<String>) -> &str {
+    match value.as_deref() {
+        Some("x11") => "x11",
+        Some("wayland") => "wayland",
+        Some(_) => "<other>",
+        None => "<unset>",
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum BackendError {
-    #[error("No accessible AT-SPI desktop session found. {environment}. Cause: {source}")]
+    #[error("No accessible AT-SPI desktop session found. {environment}.")]
     NoDesktopSession {
         environment: String,
         source: Box<zbus::Error>,
     },
     #[error(
-        "No accessible AT-SPI desktop session found. The session D-Bus is reachable, but the AT-SPI bus is unavailable. {environment}. Cause: {source}"
+        "No accessible AT-SPI desktop session found. The session D-Bus is reachable, but the AT-SPI bus is unavailable. {environment}."
     )]
     AtspiUnavailable {
         environment: String,
@@ -4015,6 +4024,22 @@ async fn read_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_environment_summary_redacts_connection_values() {
+        let environment = SessionEnvironment {
+            xdg_session_type: Some("x11".into()),
+            dbus_session_bus_address: Some("unix:path=/secret/session-bus".into()),
+            display: Some(":99".into()),
+            wayland_display: None,
+        };
+        let summary = environment.summary();
+        assert_eq!(
+            summary,
+            "XDG_SESSION_TYPE=x11, DBUS_SESSION_BUS_ADDRESS=<set>, DISPLAY=<set>, WAYLAND_DISPLAY=<unset>"
+        );
+        assert!(!summary.contains("secret") && !summary.contains(":99"));
+    }
 
     fn test_event(path: &str) -> crate::events::NormalizedEvent {
         crate::events::NormalizedEvent::NodePropertyChanged {

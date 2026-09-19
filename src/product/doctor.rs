@@ -1,4 +1,4 @@
-use super::{config::Config, launcher, paths};
+use super::{config::Config, headless::SessionSelection, launcher, paths};
 use crate::backend::AtspiBackend;
 use serde::Serialize;
 use std::{
@@ -118,7 +118,7 @@ async fn endpoint_probe(socket: &Path) -> io::Result<bool> {
 }
 
 /// Only explicitly invoked by the user; never part of initial semantic bootstrap.
-pub async fn run(socket: Option<&Path>) -> Report {
+pub async fn run(socket: Option<&Path>, selection: &SessionSelection) -> Report {
     let started = Instant::now();
     let mut checks = vec![check(
         "platform",
@@ -133,6 +133,21 @@ pub async fn run(socket: Option<&Path>) -> Report {
             "Development/build platform only; live desktop operation requires Linux AT-SPI"
         },
     )];
+    checks.push(check(
+        "session-selection",
+        if selection.diagnostic.is_some() {
+            Level::Warn
+        } else {
+            Level::Info
+        },
+        match selection.diagnostic.as_deref() {
+            Some(diagnostic) => format!("Selected {}. {diagnostic}", selection.summary()),
+            None => format!(
+                "Selected {}. Session selection chooses connection environment only; application authority still requires a fresh current AT-SPI enumeration and explicit application selection.",
+                selection.summary()
+            ),
+        },
+    ));
     let display = std::env::var_os("DISPLAY").is_some();
     let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
     let session = match std::env::var("XDG_SESSION_TYPE").as_deref() {
@@ -213,7 +228,11 @@ pub async fn run(socket: Option<&Path>) -> Report {
     let dbus = tokio::time::timeout(PROBE_TIMEOUT, zbus::Connection::session()).await;
     match dbus {
         Ok(Ok(connection)) => {
-            checks.push(check("session-bus", Level::Pass, "Session D-Bus reachable"));
+            checks.push(check(
+                "session-bus",
+                Level::Pass,
+                format!("Session D-Bus reachable for {}", selection.label()),
+            ));
             let address = tokio::time::timeout(PROBE_TIMEOUT, async {
                 let proxy =
                     zbus::Proxy::new(&connection, "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus")
@@ -236,7 +255,7 @@ pub async fn run(socket: Option<&Path>) -> Report {
             ));
         }
         _ => {
-            checks.push(check("session-bus", Level::Fail, "No session bus reachable within deadline. Run in the same desktop session/user; in an isolated test use dbus-run-session. Do not copy another user's credentials."));
+            checks.push(check("session-bus", Level::Fail, format!("No session bus reachable for {} within deadline. Select `--session desktop` for the inherited desktop environment or start/check the managed session before selecting `--session managed`. Do not copy another user's credentials.", selection.label())));
             checks.push(check(
                 "accessibility-bus",
                 Level::Info,

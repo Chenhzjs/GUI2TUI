@@ -19,6 +19,7 @@ use crossterm::{
 use futures_lite::StreamExt;
 use gui2tui::{
     backend::{ApplicationRef, AtspiBackend, BootstrapStrategy, InspectOptions},
+    product::headless::{SessionChoice, SessionSelection, SessionTopology},
     runtime::signals::{RuntimeSignal, RuntimeSignals},
     transcompile::PresentationMode,
     tui::{
@@ -67,6 +68,10 @@ struct Cli {
     /// Accessible application name or an unambiguous substring.
     #[arg(long, value_name = "NAME", global = true)]
     app: Option<String>,
+
+    /// Connection environment. Omit to reuse a valid managed descriptor, otherwise use desktop.
+    #[arg(long, value_enum, value_name = "SESSION", global = true)]
+    session: Option<SessionChoice>,
 
     /// Maximum accessibility-tree depth per snapshot.
     #[arg(long, default_value_t = 64, hide = true)]
@@ -168,7 +173,7 @@ enum Command {
 }
 #[derive(Debug, Subcommand)]
 enum SetupCommand {
-    /// Start (or reuse) a persistent session used automatically by future terminals.
+    /// Start (or reuse) a persistent session available to future terminals.
     Persistent {
         #[arg(long, default_value = "1440x900x24")]
         screen: String,
@@ -232,11 +237,32 @@ enum LogLevel {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let setup_command = matches!(&cli.command, Some(Command::Setup { .. }));
-    if !setup_command {
-        if let Err(error) = gui2tui::product::headless::apply_at_process_start() {
-            eprintln!("warning: {error}");
+    let session = if setup_command {
+        None
+    } else {
+        match gui2tui::product::headless::select_at_process_start(cli.session) {
+            Ok(selection) => {
+                if !matches!(
+                    &cli.command,
+                    Some(Command::Doctor { .. })
+                        | Some(Command::Config { .. })
+                        | Some(Command::App { .. })
+                        | Some(Command::Inspect { .. })
+                        | Some(Command::Endpoint { .. })
+                ) {
+                    eprintln!("Session: {}", selection.summary());
+                    if let Some(diagnostic) = selection.diagnostic.as_deref() {
+                        eprintln!("warning: {diagnostic}");
+                    }
+                }
+                Some(selection)
+            }
+            Err(error) => {
+                eprintln!("error: session selection failed: {error}");
+                return ExitCode::FAILURE;
+            }
         }
-    }
+    };
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -247,7 +273,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match runtime.block_on(dispatch(cli)) {
+    match runtime.block_on(dispatch(cli, session)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
@@ -256,7 +282,7 @@ fn main() -> ExitCode {
     }
 }
 
-async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
+async fn dispatch(mut cli: Cli, session: Option<SessionSelection>) -> Result<(), Box<dyn Error>> {
     use gui2tui::product::{
         config::{Config, LauncherConfig},
         doctor, launcher, paths,
@@ -267,7 +293,13 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
             return run_setup(command);
         }
         Some(Command::Inspect { args }) => {
-            return run_companion("gui2tui-inspect", args);
+            return run_inspector(
+                args,
+                session
+                    .as_ref()
+                    .ok_or("Session selection missing for inspector")?
+                    .topology,
+            );
         }
         Some(Command::Endpoint { args }) => {
             return run_companion("gui2tui-local", args);
@@ -277,7 +309,13 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
             json,
             report,
         }) => {
-            let result = doctor::run(cli.modality_socket.as_deref()).await;
+            let result = doctor::run(
+                cli.modality_socket.as_deref(),
+                session
+                    .as_ref()
+                    .ok_or("Session selection missing for diagnostics")?,
+            )
+            .await;
             if let Some(path) = report {
                 result.write_private(&path)?;
                 eprintln!(
@@ -388,6 +426,7 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
         Some(Command::Launch { id }) => launch_id = Some(id),
         Some(Command::Run) | None => {}
     }
+    let session = session.ok_or("Session selection missing for interactive runtime")?;
     let mut config = Config::load(&paths::config_path()?)?;
     config.apply_overrides(cli.timeout_ms, cli.event_buffer_capacity, cli.no_mouse)?;
     if let Some(id) = launch_id {
@@ -452,7 +491,7 @@ async fn dispatch(mut cli: Cli) -> Result<(), Box<dyn Error>> {
             .try_init();
     }
     tracing::info!(target: "gui2tui::product", version=env!("CARGO_PKG_VERSION"), "session starting");
-    let result = run(cli, config).await;
+    let result = run(cli, config, session).await;
     tracing::info!(target: "gui2tui::product", success=result.is_ok(), "session stopped");
     result
 }
@@ -494,6 +533,18 @@ fn run_companion(name: &str, args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
 }
 
+fn run_inspector(mut args: Vec<String>, topology: SessionTopology) -> Result<(), Box<dyn Error>> {
+    let mut selected = vec![
+        "--session".to_owned(),
+        match topology {
+            SessionTopology::CurrentDesktop => "desktop".to_owned(),
+            SessionTopology::ManagedHeadless => "managed".to_owned(),
+        },
+    ];
+    selected.append(&mut args);
+    run_companion("gui2tui-inspect", selected)
+}
+
 fn run_setup(command: SetupCommand) -> Result<(), Box<dyn Error>> {
     let helper = companion_path("headless-session")?;
     let current = std::env::current_exe()?;
@@ -533,7 +584,9 @@ fn run_setup(command: SetupCommand) -> Result<(), Box<dyn Error>> {
     }
     if run_doctor {
         println!("\nVerifying the managed session with a fresh GUI2TUI process...");
-        let status = ProcessCommand::new(current).arg("doctor").status()?;
+        let status = ProcessCommand::new(current)
+            .args(["--session", "managed", "doctor"])
+            .status()?;
         if !status.success() {
             return Err("Managed session started, but diagnostics did not pass".into());
         }
@@ -602,7 +655,11 @@ fn prompt_required(label: &str) -> Result<String, Box<dyn Error>> {
     Ok(value)
 }
 
-async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(), Box<dyn Error>> {
+async fn run(
+    cli: Cli,
+    mut config: gui2tui::product::config::Config,
+    session: SessionSelection,
+) -> Result<(), Box<dyn Error>> {
     let timeout = Duration::from_millis(config.runtime.backend_timeout_ms);
     let recovered = gui2tui::runtime::artifacts::recover_abandoned()?;
     tracing::debug!(
@@ -637,6 +694,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                 timeout,
                 config.terminal.mouse,
                 &mut config,
+                &session,
                 None,
             )
             .await?
@@ -657,7 +715,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
     let initial_size = (initial_terminal.width, initial_terminal.height);
     let mut app = match initial_application {
         InitialApplication::Named(name) => {
-            let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Desktop accessibility service unavailable. Run gui2tui doctor; use the same desktop session/user.")?;
+            let backend = AtspiBackend::connect(timeout).await.map_err(|_| "Selected session accessibility service unavailable. Run `gui2tui doctor` with the same --session choice.")?;
             TuiApplication::new(
                 backend,
                 name,
@@ -796,6 +854,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                                 timeout,
                                 config.terminal.mouse,
                                 &mut config,
+                                &session,
                                 selection_transport,
                             )
                             .await?
@@ -814,7 +873,7 @@ async fn run(cli: Cli, mut config: gui2tui::product::config::Config) -> Result<(
                             continue;
                         }
                         if !app.is_available() && key.code == crossterm::event::KeyCode::Char('d') {
-                            show_diagnostics(&mut terminal, &mut terminal_events).await?;
+                            show_diagnostics(&mut terminal, &mut terminal_events, &session).await?;
                             continue;
                         }
                         if app.handle_key_event(key).await {
@@ -960,6 +1019,7 @@ async fn run_selector(
     timeout: Duration,
     mouse_enabled: bool,
     config: &mut gui2tui::product::config::Config,
+    session: &SessionSelection,
     transport: Option<AtspiBackend>,
 ) -> Result<Option<SelectedApplication>, io::Error> {
     let launchers = config.launchers.keys().cloned().collect::<Vec<_>>();
@@ -1031,7 +1091,7 @@ async fn run_selector(
                     continue;
                 }
                 if key.code == crossterm::event::KeyCode::Char('d') {
-                    show_diagnostics(terminal, events).await?;
+                    show_diagnostics(terminal, events, session).await?;
                     continue;
                 }
                 if let Some(intent) = key_to_selector_intent(key) {
@@ -1256,7 +1316,7 @@ async fn refresh_selector(
         }
         _ => {
             *snapshot = None;
-            selector.replace(Vec::new(), launchers.to_vec(), Some("Desktop accessibility service unavailable. Registered launchers still require a working AT-SPI session; press d for diagnostics.".into()));
+            selector.replace(Vec::new(), launchers.to_vec(), Some("Selected session accessibility service unavailable. Registered launchers still require a working AT-SPI session; press d for diagnostics.".into()));
         }
     }
 }
@@ -1264,6 +1324,7 @@ async fn refresh_selector(
 async fn show_diagnostics(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     events: &mut EventStream,
+    session: &SessionSelection,
 ) -> io::Result<()> {
     use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
     terminal.draw(|frame| {
@@ -1272,7 +1333,7 @@ async fn show_diagnostics(
             frame.area(),
         )
     })?;
-    let report = gui2tui::product::doctor::run(None).await;
+    let report = gui2tui::product::doctor::run(None, session).await;
     let text = report.text(false);
     let mut scroll = 0;
     loop {
