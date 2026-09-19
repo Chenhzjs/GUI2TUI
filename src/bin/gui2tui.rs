@@ -130,7 +130,7 @@ enum LayoutMode {
 enum Command {
     /// Open the application selector (also the default with no command).
     Run,
-    /// Check dependencies and session access without reading GUI contents.
+    /// Check installation, terminal and selected-session access without reading GUI contents.
     Doctor {
         #[arg(long)]
         verbose: bool,
@@ -497,29 +497,7 @@ async fn dispatch(mut cli: Cli, session: Option<SessionSelection>) -> Result<(),
 }
 
 fn companion_path(name: &str) -> Result<std::path::PathBuf, Box<dyn Error>> {
-    let current = std::env::current_exe()?;
-    let bin = current.parent().ok_or("Current executable has no parent")?;
-    let installed = bin.join("../libexec/gui2tui").join(name);
-    if installed.is_file() {
-        return Ok(installed);
-    }
-    let sibling = bin.join(name);
-    if sibling.is_file() {
-        return Ok(sibling);
-    }
-    // A release binary built directly from a checkout is also a supported
-    // developer install (`cargo build --release`). Locate the repository by
-    // walking from target/{debug,release}; packaged archives are handled by
-    // the libexec path above and never contain this layout.
-    if let Some(target_dir) = bin.parent()
-        && let Some(project_dir) = target_dir.parent()
-    {
-        let source = project_dir.join("scripts").join(name);
-        if source.is_file() {
-            return Ok(source);
-        }
-    }
-    Err(format!("Required internal component '{name}' is missing; reinstall GUI2TUI").into())
+    Ok(gui2tui::product::paths::companion(name)?.path)
 }
 
 fn run_companion(name: &str, args: Vec<String>) -> Result<(), Box<dyn Error>> {

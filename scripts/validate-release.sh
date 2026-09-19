@@ -12,7 +12,7 @@ tar -tzf "$archive" >"$temp/layout.txt"
 if grep -Eq '^/|(^|/)\.\.(/|$)' "$temp/layout.txt"; then echo 'unsafe archive path' >&2; exit 1; fi
 tar -xzf "$archive" -C "$temp"
 bundle="$temp/$name"
-for file in bin/gui2tui libexec/gui2tui/gui2tui-inspect libexec/gui2tui/gui2tui-local libexec/gui2tui/headless-session README.md LICENSE-MIT LICENSE-APACHE config.example.toml DEPENDENCIES.txt BUILD-INFO.json ABI.json smoke/run.sh; do
+for file in bin/gui2tui libexec/gui2tui/gui2tui-inspect libexec/gui2tui/gui2tui-local libexec/gui2tui/headless-session install-user.sh uninstall-user.sh README.md LICENSE-MIT LICENSE-APACHE config.example.toml DEPENDENCIES.txt BUILD-INFO.json ABI.json smoke/run.sh; do
     test -e "$bundle/$file" || { echo "missing bundle entry: $file" >&2; exit 1; }
 done
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$bundle/BUILD-INFO.json")
