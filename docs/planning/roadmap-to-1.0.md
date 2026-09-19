@@ -27,7 +27,7 @@ generic semantic tasks.
 | v0.3 | Verified Capability Recovery | **COMPLETED / PUBLICLY RELEASED** |
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.6 | Runtime Continuity & Multi-Surface Robustness | **DISCOVERY COMPLETE / IMPLEMENTATION PHASES PLANNED / AWAITING USER AUTHORIZATION** |
+| v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
@@ -286,9 +286,9 @@ by newly interactive control count.
 The [v0.5 Task & Interaction Completeness Discovery](v0.5-task-interaction-completeness.md)
 and all four derived functional phases are complete, and the
 [v0.5 milestone handoff](../validation/v0.5/milestone/HANDOFF.md) records the
-qualified internal close. The separately authorized v0.6 Runtime Continuity &
-Multi-Surface Robustness Discovery is complete. Its first bounded
-implementation phase remains **NOT AUTHORIZED**.
+qualified internal close. v0.6 Runtime Continuity & Multi-Surface Robustness is
+also complete and milestone-qualified internally. The next recommended work is
+v0.7 Discovery, which remains **NOT AUTHORIZED**.
 
 ## 5. v0.5 — Task & Interaction Completeness
 
@@ -307,9 +307,9 @@ task engine was found.
 The detailed task matrix, negative evidence, 1.0 baseline, and four bounded
 phases are recorded in the [v0.5 Discovery](v0.5-task-interaction-completeness.md)
 and [v0.5 roadmap](v0.5-roadmap.md). Functional development is complete and
-the internal milestone is qualified. v0.6 Discovery was separately authorized
-and is complete; every derived implementation phase remains **NOT AUTHORIZED**
-until explicit user approval.
+the internal milestone is qualified. v0.6 is also complete and
+milestone-qualified internally; v0.7 Discovery requires separate explicit user
+approval.
 
 ### Candidate interaction families
 
@@ -394,12 +394,13 @@ Expected evidence areas include:
 - cancellation and controlled recovery after partial runtime failure.
 
 The completed [v0.6 Discovery](v0.6-runtime-continuity.md) found that the
-existing authority model is sufficient and bounded runtime hardening is
+existing authority model is sufficient and bounded runtime hardening was
 required. `RuntimeSessionId` + `ApplicationGenerationId` + exact
 `BackendLocator` provide the authority epoch with small lifecycle hardening;
-no new epoch, window-manager, or recovery framework is justified. The
-[derived roadmap](v0.6-roadmap.md) groups the work by generic runtime
-invariants. No implementation phase is automatically authorized.
+no new epoch, window-manager, or recovery framework was justified. All five
+phases in the [derived roadmap](v0.6-roadmap.md) are validated, and the
+[v0.6 milestone handoff](../validation/v0.6/milestone/HANDOFF.md) records the
+qualified internal close. This status does not authorize v0.7 or release work.
 
 ### Multi-surface user model
 
@@ -750,11 +751,11 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 ## 15. Immediate next decision
 
-v0.4 and v0.5 are complete, milestone-qualified internal milestones. v0.6
-Discovery is complete. The recommended next technical task is the first
-bounded phase, **v0.6A — Runtime Epoch and Late-Work Isolation**. It is not
-authorized by this roadmap update. v0.7, 1.0 integration, v1.0.0 RC, and
-public release likewise remain direction only until separately authorized.
+v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
+The recommended next technical task is **v0.7 — Deployment & Environment
+Completeness Discovery**. It is not authorized by this roadmap update. v0.7
+implementation, 1.0 integration, v1.0.0 RC, and public release likewise remain
+direction only until separately authorized.
 
 ## 16. References
 
@@ -778,8 +779,10 @@ public release likewise remain direction only until separately authorized.
   internal milestone close and evidence index.
 - [v0.6 runtime-continuity Discovery](v0.6-runtime-continuity.md) — current
   lifetime model, live evidence, failure analysis, and architecture decision.
-- [v0.6 roadmap](v0.6-roadmap.md) — five bounded runtime-hardening phases;
-  none are automatically authorized.
+- [v0.6 roadmap](v0.6-roadmap.md) — five completed, validated
+  runtime-hardening phases.
+- [v0.6 milestone qualification](../validation/v0.6/milestone/HANDOFF.md) —
+  internal milestone close and evidence index.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

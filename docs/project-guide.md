@@ -176,6 +176,14 @@ logical runtime state is therefore bounded by the current GUI plus explicitly
 bounded non-authoritative caches and history; allocator RSS need not return
 byte-for-byte to establish that ownership invariant.
 
+A full semantic refresh is a correctness boundary. The current public
+Accessible tree establishes the semantic baseline; cache residency or an
+incomplete event history cannot preserve a destroyed surface as current.
+Events received during overflow resynchronization may cause one bounded second
+tree walk before rebuilding cache, scope, scene, and bindings. Normal updates
+remain incremental, and spatial geometry remains presentation-only; this rule
+does not require a complete tree walk for every ordinary update.
+
 External work never extends semantic target authority. A configured handler
 may finish after its target or generation retires, but its result can only be
 kept as private recovery data; it cannot find or mutate a replacement target.
@@ -344,7 +352,8 @@ layout reconstruction.
 
 - Public release: **v0.3.0**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
-  COMPLETE / MILESTONE QUALIFIED / INTERNAL**
+  COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.6 COMPLETE / MILESTONE
+  QUALIFIED / INTERNAL**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -415,8 +424,9 @@ layout reconstruction.
   refresh uses the current public Accessible tree; cache residency and events
   may wake convergence but cannot preserve a destroyed surface as current.
 - v0.6 functional development: **COMPLETE**.
-- Recommended next work: seek explicit authorization for **v0.6 Milestone
-  Qualification / Close**; it is **NOT YET AUTHORIZED**.
+- v0.6 milestone qualification: **QUALIFIED**.
+- Recommended next work: seek explicit authorization for **v0.7 — Deployment
+  & Environment Completeness Discovery**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -457,7 +467,9 @@ and the completed external/terminal lifecycle evidence is in the
 [0.6D handoff](validation/v0.6/external-terminal-lifecycle/HANDOFF.md). The
 completed integrated runtime evidence is in the
 [0.6E handoff](validation/v0.6/integrated-runtime-continuity/HANDOFF.md).
-Milestone qualification and release work are not automatically authorized.
+The formal internal close and evidence index are in the
+[v0.6 milestone handoff](validation/v0.6/milestone/HANDOFF.md). v0.7 and
+release work are not automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -469,8 +481,9 @@ Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
-complete, 0.6A through 0.6E are validated, and v0.6 functional development is
-complete; milestone qualification still requires explicit authorization.
+complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
+internally. The next recommended work is v0.7 Discovery, which requires
+separate explicit authorization.
 
 ## 21. Glossary
 
