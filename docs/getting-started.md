@@ -6,31 +6,48 @@ controls, bounded Value adjustment, a document Reader, and optional configured
 interaction for qualified complete plain text. Insufficient capability remains
 visibly read-only; operations are never guessed.
 
-## Manual installation
+## User-prefix installation
 
-The v0.3.0 release candidate uses responsive spatial presentation by default.
-Build the current source on Linux with `cargo build --release --locked` and
-use `target/release/gui2tui`; `--layout flat` remains available as a
-compatibility fallback.
-
-The release exposes one user command. Keep its private implementation
-components in the archive layout:
+Build the current source on Linux with the pinned dependencies, then install
+the complete runtime layout without root:
 
 ```bash
-mkdir -p "$HOME/.local/bin"
-install -m 755 bin/gui2tui "$HOME/.local/bin/"
-mkdir -p "$HOME/.local/libexec"
-cp -R libexec/gui2tui "$HOME/.local/libexec/"
+cargo build --release --locked --bins
+./scripts/install-user.sh --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Add that directory to PATH through your normal shell configuration. Use
-`gui2tui inspect ...` for low-level diagnostics and `gui2tui endpoint ...` for
-the optional same-host viewer broker; their implementation executables are
-private libexec components. See `DEPENDENCIES.txt` in the archive
-for actual dynamic linkage. No complete GNOME/KDE installation is required.
-Official x86_64 and aarch64 archives are built natively on Ubuntu 22.04 runners.
-Published archives record measured ELF requirements in
-`RELEASE-MANIFEST.json`. Other architectures must build from source.
+An extracted bundle that contains the installer uses the same contract:
+
+```bash
+./install-user.sh --prefix "$HOME/.local"
+```
+
+The default prefix is `$HOME/.local`; `--prefix` also accepts another absolute,
+current-user-owned path, including paths containing spaces. Never run the
+installer with `sudo`. It refuses symlink install directories and every
+pre-existing target rather than overwriting unrelated files. Reinstall by
+using the recorded uninstaller first or by choosing another prefix.
+
+The installed layout is:
+
+```text
+PREFIX/bin/gui2tui
+PREFIX/libexec/gui2tui/gui2tui-inspect
+PREFIX/libexec/gui2tui/gui2tui-local
+PREFIX/libexec/gui2tui/headless-session
+PREFIX/libexec/gui2tui/uninstall-user
+PREFIX/libexec/gui2tui/install-manifest-v1
+```
+
+Only `gui2tui` belongs on `PATH`. `gui2tui inspect ...`, `gui2tui endpoint ...`
+and `gui2tui setup ...` find their private components relative to the running
+main executable, so they do not depend on the checkout, Cargo target directory
+or current working directory. `gui2tui-local` is optional for core semantic
+operation but is installed so the explicit same-host modality endpoint remains
+available. No separate runtime data bundle is required. Existing archive
+`DEPENDENCIES.txt` files describe their own binary linkage; current-source
+package/ABI qualification remains a later v0.7 phase.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
 cursor/alternate-screen support, and an already running accessible GUI application.
@@ -99,9 +116,16 @@ gui2tui app add chromium --replace -- \
   --force-renderer-accessibility=complete about:blank
 ```
 
-Doctor is explicit, bounded and does not read application text. No DISPLAY is not itself an
-error: the terminal may be headless while a GUI session runs elsewhere on the same host.
-No apps? Start an application in that desktop session, press `r`, or `d` for diagnostics.
+Doctor is explicit, bounded and does not read application text. It checks the
+actual running entry, private helpers, optional same-host helper, user-install
+marker, configuration, handler executability, terminal basics, selected
+session D-Bus, Accessibility bus, registry and application count. No DISPLAY
+is not itself an error: the terminal may be headless while a GUI session runs
+elsewhere on the same host. No apps? Start an application in that exact
+session, press `r`, or `d` for diagnostics. Application presence does not prove
+that every control exposes sufficient semantics; Doctor labels that
+application-level assessment NOT CHECKED instead of declaring the deployment
+broken.
 
 ## Managed headless session
 
@@ -203,6 +227,22 @@ exact result directory for review. Use `DISPLAY_NUMBER=:146 bash smoke/run.sh` i
 It never uses Cargo or repository files. For interactive experimentation in your desktop session:
 `python3 smoke/release_smoke_gtk.py`, then in another terminal `bin/gui2tui --app gui2tui-release-demo`.
 
-Uninstall by removing only the three executables you installed and the extracted bundle.
-Config removal is optional; no background daemon is installed. Do not delete live owned artifact
-directories manually; leases and TTL cleanup protect active sessions.
+## Safe uninstall
+
+Stop an owned Managed Headless session first, then run the installed exact-file
+uninstaller:
+
+```bash
+gui2tui setup stop                  # only when a Managed descriptor exists
+"$HOME/.local/libexec/gui2tui/uninstall-user" --prefix "$HOME/.local"
+```
+
+The uninstaller verifies its private manifest and every remaining installed
+file before removing only the five recorded GUI2TUI executables/scripts plus
+the manifest. It refuses changed files, symlinks, unsafe ownership/permissions
+or an existing Managed descriptor. It never recursively removes the prefix and
+never kills processes by name. Unrelated prefix files and
+`$XDG_CONFIG_HOME/gui2tui/config.toml` are retained, as are user-selected
+private recovery candidates and runtime state. Do not delete live artifact or
+Managed state directories manually; use existing lifecycle commands and TTL
+cleanup.

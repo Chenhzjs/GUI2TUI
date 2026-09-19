@@ -52,6 +52,13 @@ read-back. The placeholder is never an application backing-file path. If this
 section is absent, eligible content remains readable and external editing is
 reported as not configured.
 
+`gui2tui doctor` performs a read-only preflight of this section. A missing
+section is INFO and valid. A configured program must resolve to an executable
+under the same direct-argv rules; otherwise Doctor emits WARN for complex-text
+editing without failing core GUI2TUI. Structural `{file}` and shell-free rules
+remain configuration errors. Doctor never starts the handler, creates a GUI
+target or writes a candidate during this check.
+
 Precedence: built-in defaults < config file < explicit CLI.
 `--timeout-ms`, `--event-buffer-capacity` are retained developer overrides but hidden from brief help;
 `--no-mouse` is user-visible. Example: `gui2tui --no-mouse config show` prints effective configuration.

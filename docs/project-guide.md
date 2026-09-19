@@ -436,12 +436,21 @@ layout reconstruction.
   managed never creates or falls back, and compatible implicit selection is
   visible. Doctor separates topology, connection and zero-application state.
   Session choice does not grant application authority.
+- v0.7B Installation and Diagnostic Completeness: **COMPLETE / VALIDATED**.
+  A fixed unprivileged user-prefix installer preserves the existing
+  `bin`/`libexec` layout, records exact installed-file hashes and supplies a
+  fail-closed uninstaller that preserves configuration, runtime/recovery data
+  and unrelated prefix files. Helper discovery is executable-aware and
+  relative to the running main program. Existing Doctor output now separates
+  installation, terminal, session D-Bus, Accessibility bus, registry, zero-app
+  and application-semantic assessment, and checks optional handler
+  executability without spawning it.
 - User-confirmed 1.0 direction: local Linux X11 and managed Xvfb are core
   targets; native Wayland/XWayland are priority validation targets; same-host
   SSH TUI should be pursued; cross-host Remote Companion is deferred beyond
   1.0. These are development targets, not claims of completed qualification.
-- v0.7B through 0.7E: **PLANNED / NOT AUTHORIZED**. The next recommended
-  direction is separately authorized 0.7B.
+- v0.7C through 0.7E: **PLANNED / NOT AUTHORIZED**. The next recommended
+  direction is separately authorized 0.7C.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -487,8 +496,10 @@ The formal internal close and evidence index are in the
 release work are not automatically authorized. The current deployment
 architecture, evidence classifications and candidate 1.0 environment contract
 are in the [v0.7 Discovery](planning/v0.7-deployment-environment.md); the five
-bounded phases and completed 0.7A result are in the
-[v0.7 roadmap](planning/v0.7-roadmap.md).
+bounded phases and completed 0.7A–0.7B results are in the
+[v0.7 roadmap](planning/v0.7-roadmap.md). Phase evidence is in the
+[0.7A session-selection handoff](validation/v0.7/environment-session-selection/HANDOFF.md)
+and [0.7B installation/diagnostics handoff](validation/v0.7/installation-diagnostics/HANDOFF.md).
 
 ## 20. v0.3 Capability Recovery
 
@@ -501,7 +512,7 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. v0.7 Discovery and 0.7A are complete; 0.7B–0.7E each require
+internally. v0.7 Discovery and 0.7A–0.7B are complete; 0.7C–0.7E each require
 separate explicit authorization.
 
 ## 21. Glossary

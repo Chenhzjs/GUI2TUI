@@ -27,6 +27,10 @@ Both native jobs call the same `scripts/package-linux.sh` used locally. `scripts
 checks the extracted layout, version, measured ABI, developer-path leakage and sentinel leakage,
 then invokes only the packaged smoke harness. `scripts/assemble-release.py` requires both architectures,
 successful smoke transcripts, matching commit/version metadata, and produces combined final checksums.
+The current archive layout also stages `install-user.sh` and
+`uninstall-user.sh`; future package qualification must verify their fresh-
+prefix behavior. Adding them to current development source does not create or
+publish a v0.7.0 archive, and historical release bytes remain immutable.
 
 The fixed compiler is Rust 1.88.0 and every Cargo build uses `--locked`. ABI builds use
 `ubuntu-22.04` and `ubuntu-22.04-arm`, not `ubuntu-latest`; the workflow still gates the measured

@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / 0.7A COMPLETE / LATER PHASES NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / 0.7A–0.7B COMPLETE / LATER PHASES NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -483,7 +483,7 @@ The decision must not remain ambiguous at the 1.0 boundary. It must be driven
 by the intended deployment contract and evidence, not by the existence of an
 architectural sketch.
 
-### Discovery and 0.7A result
+### Discovery, 0.7A and 0.7B result
 
 The completed [v0.7 Discovery](v0.7-deployment-environment.md) found that the
 current AT-SPI/D-Bus backend is a same-host, same-accessibility-session model.
@@ -512,6 +512,18 @@ zero-application state. Current registry enumeration and exact application
 selection remain the only path to application authority. The detailed
 contract, evidence and remaining separately authorized phases are in the
 [v0.7 roadmap](v0.7-roadmap.md).
+
+0.7B is also complete. Current source or an extracted compatible bundle can be
+installed into an explicit current-user prefix without root through a fixed
+`bin`/`libexec` layout. Private helpers resolve relative to the running main
+executable, and an exact-file hash manifest supports fail-closed uninstall
+without deleting user configuration, runtime/recovery data or unrelated prefix
+files. The existing Doctor now distinguishes installation/helper completeness,
+terminal preconditions, selected session D-Bus, Accessibility bus, registry,
+zero applications and unassessed application semantic sufficiency. It checks a
+configured complex-text handler without executing it. Controlled Ubuntu 24.04
+arm64 Xvfb evidence validates this foundation, but does not qualify a real
+local X11 desktop, SSH, package ABI, Wayland or XWayland.
 
 ### Platform boundary
 
@@ -782,9 +794,10 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-v0.7 Discovery and **0.7A — Environment Contract and Session Selection** are
-complete. The next recommended direction is **0.7B — Installation and
-Diagnostic Completeness**, which is not authorized. 0.7C–0.7E, v0.7 milestone
+v0.7 Discovery, **0.7A — Environment Contract and Session Selection** and
+**0.7B — Installation and Diagnostic Completeness** are complete. The next
+recommended direction is **0.7C — X11, Headless and Same-host SSH
+Qualification**, which is not authorized. 0.7D–0.7E, v0.7 milestone
 qualification, 1.0 integration, v1.0.0 RC, and public release also remain
 unauthorized.
 
@@ -817,8 +830,11 @@ unauthorized.
 - [v0.7 deployment/environment Discovery](v0.7-deployment-environment.md) —
   current deployment architecture, evidence, candidate support contract and
   remote-companion decision.
-- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A contract/selection phase and
-  four remaining bounded phases, none automatically authorized.
+- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A contract/selection and 0.7B
+  install/diagnostic phases plus three remaining bounded phases, none
+  automatically authorized.
+- [v0.7B installation/diagnostics handoff](../validation/v0.7/installation-diagnostics/HANDOFF.md)
+  — no-root prefix install, bounded uninstall and Doctor evidence.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

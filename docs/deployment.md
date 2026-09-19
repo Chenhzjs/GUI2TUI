@@ -35,6 +35,33 @@ inherited desktop environment, and reports the result. Session selection does
 not grant application authority: the selected registry is enumerated afresh
 and an exact current application must still be chosen.
 
+## Installation and diagnosis foundation
+
+Current source and future bundles use the same unprivileged prefix contract:
+
+```bash
+cargo build --release --locked --bins
+./scripts/install-user.sh --prefix "$HOME/.local"
+"$HOME/.local/bin/gui2tui" --session desktop doctor
+```
+
+The installer copies only the main executable, inspector, Managed Headless
+helper, optional same-host modality helper and exact-file uninstaller. Private
+helpers are resolved relative to the running main executable, not the checkout
+or current directory. An owned mode-0600 hash manifest makes removal bounded;
+the uninstaller refuses changed files, symlinks and a remaining Managed
+descriptor, then preserves configuration, runtime/recovery data and unrelated
+prefix entries. It never uses `sudo` or recursively removes a prefix.
+
+Doctor reports installation entry/helper integrity separately from terminal,
+session D-Bus, `org.a11y.Bus`, AT-SPI registry and accessible-application
+count. A reachable registry with zero applications is a warning, not a
+connection failure. Application presence is not semantic-capability
+qualification: Doctor performs no control traversal or mutation and reports
+application-level semantic sufficiency as NOT CHECKED. A configured complex
+text handler is validated as direct argv and executable without starting it or
+creating a candidate; an absent handler remains valid.
+
 Headless does not mean launching GUI programs without any display server. It means the terminal
 frontend needs no graphical viewer. For tests, Xvfb supplies the application's graphical environment;
 normal sessions can use their existing desktop. Wayland semantic access is

@@ -33,19 +33,22 @@ backing file—into the semantic backend.
 · [Full capability and refusal demo](docs/demo/v0.3/demo-v0.3.mp4)
 · [Recording method and evidence](docs/demo/v0.3/README.md)
 
-## Download and quick start
+## Build, install and quick start
 
-The current source is prepared as the v0.3.0 release candidate. Responsive
-spatial presentation remains the default; `--layout flat` remains a
-compatibility fallback. Public v0.3.0 release publication is a separate step.
+The current development source retains package version `0.3.0`; v0.7 is an
+internal milestone, not a published v0.7.0 package. Responsive spatial
+presentation remains the default; `--layout flat` remains a compatibility
+fallback.
 
 ```bash
 git clone https://github.com/Chenhzjs/GUI2TUI.git
 cd GUI2TUI
-cargo build --release
+cargo build --release --locked --bins
+./scripts/install-user.sh --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
 
-./target/release/gui2tui --session desktop doctor
-./target/release/gui2tui --session desktop
+gui2tui --session desktop doctor
+gui2tui --session desktop
 ```
 
 The GUI application must already be running in the explicitly selected Linux
@@ -58,7 +61,7 @@ For a server without a physical desktop, configure a persistent managed Xvfb +
 D-Bus + AT-SPI session once:
 
 ```bash
-./bin/gui2tui setup persistent
+gui2tui setup persistent
 ```
 
 Select it explicitly with `--session managed`; no shell profile or `source` is
@@ -73,18 +76,18 @@ To save and launch an application directly (instead of starting it in another
 shell first), register its executable once. The shortest form is:
 
 ```bash
-./bin/gui2tui --session managed app add mousepad
-./bin/gui2tui --session managed launch mousepad
+gui2tui --session managed app add mousepad
+gui2tui --session managed launch mousepad
 ```
 
-Run `./bin/gui2tui app add` with no executable for a fill-in setup wizard. For
+Run `gui2tui app add` with no executable for a fill-in setup wizard. For
 ordinary applications, type the executable and press Enter once more to finish
 the optional argument list; names are inferred/discovered automatically.
 If Chromium does not register accessibility by default, add its required argv
 without a shell command:
 
 ```bash
-./bin/gui2tui app add chromium --replace -- \
+gui2tui app add chromium --replace -- \
   --force-renderer-accessibility=complete about:blank
 ```
 
@@ -97,14 +100,20 @@ cannot reach a private managed D-Bus due to confinement; that topology is
 now rejected immediately. Use the normal desktop session or a non-Snap build,
 never a weakened sandbox. See [launcher compatibility](docs/launcher-compatibility.md).
 
-Verify downloaded archives with:
+The installer writes only the fixed `bin/gui2tui` and private libexec layout,
+requires no root access, and records hashes for exact-file uninstall. See
+[Getting started](docs/getting-started.md) for alternate prefixes, Doctor and
+safe uninstall. Existing published archives retain their own documented
+checksums and provenance; no v0.7.0 archive or release exists.
+
+Verify an existing downloaded release archive with its published checksums:
 
 ```bash
 sha256sum -c SHA256SUMS
 ```
 
-See [Getting started](docs/getting-started.md) for installation details and
-[build provenance verification](docs/release-pipeline.md) for GitHub attestations.
+See [build provenance verification](docs/release-pipeline.md) for GitHub
+attestations.
 
 ## What is GUI2TUI?
 
