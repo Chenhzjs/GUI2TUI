@@ -408,8 +408,15 @@ layout reconstruction.
   terminal ownership; external handlers pause TUI input and return to one
   reader; completed children are reaped; stale results cannot write back; and
   owned external/modality artifacts remain private and bounded.
-- Recommended next work: seek explicit authorization for **v0.6E Integrated
-  Runtime Continuity Qualification**; it is **NOT YET AUTHORIZED**.
+- v0.6E Integrated Runtime Continuity Qualification: **COMPLETE / VALIDATED**.
+  Mixed application generations, surface churn, event overflow, external
+  handlers, late operations, recovery, and terminal suspend/resume compose
+  without authority migration or unbounded logical resources. A full semantic
+  refresh uses the current public Accessible tree; cache residency and events
+  may wake convergence but cannot preserve a destroyed surface as current.
+- v0.6 functional development: **COMPLETE**.
+- Recommended next work: seek explicit authorization for **v0.6 Milestone
+  Qualification / Close**; it is **NOT YET AUTHORIZED**.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -447,8 +454,10 @@ completed transport/application recovery evidence is in the
 the completed event/surface/resource evidence is in the
 [0.6C handoff](validation/v0.6/surface-event-resource-continuity/HANDOFF.md),
 and the completed external/terminal lifecycle evidence is in the
-[0.6D handoff](validation/v0.6/external-terminal-lifecycle/HANDOFF.md).
-No later implementation phase or release work is automatically authorized.
+[0.6D handoff](validation/v0.6/external-terminal-lifecycle/HANDOFF.md). The
+completed integrated runtime evidence is in the
+[0.6E handoff](validation/v0.6/integrated-runtime-continuity/HANDOFF.md).
+Milestone qualification and release work are not automatically authorized.
 
 ## 20. v0.3 Capability Recovery
 
@@ -460,8 +469,8 @@ Consult the [v0.3 roadmap](planning/v0.3-roadmap.md) and latest validation
 handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
-complete, and 0.6A through 0.6D are validated; 0.6E still requires explicit
-authorization.
+complete, 0.6A through 0.6E are validated, and v0.6 functional development is
+complete; milestone qualification still requires explicit authorization.
 
 ## 21. Glossary
 
