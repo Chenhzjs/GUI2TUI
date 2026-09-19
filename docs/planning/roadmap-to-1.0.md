@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **PLANNED / NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / IMPLEMENTATION NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -483,6 +483,24 @@ The decision must not remain ambiguous at the 1.0 boundary. It must be driven
 by the intended deployment contract and evidence, not by the existence of an
 architectural sketch.
 
+### Discovery result
+
+The completed [v0.7 Discovery](v0.7-deployment-environment.md) found that the
+current AT-SPI/D-Bus backend is a same-host, same-accessibility-session model.
+It contains no X11-specific semantic dependency and therefore provides no
+evidence for a pre-emptive Wayland semantic-backend rewrite. Native Wayland
+and XWayland still require separate real-session qualification; optional
+static visual acquisition remains native-X11-only.
+
+The candidate 1.0 baseline is selected Ubuntu GNU/Linux environments on
+x86_64 and aarch64, covering an ordinary same-user X11 desktop and the bundled
+managed Xvfb topology. Same-host SSH is Limited pending an end-to-end PTY and
+session qualification. Cross-host local-TUI/remote-GUI operation and a Remote
+Companion are recommended Deferred beyond 1.0. The detailed support matrix,
+five bounded implementation phases and exit gates are in the
+[v0.7 roadmap](v0.7-roadmap.md). They require user review and separate
+authorization.
+
 ### Platform boundary
 
 v0.7 is deployment completion, not automatic platform expansion. GUI2TUI is
@@ -752,10 +770,12 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-The recommended next technical task is **v0.7 — Deployment & Environment
-Completeness Discovery**. It is not authorized by this roadmap update. v0.7
-implementation, 1.0 integration, v1.0.0 RC, and public release likewise remain
-direction only until separately authorized.
+v0.7 Deployment & Environment Completeness Discovery is complete. The next
+decision is user review of its candidate 1.0 support contract and Remote
+Companion deferral, followed, if accepted, by explicit authorization of
+**0.7A — Environment Contract and Session Selection**. Every v0.7
+implementation phase, 1.0 integration, v1.0.0 RC, and public release remains
+unauthorized.
 
 ## 16. References
 
@@ -783,6 +803,11 @@ direction only until separately authorized.
   runtime-hardening phases.
 - [v0.6 milestone qualification](../validation/v0.6/milestone/HANDOFF.md) —
   internal milestone close and evidence index.
+- [v0.7 deployment/environment Discovery](v0.7-deployment-environment.md) —
+  current deployment architecture, evidence, candidate support contract and
+  remote-companion decision.
+- [v0.7 roadmap](v0.7-roadmap.md) — five planned bounded phases; all remain
+  not authorized.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

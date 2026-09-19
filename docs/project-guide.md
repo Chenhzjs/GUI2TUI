@@ -425,8 +425,14 @@ layout reconstruction.
   may wake convergence but cannot preserve a destroyed surface as current.
 - v0.6 functional development: **COMPLETE**.
 - v0.6 milestone qualification: **QUALIFIED**.
-- Recommended next work: seek explicit authorization for **v0.7 — Deployment
-  & Environment Completeness Discovery**; it is **NOT YET AUTHORIZED**.
+- v0.7 Deployment & Environment Completeness Discovery: **COMPLETE**. The
+  existing semantic backend is a same-host session-D-Bus/AT-SPI model and has
+  no X11-specific semantic dependency. Native Wayland and XWayland remain
+  separately untested; cross-host Remote Companion is recommended deferred
+  beyond the candidate 1.0 baseline.
+- v0.7A through 0.7E: **PLANNED / NOT AUTHORIZED**. The next decision is user
+  review of the candidate environment contract, followed by separately
+  authorized 0.7A if accepted.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -469,7 +475,11 @@ completed integrated runtime evidence is in the
 [0.6E handoff](validation/v0.6/integrated-runtime-continuity/HANDOFF.md).
 The formal internal close and evidence index are in the
 [v0.6 milestone handoff](validation/v0.6/milestone/HANDOFF.md). v0.7 and
-release work are not automatically authorized.
+release work are not automatically authorized. The current deployment
+architecture, evidence classifications and candidate 1.0 environment contract
+are in the [v0.7 Discovery](planning/v0.7-deployment-environment.md); the five
+bounded, not-yet-authorized phases are in the
+[v0.7 roadmap](planning/v0.7-roadmap.md).
 
 ## 20. v0.3 Capability Recovery
 
@@ -482,8 +492,8 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. The next recommended work is v0.7 Discovery, which requires
-separate explicit authorization.
+internally. v0.7 Discovery is complete; implementation has not begun and every
+proposed phase requires separate explicit authorization.
 
 ## 21. Glossary
 
