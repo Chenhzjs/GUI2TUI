@@ -14,6 +14,8 @@ GLib.set_application_name("GUI2TUI Live Fixture")
 class LiveFixture(Gtk.Application):
     def __init__(self) -> None:
         super().__init__(application_id="org.gui2tui.LiveFixture")
+        self.secondary = None
+        self.secondary_activations = 0
 
     def do_activate(self) -> None:
         window = Gtk.ApplicationWindow(application=self)
@@ -109,7 +111,7 @@ class LiveFixture(Gtk.Application):
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             box.append(Gtk.Label(label="Dialog content"))
             close = Gtk.Button(label="Close dialog")
-            close.connect("clicked", lambda _close: dialog.close())
+            close.connect("clicked", lambda _close: dialog.destroy())
             box.append(close)
             dialog.set_child(box)
             dialog.present()
@@ -146,6 +148,52 @@ class LiveFixture(Gtk.Application):
 
         storm.connect("clicked", run_storm)
         content.append(storm)
+
+        open_secondary = Gtk.Button(label="Open GTK secondary surface")
+
+        def show_secondary(_button: Gtk.Button) -> None:
+            if self.secondary is not None:
+                return
+            secondary = Gtk.ApplicationWindow(
+                application=self, title="GUI2TUI Live Fixture"
+            )
+            secondary.set_default_size(360, 180)
+            secondary_box = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=8
+            )
+            secondary_box.append(Gtk.Label(label="Same-looking GTK secondary surface"))
+            secondary_operation = Gtk.CheckButton(label="GTK secondary operation")
+
+            def activate_secondary(_control: Gtk.CheckButton) -> None:
+                self.secondary_activations += 1
+                status.set_label(
+                    f"Status: secondary activated {self.secondary_activations}"
+                )
+
+            secondary_operation.connect("toggled", activate_secondary)
+            secondary_box.append(secondary_operation)
+            close_secondary = Gtk.Button(label="Close GTK secondary surface")
+
+            def destroy_secondary(_close: Gtk.Button) -> None:
+                self.secondary = None
+                status.set_label("Status: secondary closed")
+                secondary.destroy()
+
+            close_secondary.connect("clicked", destroy_secondary)
+            secondary_box.append(close_secondary)
+            secondary.set_child(secondary_box)
+
+            def secondary_closed(_window: Gtk.Window) -> bool:
+                self.secondary = None
+                status.set_label("Status: secondary closed")
+                return False
+
+            secondary.connect("close-request", secondary_closed)
+            self.secondary = secondary
+            secondary.present()
+
+        open_secondary.connect("clicked", show_secondary)
+        content.append(open_secondary)
 
         external_text = Gtk.TextView()
         external_text.set_editable(True)

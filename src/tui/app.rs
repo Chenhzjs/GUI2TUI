@@ -72,7 +72,6 @@ pub struct TuiApplication {
     backend: AtspiBackend,
     application_locator: crate::semantic::BackendLocator,
     inspect_options: InspectOptions,
-    bootstrap_strategy: BootstrapStrategy,
     settle_delay: Duration,
     cache: SemanticCache,
     event_subscription: EventSubscription,
@@ -368,7 +367,11 @@ impl TuiApplication {
             application,
             self.inspect_options,
             self.settle_delay,
-            self.bootstrap_strategy,
+            // A fresh generation must start from the selected application's
+            // current public tree. The AT-SPI cache can retain a destroyed
+            // surface after a missed removal event, so it is an optimization
+            // source for initial startup, not fresh application authority.
+            BootstrapStrategy::Walk,
             self.event_subscription.capacity(),
             self.presentation_mode,
             self.spatial_layout,
@@ -865,7 +868,6 @@ impl TuiApplication {
             backend,
             application_locator,
             inspect_options,
-            bootstrap_strategy,
             settle_delay,
             cache,
             event_subscription,
@@ -3487,6 +3489,9 @@ impl TuiApplication {
     }
 
     async fn full_reload(&mut self, success_status: Option<String>) {
+        // A full refresh is a correctness boundary. Read the current public
+        // Accessible tree instead of trusting cache residency, which may lag
+        // surface destruction when a structural event was lost.
         if !self.application_available {
             return;
         }
@@ -3514,7 +3519,7 @@ impl TuiApplication {
             &self.backend,
             &self.application_locator,
             self.inspect_options,
-            self.bootstrap_strategy,
+            BootstrapStrategy::Walk,
         )
         .await
         {
@@ -4593,6 +4598,10 @@ impl TuiApplication {
     async fn resynchronize_after_overflow(&mut self, dropped: u64) {
         // Discard the incomplete pre-overflow prefix. The full bootstrap below
         // becomes the new baseline; events arriving during it remain buffered.
+        // Do not use the event service's Cache as the correctness source here:
+        // the missing prefix can include the removal that would have evicted a
+        // destroyed surface from that cache. A bounded public Accessible walk
+        // re-establishes current tree membership independently of lost events.
         while self.event_subscription.try_recv().is_ok() {}
         self.status =
             format!("Event overflow detected ({dropped} dropped); resynchronizing semantic tree");
@@ -4619,10 +4628,14 @@ impl TuiApplication {
                 events.push(event);
             }
             if !events.is_empty() {
-                self.apply_event_batch(
-                    events,
-                    Some("Replayed events received during resync".to_owned()),
-                )
+                // These events only prove that the tree may have changed
+                // during the first walk. A second bounded walk establishes a
+                // final current baseline without replaying stale structural
+                // events across that baseline.
+                self.full_reload(Some(format!(
+                    "Re-read semantics after {} events received during resync",
+                    events.len()
+                )))
                 .await;
             }
             false

@@ -25,6 +25,13 @@ external_text.get_buffer().set_text("lifecycle alpha\nlifecycle beta\n")
 external_text.get_accessible().set_name("Lifecycle external text")
 layout.pack_start(external_text, True, True, 0)
 
+change_external_text = Gtk.Button(label="Change lifecycle text independently")
+change_external_text.connect(
+    "clicked",
+    lambda _button: external_text.get_buffer().set_text("lifecycle authoritative B\n"),
+)
+layout.pack_start(change_external_text, False, False, 0)
+
 status = Gtk.Label(label="Lifecycle status: idle")
 layout.pack_start(status, False, False, 0)
 activate = Gtk.Button(label="Lifecycle activate")

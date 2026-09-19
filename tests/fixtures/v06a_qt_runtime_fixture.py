@@ -6,7 +6,7 @@ import pathlib
 import sys
 import time
 
-from PyQt6.QtCore import QCoreApplication, QEventLoop
+from PyQt6.QtCore import QCoreApplication, QEventLoop, QTimer
 from PyQt6.QtWidgets import QApplication, QCheckBox, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 
@@ -44,11 +44,23 @@ class RuntimeFixture(QMainWindow):
         )
         self.layout.addWidget(self.fresh)
 
+        suspend_mutation = os.environ.get("V06E_SUSPEND_MUTATE")
+        if suspend_mutation:
+            self.suspend_mutation = pathlib.Path(suspend_mutation)
+            self.suspend_timer = QTimer(self)
+            self.suspend_timer.timeout.connect(self.apply_suspend_mutation)
+            self.suspend_timer.start(50)
+
         self.replaceable = QCheckBox("Replaceable toggle")
         self.replaceable.toggled.connect(self.replace_target)
         self.layout.addWidget(self.replaceable)
 
         self.setCentralWidget(content)
+
+    def apply_suspend_mutation(self) -> None:
+        if self.suspend_mutation.exists():
+            self.suspend_mutation.unlink()
+            self.fresh.setChecked(not self.fresh.isChecked())
 
     def delayed_toggle(self, checked: bool) -> None:
         if not checked:
