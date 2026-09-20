@@ -244,20 +244,36 @@ class Qualification:
             shell.close()
 
     def geometry(self, application: str, label: str, collapsed: bool) -> None:
-        spatial = self.inspect(application, "--dump-spatial-evidence")
-        layout = self.inspect(application, "--dump-layout-plan")
         if collapsed:
-            header = spatial.splitlines()[1] if spatial.startswith("Session:") else spatial.splitlines()[0]
-            if "successes=0" not in spatial or "rejected=" not in spatial:
-                raise AssertionError(f"collapsed geometry was not rejected\n{header}\n{layout[:500]}")
-            if (
-                "trust=Inconsistent" not in layout
-                or "topology_anchors=0" not in layout
-                or "topology_pairs=0" not in layout
-                or "topology_relations=0" not in layout
-            ):
+            # GTK can register its application root before the virtualized
+            # descendants have supplied enough extents to identify the
+            # collapsed-origin pattern. Wait for a current complete-enough
+            # public snapshot instead of treating that transient partial tree
+            # as a geometry-policy failure.
+            deadline = time.monotonic() + 15
+            spatial = ""
+            layout = ""
+            while time.monotonic() < deadline:
+                spatial = self.inspect(application, "--dump-spatial-evidence")
+                layout = self.inspect(application, "--dump-layout-plan")
+                metrics = re.search(
+                    r"successes=([0-9]+).*rejected=([0-9]+)", spatial
+                )
+                if (
+                    metrics is not None
+                    and int(metrics.group(1)) == 0
+                    and int(metrics.group(2)) > 0
+                    and "trust=Inconsistent" in layout
+                    and "topology_anchors=0" in layout
+                    and "topology_pairs=0" in layout
+                    and "topology_relations=0" in layout
+                ):
+                    break
+                time.sleep(0.1)
+            else:
                 raise AssertionError(
-                    "collapsed geometry still manufactured spatial topology"
+                    "collapsed geometry did not reach the safe fallback\n"
+                    f"{spatial[:1000]}\n{layout[:1000]}"
                 )
             if "Reorder current items" not in self.inspect(application, "--dump-scene"):
                 raise AssertionError("geometry fallback lost a qualified semantic action")
@@ -266,6 +282,8 @@ class Qualification:
                 "PASS_SEMANTIC_CONTROL_SURFACE_NO_SPATIAL_RELATIONS"
             )
         else:
+            spatial = self.inspect(application, "--dump-spatial-evidence")
+            layout = self.inspect(application, "--dump-layout-plan")
             match = re.search(r"successes=([0-9]+)", spatial)
             if match is None or int(match.group(1)) == 0:
                 raise AssertionError("Qt native Wayland exposed no usable geometry evidence")
