@@ -383,8 +383,10 @@ fn reject_collapsed_screen_origins(
     const MIN_SAMPLES: usize = 8;
     const DOMINANT_NUMERATOR: usize = 3;
     const DOMINANT_DENOMINATOR: usize = 4;
+    type CoordinatePair = (i32, i32);
+    type OriginSamples = (usize, HashSet<CoordinatePair>);
 
-    let mut origins: HashMap<(i32, i32), (usize, HashSet<(i32, i32)>)> = HashMap::new();
+    let mut origins: HashMap<CoordinatePair, OriginSamples> = HashMap::new();
     let mut comparable = 0usize;
     for evidence in entries.values() {
         if evidence.coordinate_space != CoordinateSpace::Screen
