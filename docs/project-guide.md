@@ -482,10 +482,16 @@ layout reconstruction.
   remain separate evidence-driven rows, now bounded by the 0.7D qualification.
   Cross-host Remote Companion is deferred beyond 1.0. These categories are
   development targets, not broader qualification claims.
-- v0.7E: **PLANNED / NOT AUTHORIZED**. A separately authorized real Linux
-  virtual-console run is still needed only if Local TTY -> Managed will be a
-  1.0 Supported row. Ordinary desktop compatibility is not a Headless-core
-  exit gate. No later phase starts automatically.
+- v0.7E Package and Environment Contract Qualification: **COMPLETE / QUALIFIED
+  WITH EXPLICIT LIMITATIONS**. Exact-source `eb5841f` GNU/Linux x86_64 and
+  aarch64 internal archives passed ABI/layout/checksum, extracted smoke,
+  fresh-prefix install, installed Doctor/Managed setup/semantic smoke and safe
+  uninstall. The x86_64 execution used amd64 container emulation on an arm64
+  host; the exact aarch64 package additionally passed Managed, unprivileged
+  Docker PTY, real same-host SSH, Native Wayland and XWayland integration.
+  Linux native VT, ordinary desktops and Wayland over SSH remain NOT TESTED.
+- v0.7 Milestone Qualification: **NOT STARTED / NOT AUTHORIZED**. No later
+  phase starts automatically.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -531,7 +537,7 @@ The formal internal close and evidence index are in the
 release work are not automatically authorized. The current deployment
 architecture, evidence classifications and candidate 1.0 environment contract
 are in the [v0.7 Discovery](planning/v0.7-deployment-environment.md); the five
-bounded phases and completed 0.7A–0.7B results are in the
+completed bounded phases and their current status are in the
 [v0.7 roadmap](planning/v0.7-roadmap.md). Phase evidence is in the
 [0.7A session-selection handoff](validation/v0.7/environment-session-selection/HANDOFF.md)
 and [0.7B installation/diagnostics handoff](validation/v0.7/installation-diagnostics/HANDOFF.md),
@@ -540,7 +546,9 @@ with the original partial evidence in the
 completed Headless supplement in the
 [Headless qualification handoff](validation/v0.7/headless-first-qualification/HANDOFF.md),
 and the bounded Native Wayland/XWayland evidence is in the
-[0.7D handoff](validation/v0.7/wayland-xwayland/HANDOFF.md).
+[0.7D handoff](validation/v0.7/wayland-xwayland/HANDOFF.md). Exact-source
+package, ABI, install, Doctor and integrated environment evidence is in the
+[0.7E handoff](validation/v0.7/package-environment/HANDOFF.md).
 The current product priority and revised phase exits are normative in the
 [Headless-first contract revision](planning/v0.7-headless-first-contract.md);
 it changes planning without rewriting historical evidence.
@@ -556,12 +564,15 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. v0.7 Discovery and 0.7A–0.7D are complete; 0.7C qualifies the
+internally. v0.7 Discovery and 0.7A–0.7E are complete; 0.7C qualifies the
 recorded Managed, Docker interactive-TTY and same-host SSH -> Managed
 topologies, and 0.7D qualifies one Weston Headless Native-Wayland/XWayland
-topology, all with explicit limitations. Linux native VT, real X11, ordinary
-desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-0.7E requires separate explicit authorization.
+topology, all with explicit limitations. 0.7E qualifies the exact-source
+dual-architecture internal package contract, with an explicit x86_64
+emulated-runtime limitation, and reruns the approved aarch64 integrations from
+the package. Linux native VT, real X11, ordinary desktop Wayland and Wayland
+over SSH remain NOT TESTED and are not claimed. The separate v0.7 milestone
+close requires explicit authorization.
 
 ## 21. Glossary
 

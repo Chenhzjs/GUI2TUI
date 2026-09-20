@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7D COMPLETE / 0.7E NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **0.7A–0.7E COMPLETE WITH RECORDED LIMITATIONS / MILESTONE CLOSE NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -559,6 +559,16 @@ Linux native VT, real local X11 and SSH -> existing Desktop remain NOT TESTED;
 the first is not claimed Supported and the latter two are optional
 compatibility rows.
 
+0.7D separately qualified Native Wayland, XWayland and one Weston 13 Headless
+topology with explicit limitations. 0.7E then built exact-source GNU/Linux
+x86_64 and aarch64 internal archives, qualified their ABI/layout/fresh-install
+contract, and reran the approved aarch64 Managed, Docker, SSH and Wayland
+integration rows from the package. The x86_64 runtime evidence used amd64
+container emulation on an arm64 host; native x86_64 hardware and broader
+environment integration remain outside that claim. 0.7E is **COMPLETE /
+QUALIFIED WITH EXPLICIT LIMITATIONS**. The separate v0.7 milestone close is
+not authorized by phase completion.
+
 ### Platform boundary
 
 v0.7 is deployment completion, not automatic platform expansion. GUI2TUI is
@@ -828,15 +838,16 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-v0.7 Discovery and 0.7A–0.7D are complete. 0.7C qualified the exact Managed
+v0.7 Discovery and 0.7A–0.7E are complete. 0.7C qualified the exact Managed
 Xvfb, unprivileged Docker interactive-TTY and same-host SSH -> Managed
 topologies recorded in its handoffs. 0.7D qualified the recorded Weston
 headless Native-Wayland/XWayland topology; both phases have explicit
-limitations. Linux native VT, ordinary X11 Desktop, ordinary desktop Wayland
-and Wayland over SSH remain NOT TESTED and are not claimed. The next planned
-phase is 0.7E — Package and Environment Contract Qualification. 0.7E, v0.7
-milestone qualification, 1.0 integration, v1.0.0 RC, and public release remain
-unauthorized.
+limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
+with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
+environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
+desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
+The next decision is a separately authorized v0.7 Milestone Qualification /
+Close. 1.0 integration, v1.0.0 RC and public release remain unauthorized.
 
 ## 16. References
 
@@ -870,13 +881,15 @@ unauthorized.
 - [v0.7 Headless-first contract revision](v0.7-headless-first-contract.md) —
   current product priority, environment classifications and revised 0.7C–0.7E
   exits; it does not rewrite historical evidence.
-- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A/0.7B phases, partial 0.7C
-  environment evidence and later bounded phases, none automatically
-  authorized.
+- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A–0.7E phases and the still
+  separately authorized milestone-close gate.
 - [v0.7B installation/diagnostics handoff](../validation/v0.7/installation-diagnostics/HANDOFF.md)
   — no-root prefix install, bounded uninstall and Doctor evidence.
 - [v0.7C X11/headless/SSH handoff](../validation/v0.7/x11-headless-ssh/HANDOFF.md)
   — qualified Managed Xvfb evidence and explicit real-X11/SSH gaps.
+- [v0.7E package/environment handoff](../validation/v0.7/package-environment/HANDOFF.md)
+  — exact-source dual-architecture package, install, Doctor and integrated
+  environment qualification with explicit limitations.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

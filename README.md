@@ -59,9 +59,11 @@ gui2tui --session desktop
 The GUI application must already be running in the explicitly selected Linux
 session whose AT-SPI bus is reachable. `--session desktop` preserves the
 current process's desktop/session environment as an optional compatibility
-path. Same-host SSH -> Managed is a core 1.0 candidate but remains NOT TESTED
-with a real SSH interactive PTY. No config file, root privilege, or companion
-viewer is required.
+path. Same-host SSH -> Managed is qualified on the recorded Ubuntu 24.04 arm64
+loopback OpenSSH interactive-PTY topology using the exact internal 0.7E
+package; this does not claim every SSH client, architecture or existing
+desktop attachment. No config file, root privilege, or companion viewer is
+required.
 
 For a server without a physical desktop, configure a persistent managed Xvfb +
 D-Bus + AT-SPI session once:
