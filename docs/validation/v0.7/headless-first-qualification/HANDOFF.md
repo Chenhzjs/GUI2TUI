@@ -327,7 +327,7 @@ milestone qualification.
 - Remote: local branch contains the prior unpushed contract revision and this
   phase's commits; no push was authorized or performed.
 - Package version: `0.3.0`.
-- Public tags: unchanged (`v0.1.0`, `v0.2.0`, `v0.3.0`).
+- Public tags: unchanged (`v0.1.0`, `v0.1.1`, `v0.2.0`, `v0.3.0`).
 - v0.7.0 tag/release: none.
 
 ## 22. Next recommended authorization
