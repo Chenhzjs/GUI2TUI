@@ -36,4 +36,9 @@ RUN apt-get update \
 ENV LANG=C.UTF-8 \
     TERM=xterm-256color
 
+ARG QUALIFIER_UID=1000
+RUN if ! getent passwd "$QUALIFIER_UID" >/dev/null; then \
+        useradd --uid "$QUALIFIER_UID" --no-create-home --shell /bin/bash qualifier; \
+    fi
+
 WORKDIR /src

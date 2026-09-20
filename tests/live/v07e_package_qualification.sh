@@ -49,6 +49,7 @@ for specification in amd64:x86_64 arm64:aarch64; do
     docker build \
         --platform "linux/$platform" \
         --label org.gui2tui.validation=v07e-package \
+        --build-arg "QUALIFIER_UID=$uid" \
         --file "$project_root/tests/live/Dockerfile.v07e-package" \
         --tag "$image" \
         "$project_root" >"$architecture_dir/docker-build.log"
