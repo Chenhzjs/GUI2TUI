@@ -1,6 +1,12 @@
-FROM rust:1.88-jammy
+FROM rust:1.88-bookworm AS rust-toolchain
+
+FROM ubuntu:22.04
+
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/usr/local/cargo/bin:$PATH
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
