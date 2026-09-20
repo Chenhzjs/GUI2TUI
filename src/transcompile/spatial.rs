@@ -248,6 +248,7 @@ impl SpatialEvidenceIndex {
             }
             entries.insert(node.runtime_id, evidence);
         }
+        reject_collapsed_screen_origins(&mut entries, &mut metrics);
         metrics.elapsed = started.elapsed();
         Self {
             generation,
@@ -340,6 +341,7 @@ impl SpatialEvidenceIndex {
                 });
             }
         }
+        reject_collapsed_screen_origins(&mut entries, &mut metrics);
         metrics.elapsed = started.elapsed();
         Self {
             generation,
@@ -367,6 +369,64 @@ impl SpatialEvidenceIndex {
             })
             .and_then(|e| e.bounds)
     }
+}
+
+/// Reject a degenerate coordinate space where many otherwise valid screen
+/// rectangles collapse onto one origin. Some display/toolkit combinations
+/// expose useful sizes while withholding global offsets. Treating those
+/// rectangles as comparable would manufacture containment and overlap. This
+/// generic check deliberately prefers the existing semantic fallback.
+fn reject_collapsed_screen_origins(
+    entries: &mut HashMap<RuntimeNodeId, SpatialEvidence>,
+    metrics: &mut SpatialProbeMetrics,
+) {
+    const MIN_SAMPLES: usize = 8;
+    const DOMINANT_NUMERATOR: usize = 3;
+    const DOMINANT_DENOMINATOR: usize = 4;
+
+    let mut origins: HashMap<(i32, i32), (usize, HashSet<(i32, i32)>)> = HashMap::new();
+    let mut comparable = 0usize;
+    for evidence in entries.values() {
+        if evidence.coordinate_space != CoordinateSpace::Screen
+            || evidence.trust != GeometryTrust::Consistent
+        {
+            continue;
+        }
+        let Some(bounds) = evidence.bounds else {
+            continue;
+        };
+        comparable += 1;
+        let origin = origins.entry((bounds.x, bounds.y)).or_default();
+        origin.0 += 1;
+        origin.1.insert((bounds.width, bounds.height));
+    }
+
+    let collapsed = origins.values().any(|(count, sizes)| {
+        comparable >= MIN_SAMPLES
+            && *count >= MIN_SAMPLES
+            && count.saturating_mul(DOMINANT_DENOMINATOR)
+                >= comparable.saturating_mul(DOMINANT_NUMERATOR)
+            && sizes.len() >= 3
+    });
+    if !collapsed {
+        return;
+    }
+
+    let mut rejected = 0usize;
+    for evidence in entries.values_mut() {
+        if evidence.coordinate_space == CoordinateSpace::Screen
+            && evidence.trust == GeometryTrust::Consistent
+            && evidence.bounds.is_some()
+        {
+            evidence.trust = GeometryTrust::Inconsistent;
+            evidence
+                .provenance
+                .push_str("; rejected=collapsed-screen-origin-pattern");
+            rejected += 1;
+        }
+    }
+    metrics.geometry_successes = metrics.geometry_successes.saturating_sub(rejected);
+    metrics.geometry_rejected += rejected;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -4225,6 +4285,38 @@ mod tests {
         assert_eq!(plan.plan.geometry_trust, GeometryTrust::Unavailable);
         assert!(matches!(plan.plan.root, LayoutNode::Stack(_)));
     }
+
+    #[test]
+    fn collapsed_screen_origins_are_rejected_as_unreliable_geometry() {
+        let mut root = node(0, SemanticRole::Window, "app", Some((0, 0, 800, 600)));
+        for id in 1..=9 {
+            root.children.push(actionable(node(
+                id,
+                SemanticRole::Button,
+                &format!("control {id}"),
+                Some((0, 0, 100 + id as i32, 20 + id as i32)),
+            )));
+        }
+        let regions = analyze_regions(&root);
+        let evidence = SpatialEvidenceIndex::from_tree(
+            &root,
+            ApplicationGenerationId(42),
+            SpatialProbeBudget::default(),
+        );
+        let plan = infer_layout(&regions, &root, &evidence);
+
+        assert_eq!(plan.plan.geometry_trust, GeometryTrust::Inconsistent);
+        assert_eq!(evidence.metrics.geometry_successes, 0);
+        assert_eq!(evidence.metrics.geometry_rejected, 10);
+        assert!(evidence.entries.values().all(|entry| {
+            entry.trust == GeometryTrust::Inconsistent
+                && entry
+                    .provenance
+                    .contains("rejected=collapsed-screen-origin-pattern")
+        }));
+        assert!(matches!(plan.plan.root, LayoutNode::Stack(_)));
+    }
+
     #[test]
     fn stale_generation_is_not_accepted() {
         let mut idx = SpatialEvidenceIndex::from_tree(
