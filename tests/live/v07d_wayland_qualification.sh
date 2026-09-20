@@ -86,7 +86,7 @@ container_started=true
 mounts=$(docker inspect --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' "$container")
 if [[ -n $bundle_dir ]]; then
     grep -qx '/opt/gui2tui-bundle false' <<<"$mounts"
-    [[ $(wc -l <<<"$mounts") == 1 ]]
+    [[ $(grep -c . <<<"$mounts") == 1 ]]
 else
     [[ -z $mounts ]]
 fi

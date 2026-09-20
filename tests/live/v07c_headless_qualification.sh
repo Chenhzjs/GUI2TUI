@@ -104,9 +104,9 @@ mounts=$(docker inspect --format '{{range .Mounts}}{{println .Destination .RW}}{
 grep -qx '/run/gui2tui-test/authorized_key.pub false' <<<"$mounts"
 if [[ -n $bundle_dir ]]; then
     grep -qx '/opt/gui2tui-bundle false' <<<"$mounts"
-    [[ $(wc -l <<<"$mounts") == 2 ]]
+    [[ $(grep -c . <<<"$mounts") == 2 ]]
 else
-    [[ $(wc -l <<<"$mounts") == 1 ]]
+    [[ $(grep -c . <<<"$mounts") == 1 ]]
 fi
 
 for _ in {1..100}; do
