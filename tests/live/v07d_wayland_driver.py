@@ -402,13 +402,22 @@ class Qualification:
 
     def run(self) -> None:
         self.refresh_environment()
-        source = self.raw_docker("cat", "/opt/gui2tui-source-commit").stdout.strip()
+        harness_source = self.raw_docker("cat", "/opt/gui2tui-source-commit").stdout.strip()
+        packaged_source = self.raw_docker(
+            "python3",
+            "-c",
+            "import json,sys; print(json.load(open(sys.argv[1]))['commit'])",
+            "/opt/gui2tui-bundle/BUILD-INFO.json",
+            check=False,
+        )
+        source = packaged_source.stdout.strip() if packaged_source.returncode == 0 else harness_source
         version = self.docker(GUI, "--version").stdout.strip()
         if "0.3.0" not in version:
             raise AssertionError(f"unexpected installed version: {version}")
         self.results.update(
             {
                 "source_commit": source,
+                "harness_source_commit": harness_source,
                 "installed_version": version,
                 "installed_binary": "PASS_USER_PREFIX_NONROOT",
                 "headless_compositor": "PASS_WESTON_HEADLESS_PIXMAN",

@@ -488,7 +488,15 @@ print(f'{namespaces}:{artifacts}')
         self.results["container_restart_fresh_selection"] = "PASS"
 
     def run(self) -> None:
-        source = self.docker("cat", "/opt/gui2tui-source-commit").stdout.strip()
+        harness_source = self.docker("cat", "/opt/gui2tui-source-commit").stdout.strip()
+        packaged_source = self.docker(
+            "python3",
+            "-c",
+            "import json,sys; print(json.load(open(sys.argv[1]))['commit'])",
+            "/opt/gui2tui-bundle/BUILD-INFO.json",
+            check=False,
+        )
+        source = packaged_source.stdout.strip() if packaged_source.returncode == 0 else harness_source
         version = self.docker(GUI, "--version").stdout.strip()
         applications = self.docker(INSPECT, "--session", "managed", "--list").stdout
         if SELECTION_APP not in applications or LIVE_APP not in applications:
@@ -496,6 +504,7 @@ print(f'{namespaces}:{artifacts}')
         self.results.update(
             {
                 "source_commit": source,
+                "harness_source_commit": harness_source,
                 "installed_version": version,
                 "installed_binary": "PASS",
                 "fresh_registry_enumeration": "PASS",
