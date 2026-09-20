@@ -87,7 +87,7 @@ env -u DBUS_SESSION_BUS_ADDRESS "$gui" --session desktop doctor --json \
 python3 - "$result_dir/doctor-handler-unavailable.json" <<'PY'
 import json, sys
 checks = {item["name"]: item for item in json.load(open(sys.argv[1]))["checks"]}
-assert checks["complex-text-handler"]["level"] == "WARN"
+assert checks["external-text-handler"]["level"] == "WARN"
 PY
 
 rm -f -- "$XDG_CONFIG_HOME/gui2tui/config.toml"
