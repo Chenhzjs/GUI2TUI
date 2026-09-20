@@ -454,8 +454,12 @@ class Qualification:
         self.control("start-fixture", "xwayland-selection")
         self.refresh_environment()
         self.xwayland_identity()
-        self.geometry(SELECTION_APP, "xwayland_gtk", collapsed=True)
+        # The XWayland GTK Cache may initially expose only its application,
+        # window and container. Exercise the real semantic workflow first so
+        # the controlled descendants are currently realized before taking the
+        # separate collapsed-geometry evidence snapshot.
         self.semantic_tui("xwayland")
+        self.geometry(SELECTION_APP, "xwayland_gtk", collapsed=True)
         old_xwayland = self.locator(
             self.tree(SELECTION_APP, verbose=True), "Button", "Reorder current items"
         )
