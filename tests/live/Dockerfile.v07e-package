@@ -28,6 +28,7 @@ RUN apt-get update \
         python3-pexpect \
         python3-pyqt5 \
         python3-pyte \
+        util-linux \
         x11-utils \
         xvfb \
     && rm -rf /var/lib/apt/lists/* \
