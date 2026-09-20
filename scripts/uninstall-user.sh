@@ -34,7 +34,7 @@ while (($#)); do
 done
 
 if [[ -z $prefix ]]; then
-    prefix=$(cd -- "$script_dir/../../.." && pwd -P)
+    prefix=$(cd -- "$script_dir/../.." && pwd -P)
 fi
 [[ $prefix == /* ]] || { echo 'error: --prefix must be absolute' >&2; exit 2; }
 for directory in "$prefix" "$prefix/bin" "$prefix/libexec" "$prefix/libexec/gui2tui"; do
