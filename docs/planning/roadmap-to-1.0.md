@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7C COMPLETE / LATER PHASES NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7D COMPLETE / 0.7E NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -496,10 +496,11 @@ architectural sketch.
 
 The completed [v0.7 Discovery](v0.7-deployment-environment.md) found that the
 current AT-SPI/D-Bus backend is a same-host, same-accessibility-session model.
-It contains no X11-specific semantic dependency and therefore provides no
-evidence for a pre-emptive Wayland semantic-backend rewrite. Native Wayland
-and XWayland still require separate real-session qualification; optional
-static visual acquisition remains native-X11-only.
+It contains no X11-specific semantic dependency and therefore provided no
+evidence for a pre-emptive Wayland semantic-backend rewrite. The later 0.7D
+qualification confirmed the same AT-SPI backend on separately identified
+Native Wayland and XWayland applications in one Weston headless topology;
+optional static visual acquisition remains native-X11-only.
 
 The original user-approved development direction made same-user local Linux
 X11 and bundled Managed Xvfb core targets. The later
@@ -509,8 +510,9 @@ the concrete core target; Local TTY -> Managed and same-host SSH -> Managed
 are core candidates; and Docker/OCI Headless is an important separately
 qualified candidate. Ordinary X11 Desktop and SSH -> existing Desktop are
 optional compatibility rows rather than Headless-core gates. Native Wayland,
-XWayland and Headless Wayland are separate evidence-driven candidates; lack of
-global geometry alone cannot invalidate otherwise correct semantic
+XWayland and Headless Wayland are separate evidence-driven rows, now qualified
+with explicit limitations on the recorded Ubuntu 24.04 arm64 Weston topology;
+lack of global geometry alone cannot invalidate otherwise correct semantic
 interaction. Cross-host local-TUI/remote-GUI operation and a Remote Companion
 remain explicitly deferred until after 1.0.
 
@@ -826,14 +828,15 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-v0.7 Discovery and 0.7A–0.7C are complete. 0.7C qualified the exact Managed
+v0.7 Discovery and 0.7A–0.7D are complete. 0.7C qualified the exact Managed
 Xvfb, unprivileged Docker interactive-TTY and same-host SSH -> Managed
-topologies recorded in its handoffs, with explicit limitations. Linux native
-VT and ordinary X11 Desktop remain NOT TESTED and are not claimed. The next
-recommended authorization is a narrow real Linux virtual-console qualification
-if that topology is intended for 1.0; otherwise the next planned phase is
-0.7D. 0.7D–0.7E, v0.7 milestone qualification, 1.0 integration, v1.0.0 RC,
-and public release remain unauthorized.
+topologies recorded in its handoffs. 0.7D qualified the recorded Weston
+headless Native-Wayland/XWayland topology; both phases have explicit
+limitations. Linux native VT, ordinary X11 Desktop, ordinary desktop Wayland
+and Wayland over SSH remain NOT TESTED and are not claimed. The next planned
+phase is 0.7E — Package and Environment Contract Qualification. 0.7E, v0.7
+milestone qualification, 1.0 integration, v1.0.0 RC, and public release remain
+unauthorized.
 
 ## 16. References
 

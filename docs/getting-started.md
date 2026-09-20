@@ -201,6 +201,23 @@ or general Docker installer. Its result applies only to the recorded topology;
 package/architecture integration remains 0.7E work. A Docker or SSH PTY result
 also does not qualify a Linux virtual-console TTY.
 
+The repository also contains a bounded 0.7D Headless Wayland/XWayland live
+environment:
+
+```bash
+RESULT_DIR=/tmp/gui2tui-v07d-evidence \
+  tests/live/v07d_wayland_qualification.sh
+```
+
+It starts Weston's real headless backend with software rendering, a private
+session D-Bus/AT-SPI registry, controlled native GTK/Qt clients and a separately
+identified XWayland GTK client. It requires Docker and Python 3 on the host,
+but no host GUI socket, graphical device, privileged container or complete
+desktop. The recorded Ubuntu 24.04 arm64 topology is qualified with explicit
+limitations; this validation fixture is not a production image or an implicit
+claim for other compositors, architectures, desktop sessions or Wayland over
+SSH. Wayland static capture remains unavailable.
+
 ## First two minutes
 
 1. Select an application with arrows, Enter or click. `/` starts a name filter; Enter applies,

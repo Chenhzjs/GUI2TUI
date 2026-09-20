@@ -7,13 +7,13 @@ from current qualification. A target is not a formal support claim.
 | --- | --- | --- |
 | GUI2TUI-managed Xvfb | Core support target | QUALIFIED on Ubuntu 24.04 aarch64 with an installed current-source binary: create/reuse/stop/recreate, operation/readback, terminal/handler lifecycle and cleanup passed. 0.7E package integration remains. |
 | Local Linux TTY -> Managed | Core candidate | Managed local PTY passed; real Linux virtual-console TTY is NOT TESTED. |
-| Same-host SSH -> Managed | Core candidate; highest-priority evidence gap | NOT TESTED end to end: the 0.7C environment had no SSH server/listener or real interactive PTY. |
-| Docker/OCI Headless | Important separately qualified candidate | NOT TESTED; no container image or deployment is currently qualified. |
+| Same-host SSH -> Managed | Core candidate | QUALIFIED on the recorded Ubuntu 24.04 arm64 loopback OpenSSH interactive-PTY topology, with explicit client and disconnect limitations. |
+| Docker/OCI Headless | Important separately qualified candidate | QUALIFIED WITH EXPLICIT LIMITATIONS on one unprivileged Ubuntu 24.04 arm64 live topology; no production image is supplied. |
 | Local Linux X11, same user/session | Optional compatibility | NOT TESTED in a real local desktop; controlled Xvfb evidence is not a substitute. |
 | Same-host SSH -> existing Desktop | Optional compatibility | NOT TESTED; it is not a Headless-core prerequisite. |
-| Native Wayland | Evidence-driven candidate | NOT TESTED in a real native session; 0.7D decides status from public semantics and safe geometry degradation. |
-| XWayland | Separate evidence-driven candidate | NOT TESTED; native Wayland results do not qualify this row or vice versa. |
-| Headless Wayland | Feasibility candidate | NOT TESTED; no compositor is bundled or qualified. |
+| Native Wayland | Evidence-driven candidate | QUALIFIED WITH EXPLICIT LIMITATIONS on Ubuntu 24.04 arm64, Weston 13 headless/Pixman and controlled GTK4/Qt6. |
+| XWayland | Separate evidence-driven candidate | QUALIFIED WITH EXPLICIT LIMITATIONS on that compositor with XWayland 23.2.6 and controlled GTK4. |
+| Headless Wayland | Headless candidate | QUALIFIED WITH EXPLICIT LIMITATIONS for that non-privileged Weston topology; no compositor is bundled. |
 | Local TUI + GUI on another host | Deferred until after 1.0 | No Remote Companion, cross-host semantic transport, authentication, event/cache sync, or remote backend is implemented. |
 | Linux same-host graphical viewer | Existing optional modality | Explicit private socket, configured handler and local authorization; this is not Remote Companion. |
 | macOS/Windows GUI backend | Outside the Linux AT-SPI 1.0 baseline | macOS remains build/development verification only; no GUI semantic backend. |
@@ -75,12 +75,13 @@ creating a candidate; an absent handler remains valid.
 
 Headless does not mean launching GUI programs without any display server. It
 means the terminal frontend needs no graphical viewer. Managed Xvfb supplies
-the application's qualified background graphical environment; ordinary
-sessions may use an existing desktop as optional compatibility. Native
-Wayland, XWayland and Headless Wayland require separate evidence. Wayland
-static capture is NOT IMPLEMENTED, and no compositor is bundled. Missing
-global Wayland geometry must degrade presentation and cannot by itself
-invalidate otherwise working semantic interaction.
+one qualified background graphical environment; the bounded 0.7D evidence
+also qualifies Native Wayland and XWayland semantics on one Weston 13
+headless/Pixman topology. Those remain separate rows and do not qualify other
+compositors, distributions, architectures or ordinary desktop sessions.
+Wayland static capture is NOT IMPLEMENTED, and no compositor is bundled.
+Missing or collapsed global Wayland geometry degrades presentation and cannot
+by itself invalidate otherwise working semantic interaction.
 
 No viewer endpoint means no endpoint wait on startup. F4 resource tasks remain reference-first;
 materialization on the GUI2TUI host is independent of transport. A captured region is labelled
@@ -90,14 +91,12 @@ Use a private current-user runtime directory for broker sockets, artifacts and d
 Artifact ownership/leases prevent one live session's files being scavenged by another. Running as
 root is unnecessary and does not solve access to another user's session bus.
 
-The current 0.7C evidence is intentionally asymmetric: Managed Xvfb passed in
-the named Ubuntu environment, while real Local Linux TTY, SSH -> Managed,
-ordinary local X11 and SSH -> existing Desktop remain NOT TESTED. A local PTY,
-an SSH-origin environment variable or a controlled Desktop Xvfb cannot
-substitute for those named environments. Under the revised Headless-first
-contract, SSH -> Managed and Local TTY -> Managed are core evidence gaps;
-ordinary desktop rows are optional compatibility. Docker/OCI and all Wayland
-rows also remain NOT TESTED.
+The current evidence is intentionally bounded. Managed Xvfb, unprivileged
+Docker interactive TTY, real SSH -> Managed, and the recorded Weston
+Native-Wayland/XWayland topology have matching live evidence. Real Linux
+virtual-console TTY, ordinary local X11, SSH -> existing Desktop, ordinary
+full-desktop Wayland and Wayland over SSH remain NOT TESTED. One PTY, display
+server or compositor result cannot substitute for another named environment.
 
 See the
 [Headless-first product and environment contract](planning/v0.7-headless-first-contract.md)

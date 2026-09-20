@@ -437,9 +437,9 @@ layout reconstruction.
 - v0.6 milestone qualification: **QUALIFIED**.
 - v0.7 Deployment & Environment Completeness Discovery: **COMPLETE**. The
   existing semantic backend is a same-host session-D-Bus/AT-SPI model and has
-  no X11-specific semantic dependency. Native Wayland and XWayland remain
-  separately untested; cross-host Remote Companion is recommended deferred
-  beyond the candidate 1.0 baseline.
+  no X11-specific semantic dependency. Its then-unverified Wayland rows were
+  later tested in 0.7D; cross-host Remote Companion remains deferred beyond
+  the candidate 1.0 baseline.
 - v0.7A Environment Contract and Session Selection: **COMPLETE / VALIDATED**.
   Explicit `--session desktop|managed` selects one connection environment
   before D-Bus initialization; desktop never imports a managed descriptor,
@@ -464,19 +464,28 @@ layout reconstruction.
   Container restart rejected stale session/application authority before fresh
   setup and selection. Linux native VT, real local X11 and SSH -> existing
   Desktop remain NOT TESTED and are not implied by these results.
+- v0.7D Wayland and XWayland Qualification: **COMPLETE / QUALIFIED WITH
+  EXPLICIT LIMITATIONS**. An unprivileged Ubuntu 24.04 arm64 container ran
+  Weston 13 headless/Pixman, private session D-Bus/AT-SPI, native GTK4/Qt6 and
+  separately identified XWayland 23.2.6 GTK4 applications. Installed GUI2TUI
+  completed real-PTY semantic operations, fresh readback, dynamic refresh,
+  modal scope, native Vim handoff, terminal restoration and lifecycle rebuild.
+  Collapsed GTK screen origins now degrade to non-spatial semantic
+  presentation while differentiated Qt geometry remains usable. Ordinary
+  desktop Wayland, Wayland over SSH and broader platform/toolkit coverage are
+  NOT TESTED; Wayland static capture remains unsupported/deferred.
 - Revised user-confirmed 1.0 direction: GUI2TUI is Headless-first. Managed
   Xvfb is the concrete core target; Local TTY -> Managed and same-host SSH ->
   Managed are core candidates; Docker/OCI Headless is an important separately
   qualified candidate. Ordinary X11 Desktop and SSH -> existing Desktop are
   optional compatibility rows. Native Wayland, XWayland and Headless Wayland
-  remain separate evidence-driven candidates. Cross-host Remote Companion is
-  deferred beyond 1.0. These categories are development targets, not broader
-  qualification claims.
-- v0.7D through 0.7E: **PLANNED / NOT AUTHORIZED**. A separately authorized
-  real Linux virtual-console run is still needed if Local TTY -> Managed will
-  be a 1.0 Supported row. Otherwise the next planned phase is 0.7D. Ordinary
-  desktop compatibility is not a Headless-core exit gate. No later phase
-  starts automatically.
+  remain separate evidence-driven rows, now bounded by the 0.7D qualification.
+  Cross-host Remote Companion is deferred beyond 1.0. These categories are
+  development targets, not broader qualification claims.
+- v0.7E: **PLANNED / NOT AUTHORIZED**. A separately authorized real Linux
+  virtual-console run is still needed only if Local TTY -> Managed will be a
+  1.0 Supported row. Ordinary desktop compatibility is not a Headless-core
+  exit gate. No later phase starts automatically.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -529,7 +538,9 @@ and [0.7B installation/diagnostics handoff](validation/v0.7/installation-diagnos
 with the original partial evidence in the
 [X11/headless/SSH handoff](validation/v0.7/x11-headless-ssh/HANDOFF.md) and the
 completed Headless supplement in the
-[Headless qualification handoff](validation/v0.7/headless-first-qualification/HANDOFF.md).
+[Headless qualification handoff](validation/v0.7/headless-first-qualification/HANDOFF.md),
+and the bounded Native Wayland/XWayland evidence is in the
+[0.7D handoff](validation/v0.7/wayland-xwayland/HANDOFF.md).
 The current product priority and revised phase exits are normative in the
 [Headless-first contract revision](planning/v0.7-headless-first-contract.md);
 it changes planning without rewriting historical evidence.
@@ -545,11 +556,12 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. v0.7 Discovery and 0.7A–0.7C are complete; 0.7C qualifies the
+internally. v0.7 Discovery and 0.7A–0.7D are complete; 0.7C qualifies the
 recorded Managed, Docker interactive-TTY and same-host SSH -> Managed
-topologies with explicit limitations. Linux native VT and real X11 remain NOT
-TESTED and are not claimed. 0.7D–0.7E each require separate explicit
-authorization.
+topologies, and 0.7D qualifies one Weston Headless Native-Wayland/XWayland
+topology, all with explicit limitations. Linux native VT, real X11, ordinary
+desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
+0.7E requires separate explicit authorization.
 
 ## 21. Glossary
 
