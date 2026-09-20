@@ -5,11 +5,11 @@ from current qualification. A target is not a formal support claim.
 
 | Deployment | 1.0 direction | Current qualification |
 | --- | --- | --- |
-| Local Linux X11, same user/session | Core support target | Real local-desktop install-to-exit qualification remains for 0.7C; Xvfb evidence is not a substitute. |
-| GUI2TUI-managed Xvfb | Core support target | Explicit selection and bounded descriptor handling are validated; full deployment/recovery qualification remains for 0.7C/0.7E. |
+| Local Linux X11, same user/session | Core support target | NOT TESTED in a real local desktop; controlled Xvfb evidence is not a substitute. |
+| GUI2TUI-managed Xvfb | Core support target | QUALIFIED on Ubuntu 24.04 aarch64 with an installed current-source binary: create/reuse/stop/recreate, operation/readback, terminal/handler lifecycle and cleanup passed. 0.7E package integration remains. |
 | Native Wayland | Priority validation target; seek inclusion | NOT TESTED in a real native session; 0.7D decides status from public semantics and safe geometry degradation. |
 | XWayland | Priority validation target; seek inclusion separately | NOT TESTED; native Wayland results do not qualify this row or vice versa. |
-| Same-host SSH TUI | Seek inclusion | Connectivity evidence exists, but complete SSH PTY/session lifecycle qualification remains for 0.7C. |
+| Same-host SSH TUI | Seek inclusion | NOT TESTED end to end: the 0.7C environment had no SSH server/listener, so neither SSH -> Desktop nor SSH -> Managed is qualified. |
 | Local TUI + GUI on another host | Deferred until after 1.0 | No Remote Companion, cross-host semantic transport, authentication, event/cache sync, or remote backend is implemented. |
 | Linux same-host graphical viewer | Existing optional modality | Explicit private socket, configured handler and local authorization; this is not Remote Companion. |
 | macOS/Windows GUI backend | Outside the Linux AT-SPI 1.0 baseline | macOS remains build/development verification only; no GUI semantic backend. |
@@ -77,3 +77,9 @@ RenderedSnapshot, never an original embedded resource. Only explicit user reques
 Use a private current-user runtime directory for broker sockets, artifacts and diagnostic logs.
 Artifact ownership/leases prevent one live session's files being scavenged by another. Running as
 root is unnecessary and does not solve access to another user's session bus.
+
+The current 0.7C evidence is intentionally asymmetric: Managed Xvfb passed in
+the named Ubuntu environment, while real local X11 and both same-host SSH rows
+remain NOT TESTED. A local PTY, an SSH-origin environment variable or a
+controlled Desktop Xvfb cannot substitute for a real SSH client/server PTY or
+a normal local X11 desktop.

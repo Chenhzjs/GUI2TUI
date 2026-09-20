@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY COMPLETE / 0.7A–0.7B COMPLETE / LATER PHASES NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7B COMPLETE / 0.7C PARTIALLY VALIDATED / LATER PHASES NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -525,6 +525,15 @@ configured complex-text handler without executing it. Controlled Ubuntu 24.04
 arm64 Xvfb evidence validates this foundation, but does not qualify a real
 local X11 desktop, SSH, package ABI, Wayland or XWayland.
 
+0.7C has completed the evidence available in the current Ubuntu 24.04 aarch64
+environment. The installed program qualified Managed Xvfb creation, reuse,
+explicit selection, dynamic operation/readback, fresh-scene continuation,
+terminal and handler handoff, stop/recreate, exact cleanup and uninstall. Two
+controlled registries also retained Desktop/Managed isolation. The environment
+had neither a real Linux X11 desktop nor an SSH server/listener, so real local
+X11, SSH -> Desktop and SSH -> Managed remain NOT TESTED. 0.7C is therefore
+**PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING**, not fully qualified.
+
 ### Platform boundary
 
 v0.7 is deployment completion, not automatic platform expansion. GUI2TUI is
@@ -795,10 +804,12 @@ milestone never changes the next milestone to `CURRENT` automatically.
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
 v0.7 Discovery, **0.7A — Environment Contract and Session Selection** and
-**0.7B — Installation and Diagnostic Completeness** are complete. The next
-recommended direction is **0.7C — X11, Headless and Same-host SSH
-Qualification**, which is not authorized. 0.7D–0.7E, v0.7 milestone
-qualification, 1.0 integration, v1.0.0 RC, and public release also remain
+**0.7B — Installation and Diagnostic Completeness** are complete. 0.7C has
+qualified Managed Xvfb in the available Ubuntu 24.04 aarch64 environment but
+is **PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING** because real local
+X11 and SSH PTY were unavailable. The next recommended work is to supply those
+approved environments and complete the missing 0.7C rows. 0.7D–0.7E, v0.7
+milestone qualification, 1.0 integration, v1.0.0 RC, and public release remain
 unauthorized.
 
 ## 16. References
@@ -830,11 +841,13 @@ unauthorized.
 - [v0.7 deployment/environment Discovery](v0.7-deployment-environment.md) —
   current deployment architecture, evidence, candidate support contract and
   remote-companion decision.
-- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A contract/selection and 0.7B
-  install/diagnostic phases plus three remaining bounded phases, none
-  automatically authorized.
+- [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A/0.7B phases, partial 0.7C
+  environment evidence and later bounded phases, none automatically
+  authorized.
 - [v0.7B installation/diagnostics handoff](../validation/v0.7/installation-diagnostics/HANDOFF.md)
   — no-root prefix install, bounded uninstall and Doctor evidence.
+- [v0.7C X11/headless/SSH handoff](../validation/v0.7/x11-headless-ssh/HANDOFF.md)
+  — qualified Managed Xvfb evidence and explicit real-X11/SSH gaps.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no
