@@ -30,7 +30,15 @@ install -m 755 "$target/release/gui2tui-inspect" "$target/release/gui2tui-local"
 install -m 755 scripts/headless-session "$stage/$name/libexec/gui2tui/"
 install -m 755 scripts/install-user.sh scripts/uninstall-user.sh "$stage/$name/"
 cp README.md LICENSE-MIT LICENSE-APACHE config.example.toml "$stage/$name/"
-cp -R docs "$stage/$name/docs"
+# Package only version-controlled documentation. A developer checkout may
+# contain ignored host metadata (for example macOS .DS_Store files), and those
+# files must not make otherwise identical source commits produce different
+# archives.
+while IFS= read -r -d '' tracked; do
+    destination="$stage/$name/$tracked"
+    mkdir -p -- "$(dirname -- "$destination")"
+    cp -- "$tracked" "$destination"
+done < <(git ls-files -z -- docs)
 install -m 755 scripts/release-smoke.sh "$stage/$name/smoke/run.sh"
 cp tests/live/release_smoke.py tests/fixtures/release_smoke_gtk.py \
     tests/fixtures/release_smoke_qt.py \

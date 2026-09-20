@@ -28,6 +28,10 @@ with tarfile.open(archive, "r:gz") as payload:
         path = pathlib.PurePosixPath(member.name)
         if path.is_absolute() or ".." in path.parts:
             raise SystemExit("archive safety gate failed: unsafe member path")
+        if any(part in {".DS_Store", "__MACOSX"} or part.startswith("._") for part in path.parts):
+            raise SystemExit(
+                f"archive hygiene gate failed: host metadata is forbidden: {member.name}"
+            )
         if not (member.isdir() or member.isfile()):
             raise SystemExit(
                 f"archive safety gate failed: links and special files are forbidden: {member.name}"
