@@ -1,0 +1,64 @@
+FROM rust:1.88-bookworm AS builder
+
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release --locked --bins
+
+FROM ubuntu:24.04
+
+ARG GUI2TUI_SOURCE_COMMIT=unknown
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        at-spi2-core \
+        ca-certificates \
+        dbus \
+        dbus-x11 \
+        gir1.2-gtk-4.0 \
+        libglib2.0-bin \
+        locales \
+        openssh-server \
+        procps \
+        python3 \
+        python3-gi \
+        vim \
+        x11-utils \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/* \
+    && locale-gen C.UTF-8 \
+    && useradd --create-home --shell /bin/bash gui2tui \
+    && passwd --delete gui2tui \
+    && install -d -m 0755 /run/sshd \
+    && install -d -o gui2tui -g gui2tui -m 0700 \
+        /home/gui2tui/.config \
+        /home/gui2tui/.local/state \
+        /home/gui2tui/.local/run \
+        /home/gui2tui/evidence \
+    && install -d -m 0755 /opt/gui2tui-bundle/bin /opt/gui2tui-bundle/libexec/gui2tui \
+    && printf '%s\n' "$GUI2TUI_SOURCE_COMMIT" >/opt/gui2tui-source-commit
+
+COPY --from=builder /src/target/release/gui2tui /opt/gui2tui-bundle/bin/gui2tui
+COPY --from=builder /src/target/release/gui2tui-inspect /opt/gui2tui-bundle/libexec/gui2tui/gui2tui-inspect
+COPY --from=builder /src/target/release/gui2tui-local /opt/gui2tui-bundle/libexec/gui2tui/gui2tui-local
+COPY scripts/headless-session /opt/gui2tui-bundle/libexec/gui2tui/headless-session
+COPY scripts/install-user.sh scripts/uninstall-user.sh /opt/gui2tui-bundle/
+COPY tests/fixtures/v05a_gtk_selection_fixture.py tests/fixtures/gtk4_live_fixture.py /opt/gui2tui-fixtures/
+COPY tests/live/v07c_container_control.py /usr/local/libexec/gui2tui-v07c-container-control
+COPY tests/live/v07c_container_entrypoint.sh /usr/local/sbin/gui2tui-v07c-entrypoint
+COPY tests/live/v07c_sshd_config /etc/ssh/sshd_config.d/90-gui2tui-v07c.conf
+
+RUN chmod 0755 \
+        /opt/gui2tui-bundle/bin/gui2tui \
+        /opt/gui2tui-bundle/libexec/gui2tui/gui2tui-inspect \
+        /opt/gui2tui-bundle/libexec/gui2tui/gui2tui-local \
+        /opt/gui2tui-bundle/libexec/gui2tui/headless-session \
+        /opt/gui2tui-bundle/install-user.sh \
+        /opt/gui2tui-bundle/uninstall-user.sh \
+        /usr/local/libexec/gui2tui-v07c-container-control \
+        /usr/local/sbin/gui2tui-v07c-entrypoint \
+    && chown -R gui2tui:gui2tui /home/gui2tui /opt/gui2tui-fixtures
+
+EXPOSE 22
+ENTRYPOINT ["/usr/local/sbin/gui2tui-v07c-entrypoint"]

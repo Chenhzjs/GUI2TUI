@@ -72,7 +72,8 @@ stop_session() {
     else
         echo 'Persistent GUI2TUI environment is not running.'
     fi
-    rm -f -- "$root/session.json" "$root/supervisor.pid" "$root/session-bus"
+    rm -f -- "$root/session.json" "$root/session.json.tmp" \
+        "$root/supervisor.pid" "$root/session-bus" "$root/display"
 }
 
 start_persistent() {
@@ -84,7 +85,8 @@ start_persistent() {
         echo 'Persistent GUI2TUI environment is already running.'
         return 0
     fi
-    rm -f -- "$root/session.json" "$root/supervisor.pid" "$root/session-bus"
+    rm -f -- "$root/session.json" "$root/session.json.tmp" \
+        "$root/supervisor.pid" "$root/session-bus" "$root/display"
     nohup "$0" _serve "$root" "$screen" >"$root/supervisor.log" 2>&1 </dev/null &
     local launcher_pid=$!
     for _ in {1..200}; do
@@ -108,15 +110,20 @@ serve() {
     chmod 600 "$root/supervisor.pid"
     cleanup() {
         rm -f -- "$root/session.json" "$root/supervisor.pid"
-        [[ -z $dbus_pid ]] || kill "$dbus_pid" 2>/dev/null || true
-        [[ -z $xvfb_pid ]] || kill "$xvfb_pid" 2>/dev/null || true
-        [[ -z $dbus_pid ]] || wait "$dbus_pid" 2>/dev/null || true
-        [[ -z $xvfb_pid ]] || wait "$xvfb_pid" 2>/dev/null || true
-        rm -f -- "$root/session-bus" "$root/display"
+        [[ -z ${dbus_pid:-} ]] || kill "$dbus_pid" 2>/dev/null || true
+        [[ -z ${xvfb_pid:-} ]] || kill "$xvfb_pid" 2>/dev/null || true
+        [[ -z ${dbus_pid:-} ]] || wait "$dbus_pid" 2>/dev/null || true
+        [[ -z ${xvfb_pid:-} ]] || wait "$xvfb_pid" 2>/dev/null || true
+        rm -f -- "$root/session-bus" "$root/display" "$root/session.json.tmp"
     }
     trap cleanup EXIT
     trap 'exit 0' HUP INT TERM
 
+    # The state directory can survive an abrupt host or container restart. Remove
+    # the previous display-number file before launching the asynchronous Xvfb
+    # child so the readiness loop cannot observe stale contents before the
+    # child's redirection truncates the file.
+    rm -f -- "$root/display"
     Xvfb -displayfd 3 -screen 0 "$screen" -dpi 96 \
         3>"$root/display" >>"$root/xvfb.log" 2>&1 &
     xvfb_pid=$!

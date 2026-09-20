@@ -1,0 +1,15 @@
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+PermitEmptyPasswords no
+AllowUsers gui2tui
+PermitTTY yes
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+PermitTunnel no
+GatewayPorts no
+UsePAM no
+PrintMotd no
+ClientAliveInterval 15
+ClientAliveCountMax 2
