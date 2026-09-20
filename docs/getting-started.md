@@ -179,6 +179,28 @@ Temporary mode removes its private Xvfb/runtime directory when the child shell
 or command exits. Neither mode installs packages automatically. Missing Ubuntu
 dependencies are reported with the corresponding `apt install` command.
 
+### Validation-only Docker and SSH topology
+
+The repository contains a reproducible v0.7C live environment for the exact
+qualified Ubuntu 24.04 arm64 container topology:
+
+```bash
+RESULT_DIR=/tmp/gui2tui-v07c-evidence \
+  tests/live/v07c_headless_qualification.sh
+```
+
+It builds the current source, installs it into the container user's prefix,
+starts Managed Xvfb and controlled GTK fixtures, drives a real `docker exec
+-it` TTY and a loopback-only OpenSSH PTY, then stops/uninstalls GUI2TUI and
+removes its exact temporary container, image, key and port. It requires Docker,
+OpenSSH client tools and Python 3 on the host. It does not use a host GUI,
+personal SSH keys, privileged mode, host PID namespace or a complete desktop.
+
+This is live qualification infrastructure, not a supported production image
+or general Docker installer. Its result applies only to the recorded topology;
+package/architecture integration remains 0.7E work. A Docker or SSH PTY result
+also does not qualify a Linux virtual-console TTY.
+
 ## First two minutes
 
 1. Select an application with arrows, Enter or click. `/` starts a name filter; Enter applies,

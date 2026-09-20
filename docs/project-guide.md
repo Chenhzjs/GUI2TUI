@@ -455,13 +455,15 @@ layout reconstruction.
   installation, terminal, session D-Bus, Accessibility bus, registry, zero-app
   and application-semantic assessment, and checks optional handler
   executability without spawning it.
-- v0.7C X11, Headless and Same-host SSH Qualification: **PARTIALLY VALIDATED /
-  ENVIRONMENT EVIDENCE PENDING**. Current-source installed-binary evidence
-  qualifies Managed Xvfb on Ubuntu 24.04 aarch64, including isolated session
-  selection, dynamic operation/readback, fresh continuation, handler/terminal
-  lifecycle, stop/recreate, cleanup and uninstall. The available guest had no
-  real local Linux X11 desktop and no SSH server/listener; real X11, SSH ->
-  Desktop and SSH -> Managed remain NOT TESTED.
+- v0.7C Headless-first Environment Qualification: **COMPLETE / VALIDATED WITH
+  EXPLICIT LIMITATIONS**. The installed-binary Managed Xvfb qualification on
+  Ubuntu 24.04 arm64 remains valid. A separately authorized unprivileged
+  Ubuntu 24.04 arm64 container also qualified Docker interactive-TTY and real
+  same-host OpenSSH -> Managed operation, readback, dynamic continuation,
+  terminal restoration, Vim handoff, bounded disconnect/reconnect and cleanup.
+  Container restart rejected stale session/application authority before fresh
+  setup and selection. Linux native VT, real local X11 and SSH -> existing
+  Desktop remain NOT TESTED and are not implied by these results.
 - Revised user-confirmed 1.0 direction: GUI2TUI is Headless-first. Managed
   Xvfb is the concrete core target; Local TTY -> Managed and same-host SSH ->
   Managed are core candidates; Docker/OCI Headless is an important separately
@@ -470,10 +472,10 @@ layout reconstruction.
   remain separate evidence-driven candidates. Cross-host Remote Companion is
   deferred beyond 1.0. These categories are development targets, not broader
   qualification claims.
-- v0.7D through 0.7E: **PLANNED / NOT AUTHORIZED**. The next recommended work
-  is a separately authorized 0.7C supplement using a real Local Linux TTY and
-  a real same-host SSH PTY against Managed Headless, prioritizing SSH. Ordinary
-  desktop compatibility is no longer a Headless-core exit gate. No later phase
+- v0.7D through 0.7E: **PLANNED / NOT AUTHORIZED**. A separately authorized
+  real Linux virtual-console run is still needed if Local TTY -> Managed will
+  be a 1.0 Supported row. Otherwise the next planned phase is 0.7D. Ordinary
+  desktop compatibility is not a Headless-core exit gate. No later phase
   starts automatically.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
@@ -524,8 +526,10 @@ bounded phases and completed 0.7A–0.7B results are in the
 [v0.7 roadmap](planning/v0.7-roadmap.md). Phase evidence is in the
 [0.7A session-selection handoff](validation/v0.7/environment-session-selection/HANDOFF.md)
 and [0.7B installation/diagnostics handoff](validation/v0.7/installation-diagnostics/HANDOFF.md),
-with partial 0.7C evidence in the
-[X11/headless/SSH handoff](validation/v0.7/x11-headless-ssh/HANDOFF.md).
+with the original partial evidence in the
+[X11/headless/SSH handoff](validation/v0.7/x11-headless-ssh/HANDOFF.md) and the
+completed Headless supplement in the
+[Headless qualification handoff](validation/v0.7/headless-first-qualification/HANDOFF.md).
 The current product priority and revised phase exits are normative in the
 [Headless-first contract revision](planning/v0.7-headless-first-contract.md);
 it changes planning without rewriting historical evidence.
@@ -541,11 +545,11 @@ handoff before any further work. v0.3.0 is released and immutable. Future
 source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
-internally. v0.7 Discovery and 0.7A–0.7B are complete; 0.7C has qualified the
-available Managed environment but remains partial pending revised Headless
-environment evidence, especially real SSH -> Managed and Local TTY -> Managed.
-Real X11 remains NOT TESTED as an optional compatibility row. 0.7D–0.7E each
-require separate explicit authorization.
+internally. v0.7 Discovery and 0.7A–0.7C are complete; 0.7C qualifies the
+recorded Managed, Docker interactive-TTY and same-host SSH -> Managed
+topologies with explicit limitations. Linux native VT and real X11 remain NOT
+TESTED and are not claimed. 0.7D–0.7E each require separate explicit
+authorization.
 
 ## 21. Glossary
 

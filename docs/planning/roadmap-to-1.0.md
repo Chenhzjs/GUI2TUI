@@ -28,7 +28,7 @@ generic semantic tasks.
 | v0.4 | Semantic Workflow Reconstruction | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
-| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7B COMPLETE / 0.7C PARTIALLY VALIDATED / LATER PHASES NOT AUTHORIZED** |
+| v0.7 | Deployment & Environment Completeness | **DISCOVERY AND 0.7A–0.7C COMPLETE / LATER PHASES NOT AUTHORIZED** |
 | 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
@@ -538,19 +538,24 @@ configured complex-text handler without executing it. Controlled Ubuntu 24.04
 arm64 Xvfb evidence validates this foundation, but does not qualify a real
 local X11 desktop, SSH, package ABI, Wayland or XWayland.
 
-0.7C has completed the evidence available in the current Ubuntu 24.04 aarch64
-environment. The installed program qualified Managed Xvfb creation, reuse,
+The original 0.7C run completed the evidence available in its Ubuntu 24.04
+arm64 environment. The installed program qualified Managed Xvfb creation, reuse,
 explicit selection, dynamic operation/readback, fresh-scene continuation,
 terminal and handler handoff, stop/recreate, exact cleanup and uninstall. Two
 controlled registries also retained Desktop/Managed isolation. The environment
-had neither a real Linux X11 desktop nor an SSH server/listener, so real local
-X11, SSH -> Desktop and SSH -> Managed remain NOT TESTED. 0.7C is therefore
-**PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING**, not fully qualified.
-Under the revised contract, the highest-priority gaps are a real SSH ->
-Managed interactive PTY and a real Local Linux TTY -> Managed run. Real local
-X11 and SSH -> Desktop retain their NOT TESTED facts but no longer block the
-Headless-core exit. No new environment evidence was produced by the contract
-revision.
+had neither a real Linux X11 desktop nor an SSH server/listener, so that
+historical handoff correctly recorded those rows as NOT TESTED.
+
+A later, separately authorized Headless supplement qualified an unprivileged
+Ubuntu 24.04 arm64 Docker interactive TTY and real same-host OpenSSH -> Managed
+interactive PTY using an installed current-source program. It covered Doctor,
+fresh selection, semantic operation/readback, dynamic continuation, normal
+terminal restoration, real Vim handoff, bounded transport loss/reconnection,
+container restart authority invalidation and cleanup. 0.7C is therefore
+**COMPLETE / VALIDATED WITH EXPLICIT LIMITATIONS** under the revised contract.
+Linux native VT, real local X11 and SSH -> existing Desktop remain NOT TESTED;
+the first is not claimed Supported and the latter two are optional
+compatibility rows.
 
 ### Platform boundary
 
@@ -821,16 +826,14 @@ milestone never changes the next milestone to `CURRENT` automatically.
 ## 15. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
-v0.7 Discovery, **0.7A — Environment Contract and Session Selection** and
-**0.7B — Installation and Diagnostic Completeness** are complete. 0.7C has
-qualified Managed Xvfb in the available Ubuntu 24.04 aarch64 environment but
-is **PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING**. The next recommended
-work is a separately authorized revised 0.7C supplement using a real same-host
-SSH PTY and a real Local Linux TTY against Managed Headless, prioritizing SSH.
-Ordinary X11 Desktop remains an optional NOT TESTED compatibility row. A
-Docker/OCI candidate needs its own bounded authorization before the 0.7E
-matrix is frozen. 0.7D–0.7E, v0.7 milestone qualification, 1.0 integration,
-v1.0.0 RC, and public release remain unauthorized.
+v0.7 Discovery and 0.7A–0.7C are complete. 0.7C qualified the exact Managed
+Xvfb, unprivileged Docker interactive-TTY and same-host SSH -> Managed
+topologies recorded in its handoffs, with explicit limitations. Linux native
+VT and ordinary X11 Desktop remain NOT TESTED and are not claimed. The next
+recommended authorization is a narrow real Linux virtual-console qualification
+if that topology is intended for 1.0; otherwise the next planned phase is
+0.7D. 0.7D–0.7E, v0.7 milestone qualification, 1.0 integration, v1.0.0 RC,
+and public release remain unauthorized.
 
 ## 16. References
 

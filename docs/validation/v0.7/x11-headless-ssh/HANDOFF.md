@@ -331,3 +331,12 @@ The authoritative revised classification and exits are in the
 [Headless-first contract](../../../planning/v0.7-headless-first-contract.md)
 and [v0.7 roadmap](../../../planning/v0.7-roadmap.md). This documentation-only
 revision did not complete 0.7C or run new environment qualification.
+
+## 25. Subsequent Headless qualification evidence
+
+On 2026-09-20 a separately authorized supplement obtained the real Docker and
+SSH evidence that was unavailable during this historical run. It does not
+change any original `NOT TESTED` statement above: those statements accurately
+describe the earlier environment. The new evidence and revised current 0.7C
+status are recorded in the
+[Headless-first qualification handoff](../headless-first-qualification/HANDOFF.md).
