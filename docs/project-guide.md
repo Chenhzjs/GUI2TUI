@@ -363,7 +363,7 @@ layout reconstruction.
 - Public release: **v0.3.0**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
   COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.6 COMPLETE / MILESTONE
-  QUALIFIED / INTERNAL**
+  QUALIFIED / INTERNAL; v0.7 COMPLETE / MILESTONE QUALIFIED / INTERNAL**
 - v0.1.0, v0.2.0 and v0.3.0 source tags: immutable and already published
 - v0.3 functional development: **COMPLETE**
 - v0.3.0 release-candidate qualification: **QUALIFIED**
@@ -490,8 +490,9 @@ layout reconstruction.
   host; the exact aarch64 package additionally passed Managed, unprivileged
   Docker PTY, real same-host SSH, Native Wayland and XWayland integration.
   Linux native VT, ordinary desktops and Wayland over SSH remain NOT TESTED.
-- v0.7 Milestone Qualification: **NOT STARTED / NOT AUTHORIZED**. No later
-  phase starts automatically.
+- v0.7 Milestone Qualification: **COMPLETE / MILESTONE QUALIFIED / INTERNAL**.
+  The combined evidence audit found P0/P1 zero and retained every recorded
+  environment limitation. No later phase starts automatically.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -533,8 +534,9 @@ and the completed external/terminal lifecycle evidence is in the
 completed integrated runtime evidence is in the
 [0.6E handoff](validation/v0.6/integrated-runtime-continuity/HANDOFF.md).
 The formal internal close and evidence index are in the
-[v0.6 milestone handoff](validation/v0.6/milestone/HANDOFF.md). v0.7 and
-release work are not automatically authorized. The current deployment
+[v0.6 milestone handoff](validation/v0.6/milestone/HANDOFF.md). v1.0
+Integration & Stabilization and release work are not automatically authorized.
+The current deployment
 architecture, evidence classifications and candidate 1.0 environment contract
 are in the [v0.7 Discovery](planning/v0.7-deployment-environment.md); the five
 completed bounded phases and their current status are in the
@@ -548,7 +550,9 @@ completed Headless supplement in the
 and the bounded Native Wayland/XWayland evidence is in the
 [0.7D handoff](validation/v0.7/wayland-xwayland/HANDOFF.md). Exact-source
 package, ABI, install, Doctor and integrated environment evidence is in the
-[0.7E handoff](validation/v0.7/package-environment/HANDOFF.md).
+[0.7E handoff](validation/v0.7/package-environment/HANDOFF.md), and the
+combined internal close is in the
+[v0.7 milestone handoff](validation/v0.7/milestone/HANDOFF.md).
 The current product priority and revised phase exits are normative in the
 [Headless-first contract revision](planning/v0.7-headless-first-contract.md);
 it changes planning without rewriting historical evidence.
@@ -571,8 +575,10 @@ topology, all with explicit limitations. 0.7E qualifies the exact-source
 dual-architecture internal package contract, with an explicit x86_64
 emulated-runtime limitation, and reruns the approved aarch64 integrations from
 the package. Linux native VT, real X11, ordinary desktop Wayland and Wayland
-over SSH remain NOT TESTED and are not claimed. The separate v0.7 milestone
-close requires explicit authorization.
+over SSH remain NOT TESTED and are not claimed. The combined milestone close
+has qualified this bounded deployment baseline internally. The next
+recommended phase is v1.0 Integration & Stabilization, which remains separately
+unauthorized and is not an RC.
 
 ## 21. Glossary
 

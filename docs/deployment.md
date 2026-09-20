@@ -26,7 +26,9 @@ Doctor/Managed setup/semantic smoke and safe uninstall through amd64
 Docker/OrbStack platform emulation on an arm64 host; native x86_64 hardware
 and the full x86_64 environment matrix remain outside that claim. Both
 archives reference at most glibc 2.34 and passed the declared glibc 2.35 gate.
-They are internal qualification artifacts, not a published v0.7 package.
+They are internal qualification artifacts, not a published v0.7 package. The
+combined evidence review closes v0.7 as an internal qualified milestone; it
+does not broaden this matrix or authorize v1.0 integration or release.
 
 GUI2TUI's core user may have only a local TTY, SSH PTY or container TTY. The
 target GUI application can still require a background X11 display server or

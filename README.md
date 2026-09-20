@@ -35,8 +35,8 @@ backing file—into the semantic backend.
 
 ## Build, install and quick start
 
-The current development source retains package version `0.3.0`; v0.7 is an
-internal milestone, not a published v0.7.0 package. Responsive spatial
+The current development source retains package version `0.3.0`; v0.7 is a
+qualified internal milestone, not a published v0.7.0 package. Responsive spatial
 presentation remains the default; `--layout flat` remains a compatibility
 fallback.
 

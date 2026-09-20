@@ -46,8 +46,9 @@ main executable, so they do not depend on the checkout, Cargo target directory
 or current working directory. `gui2tui-local` is optional for core semantic
 operation but is installed so the explicit same-host modality endpoint remains
 available. No separate runtime data bundle is required. Existing archive
-`DEPENDENCIES.txt` files describe their own binary linkage; current-source
-package/ABI qualification remains a later v0.7 phase.
+`DEPENDENCIES.txt` files describe their own binary linkage. The internal v0.7E
+qualification produced exact-source x86_64 and aarch64 archives with a glibc
+2.35 gate (observed maximum 2.34); no v0.7 package was published.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
 cursor/alternate-screen support, and an already running accessible GUI application.
@@ -197,9 +198,9 @@ OpenSSH client tools and Python 3 on the host. It does not use a host GUI,
 personal SSH keys, privileged mode, host PID namespace or a complete desktop.
 
 This is live qualification infrastructure, not a supported production image
-or general Docker installer. Its result applies only to the recorded topology;
-package/architecture integration remains 0.7E work. A Docker or SSH PTY result
-also does not qualify a Linux virtual-console TTY.
+or general Docker installer. Its result applies only to the recorded topology.
+0.7E subsequently reran it using the exact internal aarch64 package; a Docker
+or SSH PTY result still does not qualify a Linux virtual-console TTY.
 
 The repository also contains a bounded 0.7D Headless Wayland/XWayland live
 environment:
