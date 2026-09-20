@@ -1,0 +1,32 @@
+FROM rust:1.88-jammy
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        at-spi2-core \
+        binutils \
+        ca-certificates \
+        dbus-x11 \
+        file \
+        gir1.2-gtk-3.0 \
+        gir1.2-gtk-4.0 \
+        git \
+        jq \
+        libglib2.0-bin \
+        locales \
+        procps \
+        python3 \
+        python3-gi \
+        python3-pexpect \
+        python3-pyqt5 \
+        python3-pyte \
+        x11-utils \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/* \
+    && locale-gen C.UTF-8
+
+ENV LANG=C.UTF-8 \
+    TERM=xterm-256color
+
+WORKDIR /src

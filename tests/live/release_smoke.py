@@ -10,8 +10,9 @@ import pyte
 
 bundle = pathlib.Path(os.environ["GUI2TUI_BUNDLE"])
 result = pathlib.Path(os.environ["RESULT_DIR"])
-binary = bundle / "bin"
-inspector = bundle / "libexec/gui2tui/gui2tui-inspect"
+runtime = pathlib.Path(os.environ.get("GUI2TUI_RUNTIME_PREFIX", str(bundle)))
+binary = runtime / "bin"
+inspector = runtime / "libexec/gui2tui/gui2tui-inspect"
 config = pathlib.Path(os.environ["XDG_CONFIG_HOME"]) / "gui2tui/config.toml"
 sentinel = "release-password-sentinel"
 transcript = ""

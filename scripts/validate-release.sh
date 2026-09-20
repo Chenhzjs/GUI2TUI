@@ -10,6 +10,33 @@ temp=$(mktemp -d)
 trap 'rm -rf -- "$temp"' EXIT
 tar -tzf "$archive" >"$temp/layout.txt"
 if grep -Eq '^/|(^|/)\.\.(/|$)' "$temp/layout.txt"; then echo 'unsafe archive path' >&2; exit 1; fi
+python3 - "$archive" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+archive = pathlib.Path(sys.argv[1])
+with tarfile.open(archive, "r:gz") as payload:
+    members = payload.getmembers()
+    names = [member.name for member in members]
+    if len(names) != len(set(names)):
+        raise SystemExit("archive safety gate failed: duplicate member")
+    roots = {pathlib.PurePosixPath(name).parts[0] for name in names if name}
+    if len(roots) != 1:
+        raise SystemExit("archive safety gate failed: expected one top-level directory")
+    for member in members:
+        path = pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts:
+            raise SystemExit("archive safety gate failed: unsafe member path")
+        if not (member.isdir() or member.isfile()):
+            raise SystemExit(
+                f"archive safety gate failed: links and special files are forbidden: {member.name}"
+            )
+        if member.mode & 0o022:
+            raise SystemExit(
+                f"archive safety gate failed: group/world-writable member: {member.name}"
+            )
+PY
 tar -xzf "$archive" -C "$temp"
 bundle="$temp/$name"
 for file in bin/gui2tui libexec/gui2tui/gui2tui-inspect libexec/gui2tui/gui2tui-local libexec/gui2tui/headless-session install-user.sh uninstall-user.sh README.md LICENSE-MIT LICENSE-APACHE config.example.toml DEPENDENCIES.txt BUILD-INFO.json ABI.json smoke/run.sh; do

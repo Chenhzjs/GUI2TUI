@@ -22,6 +22,23 @@ private_key=$scratch/id_ed25519
 known_hosts=$scratch/known_hosts
 container_started=false
 image_created=false
+bundle_dir=${GUI2TUI_QUALIFICATION_BUNDLE:-}
+bundle_mount=()
+if [[ -n $bundle_dir ]]; then
+    [[ $bundle_dir == /* && -d $bundle_dir ]] || {
+        echo 'GUI2TUI_QUALIFICATION_BUNDLE must be an absolute extracted bundle directory' >&2
+        exit 2
+    }
+    for required in bin/gui2tui libexec/gui2tui/gui2tui-inspect \
+        libexec/gui2tui/gui2tui-local libexec/gui2tui/headless-session \
+        install-user.sh uninstall-user.sh BUILD-INFO.json ABI.json; do
+        [[ -f $bundle_dir/$required ]] || {
+            echo "qualification bundle is missing: $required" >&2
+            exit 2
+        }
+    done
+    bundle_mount=(--mount "type=bind,src=$bundle_dir,dst=/opt/gui2tui-bundle,readonly")
+fi
 
 container_exec() {
     docker exec --user gui2tui \
@@ -74,6 +91,7 @@ docker run -d \
     --label org.gui2tui.validation=v07c-headless \
     --publish 127.0.0.1::22 \
     --mount "type=bind,src=$private_key.pub,dst=/run/gui2tui-test/authorized_key.pub,readonly" \
+    "${bundle_mount[@]}" \
     "$image" >"$result_dir/container-id.txt"
 container_started=true
 
@@ -82,8 +100,14 @@ port=$(docker port "$container" 22/tcp | awk -F: '$1 == "127.0.0.1" { print $NF 
 [[ $(docker inspect --format '{{.HostConfig.Privileged}}' "$container") == false ]]
 [[ -z $(docker inspect --format '{{.HostConfig.PidMode}}' "$container") ]]
 [[ $(docker inspect --format '{{(index (index .NetworkSettings.Ports "22/tcp") 0).HostIp}}' "$container") == 127.0.0.1 ]]
-docker inspect --format '{{range .Mounts}}{{.Destination}} {{.RW}}{{end}}' "$container" \
-    | grep -qx '/run/gui2tui-test/authorized_key.pub false'
+mounts=$(docker inspect --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' "$container")
+grep -qx '/run/gui2tui-test/authorized_key.pub false' <<<"$mounts"
+if [[ -n $bundle_dir ]]; then
+    grep -qx '/opt/gui2tui-bundle false' <<<"$mounts"
+    [[ $(wc -l <<<"$mounts") == 2 ]]
+else
+    [[ $(wc -l <<<"$mounts") == 1 ]]
+fi
 
 for _ in {1..100}; do
     if ssh-keyscan -p "$port" 127.0.0.1 >"$known_hosts" 2>/dev/null; then

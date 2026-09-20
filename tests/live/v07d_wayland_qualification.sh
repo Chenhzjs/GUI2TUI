@@ -20,6 +20,23 @@ container="gui2tui-v07d-wayland-$short_commit-$$"
 container_started=false
 image_created=false
 control=/usr/local/libexec/gui2tui-v07d-container-control
+bundle_dir=${GUI2TUI_QUALIFICATION_BUNDLE:-}
+bundle_mount=()
+if [[ -n $bundle_dir ]]; then
+    [[ $bundle_dir == /* && -d $bundle_dir ]] || {
+        echo 'GUI2TUI_QUALIFICATION_BUNDLE must be an absolute extracted bundle directory' >&2
+        exit 2
+    }
+    for required in bin/gui2tui libexec/gui2tui/gui2tui-inspect \
+        libexec/gui2tui/gui2tui-local libexec/gui2tui/headless-session \
+        install-user.sh uninstall-user.sh BUILD-INFO.json ABI.json; do
+        [[ -f $bundle_dir/$required ]] || {
+            echo "qualification bundle is missing: $required" >&2
+            exit 2
+        }
+    done
+    bundle_mount=(--mount "type=bind,src=$bundle_dir,dst=/opt/gui2tui-bundle,readonly")
+fi
 
 container_exec() {
     docker exec --user gui2tui "$container" "$@"
@@ -60,12 +77,19 @@ docker run -d \
     --init \
     --name "$container" \
     --label org.gui2tui.validation=v07d-wayland \
+    "${bundle_mount[@]}" \
     "$image" >"$result_dir/container-id.txt"
 container_started=true
 
 [[ $(docker inspect --format '{{.HostConfig.Privileged}}' "$container") == false ]]
 [[ -z $(docker inspect --format '{{.HostConfig.PidMode}}' "$container") ]]
-[[ -z $(docker inspect --format '{{range .Mounts}}{{.Destination}}{{end}}' "$container") ]]
+mounts=$(docker inspect --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' "$container")
+if [[ -n $bundle_dir ]]; then
+    grep -qx '/opt/gui2tui-bundle false' <<<"$mounts"
+    [[ $(wc -l <<<"$mounts") == 1 ]]
+else
+    [[ -z $mounts ]]
+fi
 [[ -z $(docker inspect --format '{{range $key, $value := .NetworkSettings.Ports}}{{$key}}{{end}}' "$container") ]]
 [[ $(container_exec id -u) != 0 ]]
 
