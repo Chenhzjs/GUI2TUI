@@ -1,19 +1,30 @@
-# Deployment and environment direction
+# Headless-first deployment and environment direction
 
 The following table distinguishes the user-approved 1.0 development target
 from current qualification. A target is not a formal support claim.
 
 | Deployment | 1.0 direction | Current qualification |
 | --- | --- | --- |
-| Local Linux X11, same user/session | Core support target | NOT TESTED in a real local desktop; controlled Xvfb evidence is not a substitute. |
 | GUI2TUI-managed Xvfb | Core support target | QUALIFIED on Ubuntu 24.04 aarch64 with an installed current-source binary: create/reuse/stop/recreate, operation/readback, terminal/handler lifecycle and cleanup passed. 0.7E package integration remains. |
-| Native Wayland | Priority validation target; seek inclusion | NOT TESTED in a real native session; 0.7D decides status from public semantics and safe geometry degradation. |
-| XWayland | Priority validation target; seek inclusion separately | NOT TESTED; native Wayland results do not qualify this row or vice versa. |
-| Same-host SSH TUI | Seek inclusion | NOT TESTED end to end: the 0.7C environment had no SSH server/listener, so neither SSH -> Desktop nor SSH -> Managed is qualified. |
+| Local Linux TTY -> Managed | Core candidate | Managed local PTY passed; real Linux virtual-console TTY is NOT TESTED. |
+| Same-host SSH -> Managed | Core candidate; highest-priority evidence gap | NOT TESTED end to end: the 0.7C environment had no SSH server/listener or real interactive PTY. |
+| Docker/OCI Headless | Important separately qualified candidate | NOT TESTED; no container image or deployment is currently qualified. |
+| Local Linux X11, same user/session | Optional compatibility | NOT TESTED in a real local desktop; controlled Xvfb evidence is not a substitute. |
+| Same-host SSH -> existing Desktop | Optional compatibility | NOT TESTED; it is not a Headless-core prerequisite. |
+| Native Wayland | Evidence-driven candidate | NOT TESTED in a real native session; 0.7D decides status from public semantics and safe geometry degradation. |
+| XWayland | Separate evidence-driven candidate | NOT TESTED; native Wayland results do not qualify this row or vice versa. |
+| Headless Wayland | Feasibility candidate | NOT TESTED; no compositor is bundled or qualified. |
 | Local TUI + GUI on another host | Deferred until after 1.0 | No Remote Companion, cross-host semantic transport, authentication, event/cache sync, or remote backend is implemented. |
 | Linux same-host graphical viewer | Existing optional modality | Explicit private socket, configured handler and local authorization; this is not Remote Companion. |
 | macOS/Windows GUI backend | Outside the Linux AT-SPI 1.0 baseline | macOS remains build/development verification only; no GUI semantic backend. |
 | New TTY attaches to existing runtime | Not implemented | Same-process/same-PTY detach/resume is distinct and verified. |
+
+GUI2TUI's core user may have only a local TTY, SSH PTY or container TTY. The
+target GUI application can still require a background X11 display server or
+Wayland compositor. Headless-first means no directly interactive graphical
+desktop is required for the user; it does not mean the application has no
+graphical runtime dependency. A complete visible desktop environment is not a
+prerequisite for the Managed path.
 
 Choose the connection environment before application discovery:
 
@@ -62,13 +73,14 @@ application-level semantic sufficiency as NOT CHECKED. A configured complex
 text handler is validated as direct argv and executable without starting it or
 creating a candidate; an absent handler remains valid.
 
-Headless does not mean launching GUI programs without any display server. It means the terminal
-frontend needs no graphical viewer. For tests, Xvfb supplies the application's graphical environment;
-normal sessions can use their existing desktop. Wayland semantic access is
-separate from static capture; Wayland capture is NOT IMPLEMENTED, and no
-compositor is bundled. Missing global Wayland geometry must degrade
-presentation and cannot by itself invalidate otherwise working semantic
-interaction.
+Headless does not mean launching GUI programs without any display server. It
+means the terminal frontend needs no graphical viewer. Managed Xvfb supplies
+the application's qualified background graphical environment; ordinary
+sessions may use an existing desktop as optional compatibility. Native
+Wayland, XWayland and Headless Wayland require separate evidence. Wayland
+static capture is NOT IMPLEMENTED, and no compositor is bundled. Missing
+global Wayland geometry must degrade presentation and cannot by itself
+invalidate otherwise working semantic interaction.
 
 No viewer endpoint means no endpoint wait on startup. F4 resource tasks remain reference-first;
 materialization on the GUI2TUI host is independent of transport. A captured region is labelled
@@ -79,7 +91,14 @@ Artifact ownership/leases prevent one live session's files being scavenged by an
 root is unnecessary and does not solve access to another user's session bus.
 
 The current 0.7C evidence is intentionally asymmetric: Managed Xvfb passed in
-the named Ubuntu environment, while real local X11 and both same-host SSH rows
-remain NOT TESTED. A local PTY, an SSH-origin environment variable or a
-controlled Desktop Xvfb cannot substitute for a real SSH client/server PTY or
-a normal local X11 desktop.
+the named Ubuntu environment, while real Local Linux TTY, SSH -> Managed,
+ordinary local X11 and SSH -> existing Desktop remain NOT TESTED. A local PTY,
+an SSH-origin environment variable or a controlled Desktop Xvfb cannot
+substitute for those named environments. Under the revised Headless-first
+contract, SSH -> Managed and Local TTY -> Managed are core evidence gaps;
+ordinary desktop rows are optional compatibility. Docker/OCI and all Wayland
+rows also remain NOT TESTED.
+
+See the
+[Headless-first product and environment contract](planning/v0.7-headless-first-contract.md)
+for the current classification and revised phase exits.

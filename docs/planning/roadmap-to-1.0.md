@@ -433,6 +433,13 @@ authority and usable recovery, not hiding interruptions or retrying forever.
 **Core question:** Can users reliably run GUI2TUI in every environment that
 the 1.0 product contract claims to support?
 
+The current product contract is **Headless-first**: the primary user may have
+only a local TTY, SSH PTY or container TTY while a GUI application runs in a
+same-host background graphical and Accessibility session. GUI2TUI does not
+remove the application's X11/Wayland runtime needs, but its core path must not
+require a complete visible desktop environment. Ordinary desktops are
+compatibility environments, not a Headless prerequisite.
+
 Earlier releases have qualified package architectures and selected Linux
 validation environments. v0.7 must turn deployment assumptions into an
 explicit, reproducible support boundary. Unsupported configurations should be
@@ -442,9 +449,11 @@ diagnosed honestly rather than inferred from a nearby success.
 
 At minimum, v0.7 should review:
 
-- a local Linux graphical session;
-- X11 and the exact meaning of any Wayland support;
-- headless/Xvfb-style operation;
+- Managed Xvfb and other explicitly claimed background graphical runtimes;
+- real Local Linux TTY and same-host SSH PTY operation;
+- Docker/OCI Headless as a separately qualified candidate;
+- ordinary local graphical sessions as optional compatibility;
+- the separate meanings of native Wayland, XWayland and Headless Wayland;
 - Accessibility/session D-Bus discovery and permissions;
 - installation, first run, and `doctor` diagnostics;
 - required terminal capabilities;
@@ -483,7 +492,7 @@ The decision must not remain ambiguous at the 1.0 boundary. It must be driven
 by the intended deployment contract and evidence, not by the existence of an
 architectural sketch.
 
-### Discovery, 0.7A and 0.7B result
+### Discovery, 0.7A, 0.7B and revised product contract
 
 The completed [v0.7 Discovery](v0.7-deployment-environment.md) found that the
 current AT-SPI/D-Bus backend is a same-host, same-accessibility-session model.
@@ -492,14 +501,18 @@ evidence for a pre-emptive Wayland semantic-backend rewrite. Native Wayland
 and XWayland still require separate real-session qualification; optional
 static visual acquisition remains native-X11-only.
 
-The user-approved development direction makes same-user local Linux X11 and
-the bundled managed Xvfb topology core 1.0 support targets. Native Wayland and
-XWayland are separate priority validation targets that should be included if
-real evidence supports them; lack of global geometry alone cannot invalidate
-otherwise correct semantic interaction. Same-host SSH TUI should be pursued
-for 1.0 through the existing session-selection and terminal model. Cross-host
-local-TUI/remote-GUI operation and a Remote Companion are explicitly deferred
-until after 1.0.
+The original user-approved development direction made same-user local Linux
+X11 and bundled Managed Xvfb core targets. The later
+[Headless-first contract revision](v0.7-headless-first-contract.md) changes the
+planning priority without changing historical evidence. Managed Xvfb is now
+the concrete core target; Local TTY -> Managed and same-host SSH -> Managed
+are core candidates; and Docker/OCI Headless is an important separately
+qualified candidate. Ordinary X11 Desktop and SSH -> existing Desktop are
+optional compatibility rows rather than Headless-core gates. Native Wayland,
+XWayland and Headless Wayland are separate evidence-driven candidates; lack of
+global geometry alone cannot invalidate otherwise correct semantic
+interaction. Cross-host local-TUI/remote-GUI operation and a Remote Companion
+remain explicitly deferred until after 1.0.
 
 0.7A is complete. `--session desktop|managed` now selects one connection
 environment before D-Bus initialization. Explicit desktop never reads a
@@ -533,6 +546,11 @@ controlled registries also retained Desktop/Managed isolation. The environment
 had neither a real Linux X11 desktop nor an SSH server/listener, so real local
 X11, SSH -> Desktop and SSH -> Managed remain NOT TESTED. 0.7C is therefore
 **PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING**, not fully qualified.
+Under the revised contract, the highest-priority gaps are a real SSH ->
+Managed interactive PTY and a real Local Linux TTY -> Managed run. Real local
+X11 and SSH -> Desktop retain their NOT TESTED facts but no longer block the
+Headless-core exit. No new environment evidence was produced by the contract
+revision.
 
 ### Platform boundary
 
@@ -806,11 +824,13 @@ v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
 v0.7 Discovery, **0.7A — Environment Contract and Session Selection** and
 **0.7B — Installation and Diagnostic Completeness** are complete. 0.7C has
 qualified Managed Xvfb in the available Ubuntu 24.04 aarch64 environment but
-is **PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING** because real local
-X11 and SSH PTY were unavailable. The next recommended work is to supply those
-approved environments and complete the missing 0.7C rows. 0.7D–0.7E, v0.7
-milestone qualification, 1.0 integration, v1.0.0 RC, and public release remain
-unauthorized.
+is **PARTIALLY VALIDATED / ENVIRONMENT EVIDENCE PENDING**. The next recommended
+work is a separately authorized revised 0.7C supplement using a real same-host
+SSH PTY and a real Local Linux TTY against Managed Headless, prioritizing SSH.
+Ordinary X11 Desktop remains an optional NOT TESTED compatibility row. A
+Docker/OCI candidate needs its own bounded authorization before the 0.7E
+matrix is frozen. 0.7D–0.7E, v0.7 milestone qualification, 1.0 integration,
+v1.0.0 RC, and public release remain unauthorized.
 
 ## 16. References
 
@@ -841,6 +861,9 @@ unauthorized.
 - [v0.7 deployment/environment Discovery](v0.7-deployment-environment.md) —
   current deployment architecture, evidence, candidate support contract and
   remote-companion decision.
+- [v0.7 Headless-first contract revision](v0.7-headless-first-contract.md) —
+  current product priority, environment classifications and revised 0.7C–0.7E
+  exits; it does not rewrite historical evidence.
 - [v0.7 roadmap](v0.7-roadmap.md) — completed 0.7A/0.7B phases, partial 0.7C
   environment evidence and later bounded phases, none automatically
   authorized.

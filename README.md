@@ -40,6 +40,11 @@ internal milestone, not a published v0.7.0 package. Responsive spatial
 presentation remains the default; `--layout flat` remains a compatibility
 fallback.
 
+GUI2TUI is Headless-first: its core path targets terminal-only users while the
+GUI application runs in a same-host background graphical/Accessibility
+session. A complete visible desktop is not required for the Managed path; the
+application may still require Xvfb or another qualified graphical runtime.
+
 ```bash
 git clone https://github.com/Chenhzjs/GUI2TUI.git
 cd GUI2TUI
@@ -53,9 +58,10 @@ gui2tui --session desktop
 
 The GUI application must already be running in the explicitly selected Linux
 session whose AT-SPI bus is reachable. `--session desktop` preserves the
-current process's desktop/session environment. Same-host SSH is a 1.0
-qualification target, not yet a formally supported deployment row. No config
-file, root privilege, or companion viewer is required.
+current process's desktop/session environment as an optional compatibility
+path. Same-host SSH -> Managed is a core 1.0 candidate but remains NOT TESTED
+with a real SSH interactive PTY. No config file, root privilege, or companion
+viewer is required.
 
 For a server without a physical desktop, configure a persistent managed Xvfb +
 D-Bus + AT-SPI session once:

@@ -304,3 +304,30 @@ Wayland/XWayland 后续分别验证，same-host SSH 争取纳入，Remote Compan
 1.0 后。下一步应先补真实 X11 与 SSH 环境证据；0.7D/0.7E 未授权，v0.7 仍为
 内部里程碑，package version 仍为 0.3.0，v1.0.0 仍是下一计划公开版本。不得
 自行扩展任务。
+
+## 24. Post-handoff Headless-first contract revision
+
+This section was appended after the recorded 0.7C validation. It changes
+future product priority and exit criteria only; sections 1-23 remain the
+historical evidence record.
+
+- Managed Xvfb remains **QUALIFIED on Ubuntu 24.04 aarch64** on the exact
+  recorded topology. No rerun or broader claim is implied.
+- Real local X11, SSH -> existing Desktop and SSH -> Managed remain **NOT
+  TESTED**. The local PTY and controlled Xvfb evidence were not relabelled.
+- GUI2TUI is now Headless-first. Real SSH -> Managed is the highest-priority
+  0.7C evidence gap, and Local Linux TTY -> Managed requires a real virtual-
+  console run if that exact topology will be Supported.
+- Ordinary local X11 and SSH -> existing Desktop are optional compatibility
+  rows rather than Headless-core 0.7C exit gates. Their NOT TESTED status is
+  unchanged.
+- Docker/OCI Headless is an important but NOT TESTED candidate requiring a
+  separately authorized bounded qualification before the 0.7E matrix is
+  frozen if it remains in the proposed 1.0 contract.
+- Native Wayland, XWayland and Headless Wayland remain separately NOT TESTED
+  candidates for the planned, unauthorized 0.7D phase.
+
+The authoritative revised classification and exits are in the
+[Headless-first contract](../../../planning/v0.7-headless-first-contract.md)
+and [v0.7 roadmap](../../../planning/v0.7-roadmap.md). This documentation-only
+revision did not complete 0.7C or run new environment qualification.

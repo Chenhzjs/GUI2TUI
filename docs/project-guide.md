@@ -14,6 +14,16 @@ remains a safe selection task, and document-like content becomes a bounded
 Reader with navigation and search. Useful exposed geometry supplies spatial
 evidence for arranging those tasks.
 
+GUI2TUI is **Headless-first**. Its defining use case is a user who has only a
+local TTY, SSH PTY or container TTY and cannot interact with a graphical
+desktop directly, while the target GUI application runs in a same-host
+background graphical and Accessibility session. The application may still
+need Xvfb, another qualified display server or a Wayland compositor; GUI2TUI
+transforms user interaction, not the application's graphical runtime
+dependency. A complete visible GNOME, KDE or XFCE desktop is not a prerequisite
+for the core Managed path. Existing desktops remain optional compatibility
+environments.
+
 ## 2. What GUI2TUI Is Not
 
 It is not a framebuffer-to-ANSI converter, screenshot renderer, remote desktop,
@@ -452,13 +462,19 @@ layout reconstruction.
   lifecycle, stop/recreate, cleanup and uninstall. The available guest had no
   real local Linux X11 desktop and no SSH server/listener; real X11, SSH ->
   Desktop and SSH -> Managed remain NOT TESTED.
-- User-confirmed 1.0 direction: local Linux X11 and managed Xvfb are core
-  targets; native Wayland/XWayland are priority validation targets; same-host
-  SSH TUI should be pursued; cross-host Remote Companion is deferred beyond
-  1.0. These are development targets, not claims of completed qualification.
+- Revised user-confirmed 1.0 direction: GUI2TUI is Headless-first. Managed
+  Xvfb is the concrete core target; Local TTY -> Managed and same-host SSH ->
+  Managed are core candidates; Docker/OCI Headless is an important separately
+  qualified candidate. Ordinary X11 Desktop and SSH -> existing Desktop are
+  optional compatibility rows. Native Wayland, XWayland and Headless Wayland
+  remain separate evidence-driven candidates. Cross-host Remote Companion is
+  deferred beyond 1.0. These categories are development targets, not broader
+  qualification claims.
 - v0.7D through 0.7E: **PLANNED / NOT AUTHORIZED**. The next recommended work
-  is to supply approved real-X11 and SSH environments and complete the missing
-  0.7C rows; no later phase starts automatically.
+  is a separately authorized 0.7C supplement using a real Local Linux TTY and
+  a real same-host SSH PTY against Managed Headless, prioritizing SSH. Ordinary
+  desktop compatibility is no longer a Headless-core exit gate. No later phase
+  starts automatically.
 
 Release and validation details live in the [v0.3.0 release notes](release-notes-v0.3.0.md),
 [production release verification](validation/v0.3/release/HANDOFF.md), and
@@ -510,6 +526,9 @@ bounded phases and completed 0.7A–0.7B results are in the
 and [0.7B installation/diagnostics handoff](validation/v0.7/installation-diagnostics/HANDOFF.md),
 with partial 0.7C evidence in the
 [X11/headless/SSH handoff](validation/v0.7/x11-headless-ssh/HANDOFF.md).
+The current product priority and revised phase exits are normative in the
+[Headless-first contract revision](planning/v0.7-headless-first-contract.md);
+it changes planning without rewriting historical evidence.
 
 ## 20. v0.3 Capability Recovery
 
@@ -523,8 +542,10 @@ source fixes require v0.3.1 or later. v0.4 is an internal qualified milestone;
 v0.5 is complete and milestone-qualified internally. v0.6 Discovery is
 complete, 0.6A through 0.6E are validated, and v0.6 is milestone-qualified
 internally. v0.7 Discovery and 0.7A–0.7B are complete; 0.7C has qualified the
-available Managed environment but remains partial pending real-X11 and SSH
-evidence. 0.7D–0.7E each require separate explicit authorization.
+available Managed environment but remains partial pending revised Headless
+environment evidence, especially real SSH -> Managed and Local TTY -> Managed.
+Real X11 remains NOT TESTED as an optional compatibility row. 0.7D–0.7E each
+require separate explicit authorization.
 
 ## 21. Glossary
 
