@@ -29,7 +29,7 @@ generic semantic tasks.
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **COMPLETE / MILESTONE QUALIFIED / INTERNAL** |
-| 1.0 | Integration, Stabilization & Release Qualification | **PLANNED / NOT AUTHORIZED** |
+| 1.0 | Integration, Stabilization & Release Qualification | **DISCOVERY COMPLETE / IMPLEMENTATION NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
@@ -65,7 +65,8 @@ internal milestones:
   v0.7 Deployment & Environment Completeness -> Qualification -> STOP
 
 functional / architectural feature freeze
-  -> 1.0 Integration & Stabilization
+  -> v1.0 Integration Discovery (this review) — COMPLETE
+  -> 1.0A–1.0E bounded Integration & Stabilization — NOT AUTHORIZED
   -> separately authorized v1.0.0 RC
   -> separately authorized public v1.0.0 release
 ```
@@ -836,7 +837,42 @@ The status vocabulary is `COMPLETED`, `CURRENT`, `PLANNED`, `RECOMMENDED`,
 `CURRENT` may be applied only after explicit authorization. Completion of one
 milestone never changes the next milestone to `CURRENT` automatically.
 
-## 15. Immediate next decision
+## 15. v1.0 Integration Discovery result
+
+The v1.0 Integration & Stabilization Discovery is **COMPLETE**. It found no
+new semantic, runtime, presentation, or deployment architecture layer that is
+required before 1.0. The remaining work is final-source/package integration,
+terminal usability observation, bounded stability/performance qualification,
+support-contract freeze, and release qualification.
+
+The discovery records two 1.0 release gates rather than new product defects:
+
+- the v0.5 common-task baseline must be rerun as a bounded installed-package
+  path from session setup and application selection through authoritative task
+  result; and
+- every 1.0 environment/architecture row must be explicitly evidenced or
+  narrowed. Linux VT, native x86_64 full integration, ordinary desktops and
+  Wayland-over-SSH remain outside the current evidence.
+
+The recommended bounded implementation route is:
+
+```text
+1.0A Final-source product contract and end-to-end baseline
+  -> 1.0B Cross-milestone task integration
+  -> 1.0C Terminal usability and recovery
+  -> 1.0D Stability, performance and environment qualification
+  -> 1.0E Product contract freeze and release qualification
+```
+
+The detailed exit conditions and final acceptance contract are in the
+[v1.0 Integration Roadmap](v1.0-integration-roadmap.md). The Discovery report
+is [v1.0 Integration Discovery](v1.0-integration-discovery.md), and its
+qualification handoff is
+[v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md).
+None of these documents authorizes implementation, an RC, a package-version
+change, a tag, or a public release.
+
+## 16. Immediate next decision
 
 v0.4, v0.5, and v0.6 are complete, milestone-qualified internal milestones.
 v0.7 Discovery and 0.7A–0.7E are complete, and v0.7 is now **COMPLETE /
@@ -848,11 +884,11 @@ limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
 with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
 environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
 desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-The next recommended direction is a separately authorized **v1.0 Integration
-& Stabilization** phase. It is not an RC; v1.0.0 RC and public release remain
-separately unauthorized.
+The next recommended direction is a separately authorized **1.0A — Final-source
+product contract and end-to-end baseline** phase. It is not an RC; v1.0.0 RC
+and public release remain separately unauthorized.
 
-## 16. References
+## 17. References
 
 - [`AGENTS.md`](../../AGENTS.md) — normative repository rules.
 - [Engineering guide](../project-guide.md) — current architecture, history,
@@ -895,6 +931,12 @@ separately unauthorized.
   environment qualification with explicit limitations.
 - [v0.7 milestone qualification](../validation/v0.7/milestone/HANDOFF.md) —
   combined evidence audit, final Headless-first matrix and internal close.
+- [v1.0 Integration Discovery](v1.0-integration-discovery.md) — current
+  end-to-end review, gap matrix, evidence boundaries and architecture result.
+- [v1.0 Integration Roadmap](v1.0-integration-roadmap.md) — bounded phases,
+  measurable exits, acceptance contract and authorization boundaries.
+- [v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md)
+  — final Discovery evidence and next-session context.
 - [v0.4 workflow reconstruction Discovery](v0.4-workflow-reconstruction.md) —
   evidence and conclusion B.
 - [v0.4 bounded continuation roadmap](v0.4-roadmap.md) — derived phases; no

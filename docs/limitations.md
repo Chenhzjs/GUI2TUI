@@ -28,8 +28,11 @@
   trust UI, native deb/rpm/AppImage/Flatpak packages: NOT IMPLEMENTED.
 - Electron remains best-effort/environment-dependent, not a v0.1 hard gate. No toolkit adapters,
   DOM/CDP/UNO, OCR, visual inference or application-specific extraction are used.
-- Official Linux x86_64 and aarch64 archives are built and smoked natively; other architectures
-  must be built/tested independently. A matching filename is not proof of binary compatibility.
+- Internal v0.7E x86_64 and aarch64 archives passed archive/ABI/install smoke. The recorded
+  aarch64 runtime qualification is native; x86_64 runtime evidence used amd64 container
+  emulation on an arm64 host, so native x86_64 hardware and a full x86_64 environment matrix
+  are not claimed. Other architectures must be built/tested independently. A matching filename
+  is not proof of binary compatibility.
 
 See [compatibility evidence](compatibility.md), [runtime recovery](phase4a-completion.md),
 [real examples](gui-to-tui-examples.md) and [architecture freeze](architecture-freeze.md).
