@@ -29,7 +29,7 @@ generic semantic tasks.
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **COMPLETE / MILESTONE QUALIFIED / INTERNAL** |
-| 1.0 | Integration, Stabilization & Release Qualification | **DISCOVERY COMPLETE / IMPLEMENTATION NOT AUTHORIZED** |
+| 1.0 | Integration, Stabilization & Release Qualification | **1.0A AUTHORIZED / CURRENT; 1.0B–1.0C NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
@@ -66,7 +66,7 @@ internal milestones:
 
 functional / architectural feature freeze
   -> v1.0 Integration Discovery (this review) — COMPLETE
-  -> 1.0A–1.0E bounded Integration & Stabilization — NOT AUTHORIZED
+  -> 1.0A–1.0C bounded Integration & Stabilization — 1.0A AUTHORIZED / CURRENT
   -> separately authorized v1.0.0 RC
   -> separately authorized public v1.0.0 release
 ```
@@ -854,14 +854,12 @@ The discovery records two 1.0 release gates rather than new product defects:
   narrowed. Linux VT, native x86_64 full integration, ordinary desktops and
   Wayland-over-SSH remain outside the current evidence.
 
-The recommended bounded implementation route is:
+The consolidated bounded implementation route is:
 
 ```text
-1.0A Final-source product contract and end-to-end baseline
-  -> 1.0B Cross-milestone task integration
-  -> 1.0C Terminal usability and recovery
-  -> 1.0D Stability, performance and environment qualification
-  -> 1.0E Product contract freeze and release qualification
+1.0A Product integration and task completeness
+  -> 1.0B Usability, reliability and stabilization
+  -> 1.0C Final qualification and release readiness
 ```
 
 The detailed exit conditions and final acceptance contract are in the
@@ -869,8 +867,9 @@ The detailed exit conditions and final acceptance contract are in the
 is [v1.0 Integration Discovery](v1.0-integration-discovery.md), and its
 qualification handoff is
 [v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md).
-None of these documents authorizes implementation, an RC, a package-version
-change, a tag, or a public release.
+The current task separately authorizes 1.0A only. These documents do not
+authorize 1.0B, 1.0C, an RC, a package-version change, a tag, or a public
+release.
 
 ## 16. Immediate next decision
 
@@ -884,9 +883,9 @@ limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
 with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
 environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
 desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-The next recommended direction is a separately authorized **1.0A — Final-source
-product contract and end-to-end baseline** phase. It is not an RC; v1.0.0 RC
-and public release remain separately unauthorized.
+The current direction is the authorized **1.0A — Product integration and task
+completeness** phase. It is not an RC; 1.0B, 1.0C, the v1.0.0 RC and public
+release remain separately unauthorized.
 
 ## 17. References
 
