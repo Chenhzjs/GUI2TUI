@@ -1,9 +1,9 @@
-# Proposed v1.0 Final Support Matrix
+# v1.0 Final Support Matrix
 
-This matrix is the candidate contract for Phase 1.0C qualification. It is
-based on the v1.0A/v1.0B and v0.7 evidence; it does not promote an untested
-topology by analogy. The final release contract is frozen only by the 1.0C
-handoff.
+This matrix is the frozen v1.0 qualification contract produced by Phase 1.0C.
+It is based on the v1.0A/v1.0B and v0.7 evidence; it does not promote an
+untested topology by analogy. Public release and RC creation remain separately
+authorized actions.
 
 | Topology / capability | Candidate status | Boundary |
 | --- | --- | --- |
