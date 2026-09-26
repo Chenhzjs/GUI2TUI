@@ -360,9 +360,8 @@ layout reconstruction.
 
 ## 19. Current Project State
 
-- Public release: **v0.3.0**
-- Final release: **v1.0.0 source preparation in progress; publication pending
-  final gates**
+- Public releases: **v0.3.0, v1.0.0**
+- Final release: **v1.0.0 RELEASED AND VERIFIED**
 - Project state: **v0.4 COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.5
   COMPLETE / MILESTONE QUALIFIED / INTERNAL; v0.6 COMPLETE / MILESTONE
   QUALIFIED / INTERNAL; v0.7 COMPLETE / MILESTONE QUALIFIED / INTERNAL**
@@ -579,9 +578,10 @@ emulated-runtime limitation, and reruns the approved aarch64 integrations from
 the package. Linux native VT, real X11, ordinary desktop Wayland and Wayland
 over SSH remain NOT TESTED and are not claimed. The combined milestone close
 has qualified this bounded deployment baseline internally. The v1.0
-Integration & Stabilization phases and internal RC qualification are validated.
-Final v1.0.0 release preparation is authorized; publication remains gated by
-the final release qualification and publication checks.
+Integration & Stabilization phases and internal RC qualification are
+validated. Final `v1.0.0` release is published and verified; the immutable
+tag, source identity, package hashes, and public asset verification are
+recorded in the [final release HANDOFF](validation/v1.0/final-release/HANDOFF.md).
 
 ## 21. Glossary
 
