@@ -5,7 +5,7 @@ It is based on the v1.0A/v1.0B and v0.7 evidence; it does not promote an
 untested topology by analogy. Public release and RC creation remain separately
 authorized actions.
 
-| Topology / capability | Candidate status | Boundary |
+| Topology / capability | RC status | Boundary |
 | --- | --- | --- |
 | Managed Xvfb | Supported within evidence | Unprivileged user-prefix install, private session D-Bus/AT-SPI, recorded Ubuntu 24.04 arm64 topology. |
 | Docker/OCI Headless interactive PTY | Supported with explicit limitations | One unprivileged Ubuntu 24.04 arm64 topology; no production container image or broad OCI claim. |

@@ -35,8 +35,8 @@ backing file—into the semantic backend.
 
 ## Build, install and quick start
 
-The current development source retains package version `0.3.0`; v0.7 is a
-qualified internal milestone, not a published v0.7.0 package. Responsive spatial
+This source is the internal `1.0.0-rc.1` candidate. The public release remains
+v0.3.0 until a separately authorized v1.0.0 release. Responsive spatial
 presentation remains the default; `--layout flat` remains a compatibility
 fallback.
 
@@ -60,10 +60,9 @@ The GUI application must already be running in the explicitly selected Linux
 session whose AT-SPI bus is reachable. `--session desktop` preserves the
 current process's desktop/session environment as an optional compatibility
 path. Same-host SSH -> Managed is qualified on the recorded Ubuntu 24.04 arm64
-loopback OpenSSH interactive-PTY topology using the exact internal 0.7E
-package; this does not claim every SSH client, architecture or existing
-desktop attachment. No config file, root privilege, or companion viewer is
-required.
+loopback OpenSSH interactive-PTY topology using the RC qualification package;
+this does not claim every SSH client, architecture or existing desktop
+attachment. No config file, root privilege, or companion viewer is required.
 
 For a server without a physical desktop, configure a persistent managed Xvfb +
 D-Bus + AT-SPI session once:
@@ -112,7 +111,7 @@ The installer writes only the fixed `bin/gui2tui` and private libexec layout,
 requires no root access, and records hashes for exact-file uninstall. See
 [Getting started](docs/getting-started.md) for alternate prefixes, Doctor and
 safe uninstall. Existing published archives retain their own documented
-checksums and provenance; no v0.7.0 archive or release exists.
+checksums and provenance; no public v1.0.0 package has been published.
 
 Verify an existing downloaded release archive with its published checksums:
 

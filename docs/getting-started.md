@@ -1,7 +1,7 @@
 # Getting started
 
-GUI2TUI v0.3 presents accessibility semantics, spatial relationships, and
-verified operations as a responsive terminal application. It provides native
+GUI2TUI `1.0.0-rc.1` presents accessibility semantics, spatial relationships,
+and verified operations as a responsive terminal application. It provides native
 controls, bounded Value adjustment, a document Reader, and optional configured
 interaction for qualified complete plain text. Insufficient capability remains
 visibly read-only; operations are never guessed.
@@ -28,7 +28,7 @@ current-user-owned path, including paths containing spaces. Never run the
 installer with `sudo`. It refuses symlink install directories and every
 pre-existing target rather than overwriting unrelated files. Reinstall by
 using the recorded uninstaller first or by choosing another prefix. The
-candidate replacement procedure is documented in the [final support
+RC replacement procedure is documented in the [final support
 matrix](validation/v1.0/final-support-matrix.md#upgrade-and-uninstall-contract).
 
 The installed layout is:
@@ -48,9 +48,10 @@ main executable, so they do not depend on the checkout, Cargo target directory
 or current working directory. `gui2tui-local` is optional for core semantic
 operation but is installed so the explicit same-host modality endpoint remains
 available. No separate runtime data bundle is required. Existing archive
-`DEPENDENCIES.txt` files describe their own binary linkage. The internal v0.7E
-qualification produced exact-source x86_64 and aarch64 archives with a glibc
-2.35 gate (observed maximum 2.34); no v0.7 package was published.
+`DEPENDENCIES.txt` files describe their own binary linkage. The internal
+`1.0.0-rc.1` qualification produces exact-source x86_64 and aarch64 archives
+with a glibc 2.35 gate (observed maximum 2.34); no public v1.0.0 package has
+been published.
 
 Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF-8 and
 cursor/alternate-screen support, and an already running accessible GUI application.

@@ -3,6 +3,14 @@
 set -euo pipefail
 
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+package_version=${GUI2TUI_VERSION:-$(python3 - "$project_root/Cargo.toml" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as stream:
+    print(tomllib.load(stream)["package"]["version"])
+PY
+)}
 result_dir=${RESULT_DIR:-}
 if [[ -n $result_dir ]]; then
     [[ $result_dir == /* && ! -e $result_dir ]] || {
@@ -72,7 +80,7 @@ for specification in amd64:x86_64 arm64:aarch64; do
         bash -c 'mkdir -p "$HOME" "$CARGO_HOME" "$CARGO_TARGET_DIR"; ./scripts/package-linux.sh' \
         >"$architecture_dir/package.txt"
 
-    archive=$result_dir/packages/gui2tui-0.3.0-linux-$architecture.tar.gz
+    archive=$result_dir/packages/gui2tui-$package_version-linux-$architecture.tar.gz
     [[ -f $archive ]]
     docker run --rm \
         --platform "linux/$platform" \
@@ -98,18 +106,18 @@ for specification in amd64:x86_64 arm64:aarch64; do
         >"$architecture_dir/fresh-install.txt"
 
     cat "$architecture_dir/release-validation.txt" "$architecture_dir/fresh-install.txt" \
-        >"$result_dir/packages/gui2tui-0.3.0-linux-$architecture.smoke.txt"
+        >"$result_dir/packages/gui2tui-$package_version-linux-$architecture.smoke.txt"
     grep -q 'PACKAGED_FRESH_HOME_SMOKE=PASS' \
-        "$result_dir/packages/gui2tui-0.3.0-linux-$architecture.smoke.txt"
+        "$result_dir/packages/gui2tui-$package_version-linux-$architecture.smoke.txt"
     (cd "$result_dir/packages" && sha256sum -c "$(basename "$archive").sha256") \
         >"$architecture_dir/checksum.txt"
 done
 
 python3 "$project_root/scripts/assemble-release.py" "$result_dir/packages" \
-    --version 0.3.0 --commit "$commit" >"$result_dir/assembly.txt"
+    --version "$package_version" --commit "$commit" >"$result_dir/assembly.txt"
 (cd "$result_dir/packages" && sha256sum -c SHA256SUMS) >"$result_dir/assembled-checksums.txt"
 
-arm_archive=$result_dir/packages/gui2tui-0.3.0-linux-aarch64.tar.gz
+arm_archive=$result_dir/packages/gui2tui-$package_version-linux-aarch64.tar.gz
 mkdir -m 700 -- "$scratch/arm-bundle"
 tar -xzf "$arm_archive" -C "$scratch/arm-bundle"
 arm_bundle=$(find "$scratch/arm-bundle" -mindepth 1 -maxdepth 1 -type d -print -quit)

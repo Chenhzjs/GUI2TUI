@@ -1,7 +1,7 @@
-# v1.0.0 RC Checklist (Draft)
+# v1.0.0-rc.1 Internal RC Preparation Checklist
 
-This checklist is prepared during 1.0C. It is not authorization to create an
-RC, tag, publish an archive or change the package version.
+This checklist records internal RC preparation. It does not authorize an RC
+tag, public publication or GitHub Release.
 
 ## Candidate identity
 
@@ -11,7 +11,8 @@ RC, tag, publish an archive or change the package version.
   architecture, BUILD-INFO and source commit.
 - [ ] Build the aarch64 and x86_64 internal candidates from that same commit.
 - [ ] Record archive size, SHA-256, executable hashes and ABI reports.
-- [ ] Confirm package version remains `0.3.0` until separately authorized.
+- [ ] Confirm package version is consistently `1.0.0-rc.1` for the internal
+  candidate.
 
 ## Package and runtime
 
