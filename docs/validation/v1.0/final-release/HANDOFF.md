@@ -15,8 +15,8 @@ created or published, and no existing public tag was moved.
 - Final tag object: `e1b3902c6be3c0a24ce8bcef21a764ca591e02ee`
 - `v1.0.0^{}`: `d8abf9ae863dbfbef87e35310beecb8669f2863d`
 - Branch: `v1.0/integration-stabilization`
-- Post-release documentation HEAD: `bb5e938d64b5c05049182a3bb9302e8e9ddcc772`;
-  it is not the tag target.
+- Post-release documentation commits are after the tag and are not tag
+  targets; the final pushed branch HEAD is reported below in the Git status.
 - Remote branch and tag were pushed without force. The historical tags
   `v0.1.0` through `v0.3.0` remain unchanged.
 
