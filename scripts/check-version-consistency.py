@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import platform
 import pathlib
 import re
 import subprocess
@@ -95,13 +96,25 @@ with tempfile.TemporaryDirectory(prefix="gui2tui-version-audit-") as scratch:
             raise SystemExit(f"BUILD-INFO mismatch for {archive.name}")
         if abi["gui2tui_version"] != args.version or abi["commit"] != args.commit:
             raise SystemExit(f"ABI metadata mismatch for {archive.name}")
-        actual = subprocess.run(
-            [str(bundle / "bin/gui2tui"), "--version"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        if actual != f"gui2tui {args.version}":
-            raise SystemExit(f"CLI version mismatch for {archive.name}: {actual!r}")
+        host_architecture = {
+            "aarch64": "aarch64",
+            "arm64": "aarch64",
+            "amd64": "x86_64",
+            "x86_64": "x86_64",
+        }.get(platform.machine().lower())
+        if platform.system() == "Linux" and host_architecture == architecture:
+            actual = subprocess.run(
+                [str(bundle / "bin/gui2tui"), "--version"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if actual != f"gui2tui {args.version}":
+                raise SystemExit(f"CLI version mismatch for {archive.name}: {actual!r}")
+        else:
+            print(
+                "CLI_VERSION_CHECK=DEFERRED "
+                f"archive={archive.name} host={platform.system()}/{platform.machine()}"
+            )
 
 print(f"VERSION_CONSISTENCY=PASS version={args.version} commit={args.commit} archives=2")
