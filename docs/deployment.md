@@ -1,5 +1,10 @@
 # Headless-first deployment and environment direction
 
+The candidate v1.0 support wording is consolidated in the
+[Phase 1.0C final support matrix](validation/v1.0/final-support-matrix.md).
+The table below remains the detailed evidence boundary; it does not broaden
+claims beyond the named topology, architecture and compositor.
+
 The following table distinguishes the user-approved 1.0 development target
 from current qualification. A target is not a formal support claim.
 

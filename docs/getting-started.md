@@ -27,7 +27,9 @@ The default prefix is `$HOME/.local`; `--prefix` also accepts another absolute,
 current-user-owned path, including paths containing spaces. Never run the
 installer with `sudo`. It refuses symlink install directories and every
 pre-existing target rather than overwriting unrelated files. Reinstall by
-using the recorded uninstaller first or by choosing another prefix.
+using the recorded uninstaller first or by choosing another prefix. The
+candidate replacement procedure is documented in the [final support
+matrix](validation/v1.0/final-support-matrix.md#upgrade-and-uninstall-contract).
 
 The installed layout is:
 
