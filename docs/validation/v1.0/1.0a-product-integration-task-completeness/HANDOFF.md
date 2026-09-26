@@ -5,24 +5,25 @@
 - Phase: **1.0A Product Integration & Task Completeness**.
 - Authorization: 1.0A was explicitly authorized after the three-phase
   roadmap consolidation.
-- Result: **EXECUTED / QUALIFICATION INCOMPLETE**.
+- Result: **VALIDATED** after the bounded chooser and Qt Choice completion
+  pass.
 - 1.0B Usability, Reliability & Stabilization: **NOT AUTHORIZED / NOT
   STARTED**.
 - 1.0C Final Qualification & Release Readiness: **NOT AUTHORIZED / NOT
   STARTED**.
 - v1.0.0 RC, tag, public release and package-version change: **NOT STARTED**.
 
-This is not a release qualification. The incomplete result is intentional:
-the current installed package did not receive a fabricated PASS for the two
-chooser tasks that were not rerun, and the additional Qt Choice probe did not
-produce a fresh selected-item readback.
+This is not a release qualification. It closes only the authorized 1.0A
+product-integration gates. 1.0B, 1.0C, RC creation, release and package
+version changes remain separately authorized.
 
 ## 2. Git and source identity
 
-- Starting HEAD: `ba8bb26dfc5756cbba8313fa7fb17776c021edd7`.
-- Starting branch: `v0.7/deployment-environment-completeness`.
-- Starting worktree: clean; branch was two commits ahead of its remote after
-  the separately committed roadmap consolidation.
+- Completion-pass starting HEAD: `4c3f3a8038bb33916e79092618b41dd41a9ac68e`.
+- Completion-pass starting branch: `v1.0/integration-stabilization`, created
+  at that exact existing HEAD without rewriting history.
+- Completion-pass starting worktree: clean; the branch retained the three
+  existing local commits ahead of its remote.
 - Starting package version: `0.3.0`.
 - Final HEAD: the documentation close commit for this handoff; verify with
   `git rev-parse HEAD` at close.
@@ -90,22 +91,22 @@ The package remained `0.3.0`. No release artifact was published.
 | Task or chain | 1.0A result | Evidence and boundary |
 | --- | --- | --- |
 | Install → Managed Headless → application selection → TUI → readback → safe exit | **PASS** | Installed aarch64 package; v0.7C driver plus package qualification; Docker and same-host SSH PTYs. |
-| Structured form | **PARTIAL / QUALIFIED LIMITS** | Installed GTK/Qt scenes, single-line edit, password refusal and safe unsupported controls were exercised. Full chooser/form composition was not rerun. |
+| Structured form | **PASS WITH SAFE LIMITATION** | Installed GTK/Qt scenes, single-line edit, password refusal, safe unsupported controls and current-choice behavior were exercised. Qt transient ComboBox choice is explicitly unsupported when public selected/current readback is absent. |
 | Exact Selection | **PASS** | Installed TUI selection fixture; fresh selected-object readback. |
 | Table-row Selection | **PASS** | Installed TUI opened the current semantic table view, moved to `Beta`, selected it, and fresh Inspector read `Selected row: Beta`. |
 | PageTab | **PASS** | Installed TUI switched GTK `General` ↔ `Advanced`; fresh selected-tab and status readback. |
 | Hierarchy | **PASS** | Installed TUI collapsed and expanded GTK4 Demo `Constraints`; fresh semantic tree confirmed each state. |
 | Menu | **PASS** | Installed TUI command palette opened `Tools`, then selected `Activate Demo`; fresh caller status read `Status: menu activated 1`. |
 | Dialog / modal scope | **PASS** | Installed TUI opened the Qt modal, current modal scope was read, and the current `Close` control was activated through the TUI. Fresh tree showed the modal removed. |
-| Open File | **NOT RERUN** | v0.5 GTK live evidence remains historical. No current repository chooser fixture was available for a fresh installed-package TUI run. |
-| Choose Folder | **NOT RERUN** | Same boundary as Open File; historical v0.5 evidence is not relabelled as a new final-package run. |
+| Open File | **PASS** | Final-source installed package; ordinary TUI opened the current modal, opened the current partial Files Table, selected the exact current `beta.txt` row, used current `Open`, and fresh caller semantics returned `OPEN:beta.txt`. |
+| Choose Folder | **PASS** | Final-source installed package; ordinary TUI activated the exact current `folder-a` cell, fresh chooser semantics showed the checked `folder-a` breadcrumb and `nested.txt`, then current `Select` returned `FOLDER:folder-a`. |
 | Reader | **PASS** | Installed GTK live fixture entered and exited the semantic Reader through the TUI. |
 | Value | **PASS** | Installed Qt TUI adjusted `Probe value`; fresh authoritative tree read the changed value (`5`). |
 | Single-line text edit | **PASS** | Installed GTK TUI edit reported confirmation and fresh tree read the changed value. |
 | Password | **PASS / SAFE REFUSAL** | TUI displayed password editing as disabled; no secret was exposed in the readback or evidence. |
 | Dynamic manual continuation | **PASS** | GTK replacement/current-scene refresh, PageTab changes, modal scope change, event refresh and v0.7 restart/reconnect flow were continued manually from fresh scenes. |
 | External text | **PASS** | Installed package and SSH PTY external Vim handoff, writeback/readback, private cleanup and disconnect boundary passed. |
-| Qt Choice additional probe | **NOT QUALIFIED / INVESTIGATION OPEN** | The installed TUI opened the terminal-native choice overlay, but repeated `Beta` attempts did not produce a fresh selected-item readback. This was not reclassified as an application limitation or a PASS. |
+| Qt Choice additional probe | **UNSUPPORTED BY PUBLIC SEMANTICS** | Deterministic installed-TUI trace reached the `Alpha/Beta/Gamma` overlay and sent Down+Enter to the exact Beta target. Fresh Qt AT-SPI exposed no selected/current target and the TUI refused success; no production workaround was added. |
 
 The table is deliberately split between current installed-package evidence,
 historical evidence and an unresolved probe. A historical v0.5 PASS remains
@@ -120,24 +121,49 @@ None reproduced. No new password exposure, private artifact leak, stale
 authority migration, false authoritative success, unsafe fallback, or
 filesystem/backing-file semantic bypass was observed.
 
-### P1-level release gates still open
+### Completion-pass findings
 
-No confirmed P1 implementation defect was closed or hidden. The following
-1.0A qualification gates remain open and prevent a PASS declaration:
+The two authorized gates were closed with current-package evidence:
 
-1. **Chooser integration evidence:** Open File and Choose Folder were required
-   baseline tasks but were not rerun through the current installed TUI. The
-   missing result is an evidence/qualification gap, not a claim that the
-   historical implementation failed.
-2. **Choice integration isolation:** the current installed TUI opened the Qt
-   choice overlay but did not yield the expected authoritative `Beta`
-   selection in repeated bounded attempts. The cause is not isolated between
-   PTY driving, current semantic option exposure and backend selection
-   confirmation. It must not be waved away as a Qt limitation until a
-   controlled rerun or source-level diagnosis establishes that boundary.
+1. **Open File:** the installed TUI entered the current modal scope, opened
+   the public partial `Files` Table, used current semantic row navigation to
+   select `beta.txt`, and used the current `Open` command. Fresh caller
+   semantics exposed exactly `OPEN:beta.txt`. The table remained partial and
+   no filename, suffix, icon, filesystem metadata or unrealized row was used
+   as authority.
+2. **Choose Folder:** the installed TUI entered the current folder chooser,
+   activated the current `folder-a` cell with the contextual `a Activate cell`
+   operation, and continued from a fresh scene. The old root listing was gone,
+   the checked breadcrumb was `folder-a`, and `nested.txt` was freshly shown.
+   The current `Select` command then produced fresh caller semantics
+   `FOLDER:folder-a`. The intermediate cell action was not promoted to
+   success merely because the initiating object disappeared.
+3. **Negative chooser evidence:** the same package path showed
+   `CANCELLED` after current `Cancel`; the chooser table was rendered as
+   `partial`; and after chooser exit the current command palette contained
+   caller commands rather than the old chooser command. Historical v0.5
+   exact-object stale refusal remains the authority-model regression record;
+   no stale mutation was attempted in this pass.
+4. **Qt Choice isolation:** the trace recorded initial public roles,
+   transient children, exact `Beta` target and `Toggle` action; opened the
+   terminal overlay; sent a deterministic Down+Enter sequence; and observed
+   `Current target is unavailable; choose from the current interface`. Fresh
+   Inspector readback still showed owner `Alpha`, `ListItem Beta` without
+   `selected`, and no public Selection interface on the transient list. The
+   failure is therefore classified as **public Accessibility limitation** for
+   this Qt shape, not a PTY or overlay-target mismatch. GUI2TUI retained safe
+   refusal and did not claim Beta success.
 
-These gates remain blocking for 1.0A's “complete Common-task Baseline” exit
-condition. 1.0B must not start on the assumption that they passed.
+The controlled GTK chooser fixture used for the final evidence was restored
+under `tests/fixtures/v10a_gtk_chooser_fixture.py` as validation-only code. It
+uses a nonblocking public modal response callback so the Accessibility action
+returns and the current modal scene can be observed; it creates only a bounded
+synthetic tree and is not a production chooser subsystem. Its temporary root
+was removed on fixture shutdown.
+
+No confirmed P0 or P1 remains from this completion pass. The Qt transient
+ComboBox shape is a documented safe compatibility limitation, not a hidden
+success claim or a newly required architecture layer.
 
 ### P2 / known limits / evidence boundaries
 
@@ -197,37 +223,25 @@ stabilization or final qualification work.
 
 ## 8. Recommended next authorization
 
-Do not authorize 1.0B yet. The precise next action is a bounded continuation
-of 1.0A qualification:
-
-1. provide or restore a controlled GTK chooser fixture/harness in the
-   validation environment, without adding a production chooser subsystem;
-2. rerun Open File and Choose Folder through the installed package and actual
-   TUI, including fresh caller result readback;
-3. isolate the Qt Choice result with a minimal PTY/TUI trace and current
-   authoritative tree, then either record a generic fix with a focused
-   regression test or document a verified public-Accessibility limitation;
-4. rerun only the directly affected baseline rows and the source-quality/docs
-   checks; and
-5. close 1.0A only when every baseline row has a current-package result and
-   no P0/P1 remains.
-
-The existing v0.5 chooser architecture and the current semantic authority
-model should be reused. No new task runtime or backend is justified by this
-evidence.
+Recommend only **1.0B — Usability, Reliability & Stabilization**. It is not
+started or authorized by this handoff. The existing v0.5 chooser composition,
+current semantic authority model and safe Qt limitation should be reused; no
+new task runtime, chooser backend or architecture layer is justified.
 
 ## 9. Next Codex session context
 
 The next session must inherit:
 
 - roadmap consolidation is already committed in `ba8bb26`;
-- 1.0A is authorized, but its qualification is incomplete;
+- 1.0A completion-pass evidence is closed and validated;
 - 1.0B and 1.0C remain unauthorized;
 - package version is still `0.3.0`;
 - published tags remain immutable;
 - no production source or feature implementation was performed;
-- Open File and Choose Folder require current installed-TUI evidence;
-- Qt Choice requires bounded diagnosis before any classification;
+- Open File and Choose Folder passed through the final-source installed TUI;
+- the Qt transient ComboBox shape is unsupported when it lacks public
+  target-specific selected/current readback; GTK qualified choice evidence
+  remains the supported baseline;
 - the current package/Managed/Docker/SSH environment evidence is in the
   v0.7 qualification scripts and the temporary live evidence was cleaned at
   close; and
@@ -237,11 +251,25 @@ The next session must inherit:
 ## 10. Close declaration
 
 - 1.0A implementation scope: **no production implementation performed**.
-- 1.0A qualification: **not passed; evidence gates remain open**.
+- 1.0A qualification: **passed / validated**.
 - Open P0: **none**.
 - Open confirmed P1 implementation defects: **none**.
-- Open P1-level qualification gates: **chooser evidence and Qt Choice
-  isolation**.
+- Open P1-level qualification gates: **none**.
 - Existing public tags: **unchanged**.
 - RC/tag/release/public publication: **none performed**.
-- Next recommended stage: **finish the bounded 1.0A qualification gaps**.
+- Next recommended stage: **1.0B — Usability, Reliability & Stabilization**;
+  not authorized or started.
+
+## 11. Completion-pass quality record
+
+- Production Rust changes: **none**.
+- Validation change: added the bounded GTK3 chooser fixture described above;
+  no production behavior or architecture changed.
+- Final-package production source: `4c3f3a8038bb33916e79092618b41dd41a9ac68e`
+  for the live evidence recorded in this pass; the final documentation close
+  commit records the complete repository state.
+- Targeted live package evidence: **PASS** for Open File, Choose Folder and
+  Cancel; **safe refusal** with deterministic public-semantics classification
+  for Qt Choice.
+- Existing architecture, genericity, authority, readback, password, private
+  artifact and terminal-ownership invariants: **unchanged**.

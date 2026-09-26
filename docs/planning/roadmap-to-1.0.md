@@ -29,7 +29,7 @@ generic semantic tasks.
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **COMPLETE / MILESTONE QUALIFIED / INTERNAL** |
-| 1.0 | Integration, Stabilization & Release Qualification | **1.0A EXECUTED / QUALIFICATION INCOMPLETE; 1.0B–1.0C NOT AUTHORIZED** |
+| 1.0 | Integration, Stabilization & Release Qualification | **1.0A VALIDATED; 1.0B–1.0C NOT AUTHORIZED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
@@ -66,7 +66,7 @@ internal milestones:
 
 functional / architectural feature freeze
   -> v1.0 Integration Discovery (this review) — COMPLETE
-  -> 1.0A–1.0C bounded Integration & Stabilization — 1.0A executed / qualification incomplete
+  -> 1.0A–1.0C bounded Integration & Stabilization — 1.0A validated / 1.0B–1.0C not authorized
   -> separately authorized v1.0.0 RC
   -> separately authorized public v1.0.0 release
 ```
