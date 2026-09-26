@@ -67,6 +67,7 @@ internal milestones:
 functional / architectural feature freeze
   -> v1.0 Integration Discovery (this review) — COMPLETE
   -> 1.0A–1.0C bounded Integration & Stabilization — VALIDATED / RC READY
+  -> internal v1.0.0-rc.1 preparation — QUALIFIED (no tag or publication)
   -> separately authorized v1.0.0 RC
   -> separately authorized public v1.0.0 release
 ```
@@ -75,8 +76,9 @@ This cadence avoids repeating public release engineering while the remaining
 product layers are still tightly coupled. Release engineering remains
 essential; it is deliberately concentrated in the integrated 1.0
 stabilization/release effort. The next currently planned public GUI2TUI
-release after v0.3.0 is v1.0.0. 1.0C is validated and RC READY, but RC
-creation and production release are not automatically authorized.
+release after v0.3.0 is v1.0.0. 1.0C and internal `1.0.0-rc.1`
+preparation are validated, but RC tag creation and production release are not
+automatically authorized.
 
 The user may explicitly approve an exceptional pre-1.0 public release for a
 genuine collaboration, distribution-testing, major-public-milestone, or
@@ -867,8 +869,9 @@ The detailed exit conditions and final acceptance contract are in the
 is [v1.0 Integration Discovery](v1.0-integration-discovery.md), and its
 qualification handoff is
 [v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md).
-1.0B is validated. These documents do not authorize 1.0C, an RC, a
-package-version change, a tag, or a public release.
+1.0A, 1.0B and 1.0C are validated, and internal `1.0.0-rc.1` preparation is
+qualified. These documents do not authorize an RC tag, public release,
+publication, or push.
 
 ## 16. Immediate next decision
 
@@ -882,8 +885,8 @@ limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
 with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
 environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
 desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-The current direction is **1.0C — Final Qualification & Release Readiness**.
-It is **VALIDATED / RC READY**. This is not an RC; the v1.0.0 RC and public
+The current direction is internal **v1.0.0-rc.1 RC preparation**. It is
+**QUALIFIED**. This is not an RC tag or publication; the v1.0.0 RC and public
 release remain separately unauthorized.
 
 ## 17. References
