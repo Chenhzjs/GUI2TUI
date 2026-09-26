@@ -5,11 +5,8 @@
 - Phase: **1.0B — Usability, Reliability & Stabilization**.
 - Authorization: explicitly authorized by the user; 1.0C, RC, tag and
   release remain unauthorized.
-- Result: **NOT YET VALIDATED**. All product campaigns except the formal
-  soak close gate passed, but the two formal 45-minute runs exposed a
-  validation-harness transcript-synchronization defect during shell cleanup.
-  The workload completed; the required clean terminal-lifecycle close was
-  not accepted as evidence.
+- Result: **VALIDATED**. The formal requalification soak passed after the
+  validation-only fresh-prompt and PTY EOF cleanup fix.
 - Package version: `0.3.0`; no version change was made.
 
 The phase fixed no production defect. It added only validation harnesses and
@@ -22,8 +19,9 @@ source in disposable Linux containers and do not change product behavior.
 - Starting HEAD: `82129f847625c9c376a6c79c49b665b43da2211d`.
 - Starting branch: `v1.0/integration-stabilization`.
 - Starting worktree: clean.
-- Final HEAD: record the close commit below after documentation and harness
-  changes are committed.
+- Final HEAD: `8778d0b9ad3cf6cf9a92d4b56da7fda9d385195a` for the validated
+  production/validation source identity; this documentation update does not
+  change the production payload.
 - Remote: local branch remains ahead of `origin`; no push was performed.
 - Published tags `v0.1.0`, `v0.1.1`, `v0.2.0` and `v0.3.0` were not moved.
 
@@ -103,7 +101,7 @@ contract.
 
 ## 4. Campaign 2 — bounded soak and scale
 
-The attempted formal soak used the current-source Linux headless image, an installed
+The formal requalification soak used the current-source Linux headless image, an installed
 user-prefix package layout, a managed Xvfb session, a real PTY, and the GTK
 selection fixture. Duration was the required 45 minutes (`2700` seconds).
 The workload was deliberately bounded and user-shaped:
@@ -115,14 +113,11 @@ The workload was deliberately bounded and user-shaped:
 - samples every 60 seconds;
 - clean reset and TUI exit at the end.
 
-The workload portion reached the required 2,700 seconds in both attempts and
-completed without a product failure. The second attempt reached 86 semantic
-operations and 18 refreshes before the final cleanup assertion. Its samples
-showed 17 file descriptors, 13 threads, 13 owned/container processes, zero
-artifact files and zero operation namespaces; RSS ranged from 8,696 to 12,472
-KiB and finished at 9,312 KiB. These are diagnostic observations, not a
-formal soak PASS, because shell exit was not synchronised against a fresh
-post-quit prompt.
+The requalification reached 2,700.25 seconds and completed with exit code 0,
+91 semantic operations, 18 refreshes and 46 resource samples. RSS ranged from
+8,600 to 12,296 KiB and finished at 9,140 KiB. FD count remained 17, thread
+count 13, child-process count 13, artifact files 0 and operation namespaces 0.
+The shell exited only after a fresh post-quit prompt and explicit PTY EOF.
 
 The integrated v0.6E resource samples independently showed:
 
@@ -340,15 +335,16 @@ This is proposed for 1.0C; it is not yet frozen:
   arbitrary drag/drop, rich-text fidelity, exhaustive virtualization,
   pointer-only context menus, and application-specific adapters.
 
-## 13. Final status and precise next remediation
+## 13. Final status and precise 1.0C handoff
 
-`PHASE 1.0B NOT YET VALIDATED`
+`PHASE 1.0B USABILITY, RELIABILITY & STABILIZATION VALIDATED`
 
-The only necessary remediation is to rerun the required 45-minute soak after
-the validation-only `finish()` fix: it must wait for a fresh `V10B_PROMPT`
-after `q`, then close the interactive shell. The short terminal campaign
-already passes with this fix. No production change is indicated, and no 1.0C
-work may begin until that formal soak close gate is accepted.
+The recommended next scope is **1.0C — Final Qualification & Release
+Readiness**, which remains separately unauthorized. It must freeze the support
+contract, repeat exact candidate
+package provenance and large-tree measurements, audit final documentation,
+and produce an RC qualification conclusion. It must not create an RC, tag or
+Release without separate authorization.
 
 1.0C — Final Qualification & Release Readiness remains unauthorized and was
 not started.
