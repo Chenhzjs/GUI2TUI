@@ -14,7 +14,7 @@ v1.0.0 Release Candidate preparation.
 - Starting HEAD: `dc8c115` (`docs: validate v1.0B stabilization soak`).
 - Candidate source: `7494f6a8520a698ab3b1713a3b3ee01bc147cc42`
   (`docs: freeze v1.0 candidate support contract`).
-- Final HEAD: recorded by the documentation-close commit below.
+- Final HEAD: `74a12f0` (`docs: close v1.0C final qualification`).
 - Branch: `v1.0/integration-stabilization`.
 - Worktree: clean at final close.
 - Remote: no upstream is configured for this branch; no push was performed.
