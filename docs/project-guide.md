@@ -6,6 +6,10 @@ When the two appear inconsistent, `AGENTS.md` governs agent behavior; report
 the inconsistency and correct the documentation rather than silently inventing
 a resolution.
 
+**Current public release: `v1.0.0`.** The release tag and published packages
+are immutable; this guide retains historical architecture and validation
+provenance for maintainers.
+
 ## 1. What GUI2TUI Is
 
 GUI2TUI reads public Linux Accessibility / AT-SPI semantics and recompiles them
@@ -335,19 +339,10 @@ does not define product scope or quality.
 
 The supported release pipeline builds native Linux x86_64 and aarch64 packages,
 runs extracted-package smoke, checks ABI, checksums, manifest, and
-attestations, then optionally publishes. Published tags are immutable. The
-release source commit is distinct from later evidence/documentation commits;
-never assume newest HEAD is the binary source. `v0.1.0`, `v0.2.0`, and
-`v0.3.0` must not be moved.
-
-Under the current [roadmap to 1.0](planning/roadmap-to-1.0.md), `v0.3.0` is the
-last planned public pre-1.0 release. v0.4–v0.7 are internal architectural and
-product milestone names, not implied public package versions. Each still
-requires evidence-backed milestone qualification and user review, but does not
-automatically trigger a version bump, RC, tag, package, publication, or the
-next milestone. Public release engineering resumes during the planned 1.0
-integration and stabilization effort; v1.0.0 is the next planned public
-release and remains separately authorized.
+attestations, then publishes only from an explicitly authorized immutable tag.
+The `v1.0.0` release source commit is distinct from later
+documentation/evidence commits; never assume newest HEAD is the binary source.
+Historical `v0.1.0`, `v0.2.0`, `v0.3.0` and `v1.0.0` tags must not be moved.
 
 ## 18. Known Boundaries / Non-goals
 

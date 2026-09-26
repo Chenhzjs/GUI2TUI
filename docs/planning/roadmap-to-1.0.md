@@ -1,5 +1,9 @@
 # GUI2TUI Roadmap to 1.0
 
+> **Historical roadmap.** GUI2TUI v1.0.0 has been released. This document
+> records the evidence-backed path to that release and is no longer the active
+> product roadmap.
+
 This document records the reviewed architecture-level trajectory from the
 completed v0.3 release to GUI2TUI 1.0. It is direction, not authorization. A
 milestone starts only after explicit user approval, and uncertain architecture

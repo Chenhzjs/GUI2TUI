@@ -1,8 +1,9 @@
 # Binary release pipeline
 
 The dual-native pipeline is [live validated](release-pipeline-validation.md).
-Public v0.1.0 was released through this pipeline. Later patch releases use the
-same native build, smoke, ABI, checksum, assembly and attestation gates.
+The public `v1.0.0` release used this native build, smoke, ABI, checksum,
+assembly and attestation pipeline. Future releases must preserve the same
+fail-closed provenance and immutable-tag rules.
 
 The normal CI workflow checks formatting, all targets, tests, Clippy, and patch whitespace.
 It does not package or publish releases. The separate release workflow supports manual validation
@@ -28,9 +29,8 @@ checks the extracted layout, version, measured ABI, developer-path leakage and s
 then invokes only the packaged smoke harness. `scripts/assemble-release.py` requires both architectures,
 successful smoke transcripts, matching commit/version metadata, and produces combined final checksums.
 The current archive layout also stages `install-user.sh` and
-`uninstall-user.sh`; future package qualification must verify their fresh-
-prefix behavior. Adding them to current development source does not create or
-publish a v0.7.0 archive, and historical release bytes remain immutable.
+`uninstall-user.sh`; package qualification verifies their fresh-prefix
+behavior. Historical release bytes remain immutable.
 
 The fixed compiler is Rust 1.88.0 and every Cargo build uses `--locked`. ABI builds use
 `ubuntu-22.04` and `ubuntu-22.04-arm`, not `ubuntu-latest`; the workflow still gates the measured
@@ -40,8 +40,8 @@ maximum GLIBC version at 2.35 rather than inferring it from a runner label.
 
 ```bash
 sha256sum -c SHA256SUMS
-gh attestation verify gui2tui-0.1.1-linux-x86_64.tar.gz --repo Chenhzjs/GUI2TUI
-gh attestation verify gui2tui-0.1.1-linux-aarch64.tar.gz --repo Chenhzjs/GUI2TUI
+gh attestation verify gui2tui-1.0.0-linux-x86_64.tar.gz --repo Chenhzjs/GUI2TUI
+gh attestation verify gui2tui-1.0.0-linux-aarch64.tar.gz --repo Chenhzjs/GUI2TUI
 ```
 
 GitHub attestations require OIDC and repository attestation permission. No user-managed signing

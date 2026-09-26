@@ -4,378 +4,217 @@
 
 # GUI2TUI
 
-**Turn Linux GUI semantics and verified capabilities into responsive terminal-native workflows.**
+**Operate Linux GUI applications from a terminal when they expose sufficient
+public Accessibility semantics.**
 
-GUI2TUI recompiles accessibility-exposed application semantics, spatial
-topology, and trustworthy operations into an interactive TUI — not pixels into
-ASCII.
+GUI2TUI recompiles GUI application semantics, capabilities and useful spatial
+relationships into a terminal-native interface. It does not stream pixels or
+map screen coordinates to terminal cells.
 
 [![Release](https://img.shields.io/github/v/release/Chenhzjs/GUI2TUI?display_name=tag&sort=semver)](https://github.com/Chenhzjs/GUI2TUI/releases/latest)
 [![CI](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml/badge.svg)](https://github.com/Chenhzjs/GUI2TUI/actions/workflows/ci.yml)
-![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-2ea44f)
-![Linux aarch64](https://img.shields.io/badge/Linux-aarch64-2ea44f)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-> **Semantics, not screenshots.** Controls become terminal tasks, documents
-> become a Reader, and unavailable semantics degrade safely instead of being
-> guessed.
+## Why GUI2TUI?
 
-## See it in action
-
-![A real GUI2TUI v0.3 Value interaction confirmed in both GUI and TUI](docs/demo/v0.3/value.png)
-
-This is a real v0.3 workflow: GUI2TUI adjusts a bounded Value through public
-AT-SPI and shows the fresh authoritative result. Complex plain text can use a
-configured local handler without turning that program—or an application
-backing file—into the semantic backend.
-
-[Watch the 32-second v0.3 hero demo](docs/demo/v0.3/hero-v0.3.mp4)
-· [Full capability and refusal demo](docs/demo/v0.3/demo-v0.3.mp4)
-· [Recording method and evidence](docs/demo/v0.3/README.md)
-
-## Build, install and quick start
-
-This source is the v1.0.0 release source. Responsive spatial
-presentation remains the default; `--layout flat` remains a compatibility
-fallback.
-
-GUI2TUI is Headless-first: its core path targets terminal-only users while the
-GUI application runs in a same-host background graphical/Accessibility
-session. A complete visible desktop is not required for the Managed path; the
-application may still require Xvfb or another qualified graphical runtime.
-
-```bash
-git clone https://github.com/Chenhzjs/GUI2TUI.git
-cd GUI2TUI
-cargo build --release --locked --bins
-./scripts/install-user.sh --prefix "$HOME/.local"
-export PATH="$HOME/.local/bin:$PATH"
-
-gui2tui --session desktop doctor
-gui2tui --session desktop
-```
-
-The GUI application must already be running in the explicitly selected Linux
-session whose AT-SPI bus is reachable. `--session desktop` preserves the
-current process's desktop/session environment as an optional compatibility
-path. Same-host SSH -> Managed is qualified on the recorded Ubuntu 24.04 arm64
-loopback OpenSSH interactive-PTY topology using the qualified release package;
-this does not claim every SSH client, architecture or existing desktop
-attachment. No config file, root privilege, or companion viewer is required.
-
-For a server without a physical desktop, configure a persistent managed Xvfb +
-D-Bus + AT-SPI session once:
-
-```bash
-gui2tui setup persistent
-```
-
-Select it explicitly with `--session managed`; no shell profile or `source` is
-required. Use `setup status`, `restart`, or `stop` to manage it. Omitting
-`--session` retains the historical compatible behavior—reuse a valid managed
-descriptor when present—but startup and Doctor now identify that choice.
-Explicit desktop selection is never overridden by the descriptor, and explicit
-managed selection never falls back. An isolated one-shell alternative is
-`gui2tui setup temporary`.
-
-To save and launch an application directly (instead of starting it in another
-shell first), register its executable once. The shortest form is:
-
-```bash
-gui2tui --session managed app add mousepad
-gui2tui --session managed launch mousepad
-```
-
-Run `gui2tui app add` with no executable for a fill-in setup wizard. For
-ordinary applications, type the executable and press Enter once more to finish
-the optional argument list; names are inferred/discovered automatically.
-If Chromium does not register accessibility by default, add its required argv
-without a shell command:
-
-```bash
-gui2tui app add chromium --replace -- \
-  --force-renderer-accessibility=complete about:blank
-```
-
-Registered applications also appear as `[launch]` entries in the normal
-`gui2tui` selector; already accessible applications appear as `[running]`.
-
-On the first successful launch, GUI2TUI learns and saves the real AT-SPI name;
-for example, `libreoffice` resolves to `soffice`. Strict Snap applications
-cannot reach a private managed D-Bus due to confinement; that topology is
-now rejected immediately. Use the normal desktop session or a non-Snap build,
-never a weakened sandbox. See [launcher compatibility](docs/launcher-compatibility.md).
-
-The installer writes only the fixed `bin/gui2tui` and private libexec layout,
-requires no root access, and records hashes for exact-file uninstall. See
-[Getting started](docs/getting-started.md) for alternate prefixes, Doctor and
-safe uninstall. Existing published archives retain their own documented
-checksums and provenance.
-
-Verify an existing downloaded release archive with its published checksums:
-
-```bash
-sha256sum -c SHA256SUMS
-```
-
-See [build provenance verification](docs/release-pipeline.md) for GitHub
-attestations.
-
-## What is GUI2TUI?
+You may have access to a Linux terminal, container terminal or SSH session
+while the application you need to use is graphical. GUI2TUI keeps the original
+GUI authoritative and presents the application's exposed meaning as a TUI:
 
 ```text
 GUI application
       ↓
-AT-SPI semantics + spatial evidence
+public AT-SPI Accessibility semantics
       ↓
-Semantic graph + spatial topology
+GUI2TUI semantic runtime
       ↓
-Region presentation + responsive composition
+terminal-native views and operations
       ↓
-Terminal-native tasks and content
+authoritative GUI state/readback
 ```
 
-GUI2TUI is not a framebuffer-to-ASCII converter, remote desktop, or GUI layout
-emulator. It reorganizes exposed roles, relations, state and safe operations for
-a terminal: buttons remain actions, choices become terminal selectors, and
-document-like content becomes a reflowed Reader.
+The Headless-first path does not require the user to operate GNOME, KDE, VNC
+or a physical display. The GUI application may still need a background Xvfb,
+session D-Bus or qualified Wayland compositor on the same host.
 
-v0.1 established semantic GUI → terminal workflows. v0.2 added generic spatial
-reconstruction and responsive composition. v0.3 adds verified capability
-recovery: GUI2TUI exposes mutation only when public semantics, current identity,
-safe invocation, and authoritative read-back make it trustworthy. Coverage
-still depends on what each application exposes through Linux Accessibility /
-AT-SPI.
+## What you can do
 
-## v0.2 navigation
+GUI2TUI v1.0 provides a verified semantic task baseline including:
 
-The terminal-generated Region Navigator is distinct from GUI TabList semantics:
+- discover and explicitly select accessible applications;
+- navigate responsive terminal-native scenes, forms and controls;
+- operate buttons, toggles, values, single selection, table rows, tabs and
+  qualified hierarchies;
+- use menus, modal dialogs, Open File and Choose Folder where the application
+  exposes verifiable public semantics;
+- read document/content regions through Reader, outline and bounded search;
+- edit qualified single-line text and complete, bounded, non-secret plain text
+  through an optional local handler;
+- follow dynamic UI changes and continue manually from the fresh scene;
+- reject stale targets and report unsupported semantics instead of guessing.
 
-```text
-F6 / Shift+F6       major region
-Ctrl+Tab             sibling pane
-Ctrl+Shift+Tab       previous sibling pane
-Tab / Shift+Tab      control in the active pane
+## What it is not
+
+GUI2TUI is not a remote desktop, framebuffer-to-ASCII converter, OCR system,
+coordinate-clicking tool, keyboard/mouse injection layer or application-specific
+scripting framework. It does not use DOM/CDP, UNO, private toolkit APIs or
+backing-file mutation to manufacture capability.
+
+## Quick start
+
+Download the appropriate archive from the
+[GUI2TUI v1.0.0 release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v1.0.0).
+The archives are named for the target reported by `uname -m`:
+
+```bash
+ARCH="$(uname -m)"       # x86_64 or aarch64
+curl -LO "https://github.com/Chenhzjs/GUI2TUI/releases/download/v1.0.0/gui2tui-1.0.0-linux-${ARCH}.tar.gz"
+tar -xzf "gui2tui-1.0.0-linux-${ARCH}.tar.gz"
+cd "gui2tui-1.0.0-linux-${ARCH}"
+./install-user.sh --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+gui2tui --version
 ```
 
-Depending on terminal space, regions may split, stack, collapse, summarize or
-move into navigation. At most two useful navigation levels are shown; missing
-or unreliable accessibility data degrades safely.
+Verify a downloaded archive with the release `SHA256SUMS` before installing.
+The installer is unprivileged and deliberately refuses to overwrite existing
+targets. For replacement or custom prefixes, see
+[Getting started](docs/getting-started.md).
 
-## What works in v0.3
+### Start a Managed headless session
 
-- Application discovery, saved launchers and terminal application selector
-- Buttons, checkboxes, choices, menus and semantic command palette
-- Safe atomic editing of qualified plain single-line text fields
-- Native adjustment of qualified bounded Slider/SpinButton-style Values
-- Optional configured interaction for complete, bounded, non-secret multiline
-  plain text, with conflict checks and public AT-SPI write-back
-- Reader, Outline and bounded semantic Search
-- Tables and explicitly partial/virtualized collections
-- Event-driven updates with fast AT-SPI Cache bootstrap and correctness fallback
-- Keyboard and terminal-mouse operation
-- Headless operation and optional same-host modality viewer
-- Reference-first external resources and explicit static visual snapshots
-- GTK, Qt, Chromium, Firefox and LibreOffice representative workflows
-- Responsive spatial composition and hierarchical region navigation
+On a host without a user-operated graphical desktop:
 
-The original GUI always remains authoritative. Setter/process success alone is
-not presented as success; GUI2TUI independently reads the resulting GUI state.
-Progress/status Values, incomplete or rich documents, passwords, anonymous
-actions, and unverified writes remain read-only or unavailable by design.
-
-## Examples from real GUI applications
-
-The following are shortened exports from real Linux AT-SPI sessions, not UI
-mockups. GUI2TUI reorganizes the exposed semantics instead of copying the GUI's
-pixel layout.
-
-### v0.2 spatial scenes
-
-These captures are real accessibility-backed v0.2 scenes (not mockups):
-
-| Application | Representative scene |
-| --- | --- |
-| Chromium | [responsive document + address/search surface](docs/validation/v0.2/terminal-ux/chromium-normal.png) |
-| Qt Designer | [hierarchical Region Navigator](docs/validation/v0.2/terminal-ux/qt-designer-wide.png) |
-| EOG | [graphical content + compact controls](docs/validation/v0.2/terminal-ux/eog-normal.png) |
-| Mousepad | [document-centered normal scene](docs/validation/v0.2/terminal-ux/mousepad-normal.png) |
-
-### Chrome and Firefox: web page → Reader, outline and search
-
-A normal browser page with headings, links, form controls and tables becomes a
-bounded document task:
-
-```text
-┌ GUI2TUI — GUI2TUI Browser Fixture - Google Chrome ───────┐
-│> Document: GUI2TUI Browser Fixture                       │
-│    114 blocks | 4 headings | 3 links | 18 forms          │
-│    completeness: Complete                                │
-│    [ Enter: Read document ]                              │
-│    o Outline | / Content search                          │
-└──────────────────────────────────────────────────────────┘
-
-┌ Reader — GUI2TUI Browser Fixture ────────────────────────┐
-│ # Semantic architecture                                 │
-│ GUI2TUI turns accessibility semantics into               │
-│ terminal-native tasks and readable content.              │
-│ [Link] Architecture                                      │
-│ [Link] Evaluation                                        │
-└──────────────────────────────────────────────────────────┘
+```bash
+gui2tui setup persistent
+gui2tui --session managed doctor
+gui2tui --session managed
 ```
 
-Chrome and Firefox both completed Reader, Outline, Search and semantic-table
-workflows. This path uses AT-SPI only—no DOM/CDP or browser-specific adapter.
+The target GUI application must run inside the same selected graphical and
+Accessibility session. If it is already running, select it in the application
+list. If it is installed and can be launched directly, register it and let
+GUI2TUI start it in the Managed session:
 
-![Real browser content search rendered by GUI2TUI](docs/assets/readme/reader-search.png)
-
-### LibreOffice Writer: document canvas → reflowed content
-
-Writer content is presented as headings and semantic blocks rather than a
-terminal copy of the page canvas:
-
-```text
-┌ Reader — LibreOffice Writer — partial ───────────────────┐
-│ # GUI2TUI Semantic Content                               │
-│ This document is read through AT-SPI only.                │
-│ # Architecture                                           │
-│ • Controls remain task-oriented.                         │
-│ • Paragraphs are progressively materialized.             │
-└──────────────────────────────────────────────────────────┘
+```bash
+gui2tui --session managed app add mousepad
+gui2tui --session managed launch mousepad
+gui2tui --session managed
 ```
 
-GUI2TUI does not parse ODT or use UNO. If Writer exposes only the realized
-portion of a long document, the Reader says `partial` instead of claiming full
-document coverage.
+The launcher passes arguments directly without a shell. It cannot create an
+Accessibility tree for an application that does not expose one. Use
+`gui2tui setup status`, `restart` and `stop` to manage the session.
 
-### GTK and Qt applications: controls → terminal tasks
+### Use the TUI
 
-Mousepad multiline content becomes a Reader. Qt Designer choices, commands and
-dialogs remain navigable. Controlled GTK/Qt applications additionally validate
-safe text editing, choices, checkboxes and authoritative action read-back:
+The selector accepts arrows, Enter and `/` for filtering. In a scene, use
+Tab/Shift-Tab and the arrow keys to move through available semantic controls;
+Enter invokes the currently advertised operation. `F1` or `?` opens contextual
+help, `F5` refreshes/reconnects where applicable, `:` opens scoped commands,
+and `q` or Ctrl-C exits while restoring the terminal.
 
-```text
-┌ GUI2TUI — Qt form ────────────────────────────────────────┐
-│ Username: alice                                          │
-│ Password: [password]  (read-only)                        │
-│ [x] Enable feature                                       │
-│> [ Theme: Light ▼ ]                                      │
-│ [ Choice: Beta ▼ ]                                       │
-│ [ Activate safely ]                                      │
-└──────────────────────────────────────────────────────────┘
-```
+For the complete first-use path, external text configuration, Docker and SSH
+examples, read [Getting started](docs/getting-started.md) and
+[Deployment](docs/deployment.md).
 
-In the recorded GTK workflow, activating a TUI button changed the checkbox and
-status in the original GUI; GUI2TUI then refreshed from AT-SPI rather than
-changing local state optimistically.
+## Real demonstrations
 
-![Original GTK application confirming a semantic TUI action](docs/assets/readme/action-confirmed.png)
+These repository assets are real accessibility-backed GUI/TUI captures, not
+mockups:
 
-[See the full collection of real GUI → TUI exports](docs/gui-to-tui-examples.md),
-including browser tables, Writer, GTK rich text, Qt Choice overlays and static
-visual modality.
+### Semantic action with authoritative result
 
-### Safe degradation is a feature
+The original GTK fixture and the terminal show the same public semantic action
+and resulting state:
 
-When accessibility information is incomplete, GUI2TUI does not guess:
+![Real GUI and TUI action confirmation](docs/assets/readme/action-confirmed.png)
 
-- anonymous action → refused;
-- partially exposed document → clearly marked `PartialRealized`;
-- unresolved visual resource → unavailable rather than fabricated;
-- stale backend object → rejected instead of reusing an old identity.
+### Reader and content search
 
-## How it works
+An exposed document is reorganized as a terminal Reader; search operates on
+the available semantic content:
 
-```mermaid
-flowchart LR
-    A[GUI App] --> B[AT-SPI]
-    B --> C[Semantic Runtime]
-    C --> D[Task + Content Reconstruction]
-    D --> E[Terminal UI]
-    E --> F[Semantic Operation]
-    F --> A
-```
+![Real GUI2TUI Reader and semantic search](docs/assets/readme/reader-search.png)
 
-The original GUI remains the source of truth. GUI2TUI sends only resolved,
-advertised semantic operations, then confirms resulting state through AT-SPI
-events or bounded read-back. Geometry is not the primary terminal layout.
+### End-to-end semantic scene
 
-See [Architecture](docs/architecture.md), [Design principles](docs/design-principles.md),
-and the [semantic contract](docs/semantic-contract.md) for the technical model.
+This capture shows the original GUI beside the terminal-native scene, including
+an exposed action and status readback:
 
-## Real-world validation
+![Real GUI2TUI semantic scene](docs/assets/readme/hero.png)
 
-| Family | Validated example | Current result |
-| --- | --- | --- |
-| GTK | Mousepad, controlled GTK fixtures | Native text and configured complete-text workflows validated |
-| Qt | Qt Designer, controlled Qt fixtures | Spatial workflows and bounded Value validated; unsafe multiline Text remains quarantined |
-| Chromium | Google Chrome | Validated Reader/table/search workflows |
-| Firefox | Mozilla Firefox | Validated Reader/table/search workflows |
-| LibreOffice | Writer | Validated; long documents may be partial |
-| Electron | Visual Studio Code | Partial, accessibility-dependent |
+For the reproducible GTK fixture walkthrough, recording method and result
+files, see [demo assets](docs/demo/README.md). The older Value and external-text
+recordings remain useful demonstrations of the same v1.0 safety contracts;
+their historical provenance is retained under [docs/demo/v0.3](docs/demo/v0.3/README.md):
+[short walkthrough](docs/demo/v0.3/hero-v0.3.mp4) and
+[full safety/refusal walkthrough](docs/demo/v0.3/demo-v0.3.mp4).
 
-These are bounded workflow claims, not promises that every control in every
-application is supported. See the detailed [compatibility matrix](docs/compatibility.md)
-and [Phase 4C evidence](docs/phase4c-validation.md).
+## Supported environments
 
-## Known limitations
+GUI2TUI v1.0 is Headless-first. The qualified support contract includes:
 
-- Large Chromium trees may need several seconds while the accessibility Cache
-  is incomplete and GUI2TUI performs a correctness walk.
-- Long documents may expose only the currently realized semantic subset.
-- Electron coverage depends heavily on each application's accessibility tree.
-- External editing is limited to qualified complete, bounded, non-secret plain
-  text. Rich, partial, virtualized and quarantined text remains read-only.
-- Configured handlers must preserve GUI2TUI's owned artifact identity; editor
-  compatibility is not universal. No editor is required for normal startup.
-- Password editing/export, broad Selection recovery, generic Expand/Collapse,
-  IME, clipboard and remote-caret editing are not implemented.
-- Wayland static image acquisition is not implemented.
-- Remote companion transport and new-TTY attachment are not implemented.
-- Live game, video and 3D surfaces are not streamed.
+- Managed Xvfb sessions;
+- the recorded unprivileged Docker/OCI interactive-PTY topology;
+- same-host SSH into a Managed session;
+- the recorded Weston headless Native Wayland/XWayland topology, with explicit
+  limitations;
+- native Linux aarch64 package and live evidence.
 
-See [Limitations](docs/limitations.md) for exact safety boundaries.
+Linux x86_64 packages are available and ABI/install/runtime-smoke qualified
+through amd64 emulation on an arm64 host. Native x86_64 hardware and a full
+native environment matrix are not qualified. Linux native VT, ordinary local
+desktop sessions, Wayland over SSH, static capture and cross-host Remote
+Companion are not v1.0 support claims.
+
+See the [frozen v1.0 support matrix](docs/validation/v1.0/final-support-matrix.md)
+for exact topology and architecture boundaries.
+
+## Safety and correctness
+
+GUI2TUI acts only on currently exposed public Accessibility semantics. A
+successful backend method or event does not by itself prove success; writes
+require fresh authoritative application readback. Stale targets, replaced
+applications and invalid scopes are rejected. PasswordText is never exported,
+external text handlers receive only private GUI2TUI-owned candidates, and
+unsupported or incomplete semantics degrade to read-only or an explicit refusal.
+
+## Limitations
+
+Accessibility quality is application-defined. Not every control exposes a
+safe operation, and some Qt transient choice shapes do not expose reliable
+selected/current truth. Rich-text fidelity, arbitrary drag/drop, exhaustive
+virtualization, pointer-only interactions and private application semantics
+are outside the v1.0 task contract. Long documents and virtualized content may
+remain partial. See [v1.0 limitations](docs/limitations.md) for the detailed
+matrix and safe recovery guidance.
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
-- [Configuration](docs/configuration.md)
-- [Deployment: headless and same-host](docs/deployment.md)
-- [Troubleshooting and contents-free diagnostics](docs/troubleshooting.md)
-- [Inspector reference](docs/inspector.md)
+- [Deployment and supported topologies](docs/deployment.md)
+- [Limitations and support boundaries](docs/limitations.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Architecture](docs/architecture.md)
-- [Development and live-test harnesses](docs/development.md)
-- [Project history](docs/history.md)
-- [v0.3.0 release notes](docs/release-notes-v0.3.0.md)
-- [v1.0.0 release notes](docs/release-notes-v1.0.0.md)
-- [v0.2.0 release notes](docs/release-notes-v0.2.0.md)
-- [Unreleased corrective notes for v0.1.2](docs/release-notes-v0.1.2.md)
-- [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
-- [Launcher compatibility and failure classes](docs/launcher-compatibility.md)
-- [Release notes for v0.1.0](docs/release-notes-v0.1.0.md)
-- [v0.1.0 public release verification](docs/release-v0.1.0-validation.md)
+- [Engineering guide](docs/project-guide.md)
+- [v1.0 release notes](docs/release-notes-v1.0.0.md)
+- [Release verification](docs/validation/v1.0/final-release/HANDOFF.md)
+- [Development and validation history](docs/history.md)
 
 ## Development
 
-macOS can build and test the code, but live AT-SPI operation requires Linux.
-Rust 1.88 or newer is supported.
+Builds and tests require Rust 1.88 or newer. Live AT-SPI operation requires
+Linux; macOS can build and run non-live checks.
 
 ```bash
 cargo build --locked
 cargo test --all-targets --locked
 ```
 
-The Rust backend talks to AT-SPI over D-Bus through `zbus`; it does not link to
-GTK, Qt or `libatspi`. See [Development](docs/development.md) for fixtures,
-Xvfb/browser probes, release packaging and the reproducible demo recorder.
-
-## Current boundaries
-
-- Accessibility completeness and operation quality remain application-defined.
-- Rich-text fidelity, broad Selection and generic Expand/Collapse recovery are
-  intentionally outside v0.3.
-- Remote modality transport, Wayland static capture, and live visual streaming
-  remain future work.
+GUI2TUI reached v1.0 through internal architecture and validation milestones.
+Historical evidence remains under `docs/validation/` and the planning
+documents; it is provenance, not additional user setup.
 
 ## License
 

@@ -1,47 +1,71 @@
-# v0.3 limitations
+# GUI2TUI v1.0 limitations
 
-- Applications must expose useful Linux accessibility semantics. GTK/Qt/browser implementations
-  differ. Read-only/unavailable is an honest result, not an invitation to inject guessed actions.
-- Anonymous Chrome/Electron actions are never semantic index-0 fallbacks. Named safe actions or
-  parent Selection are required. GTK ComboBox options may be accessibility-limited and remain read-only.
-- Qualified plain single-line editing is atomic replacement with read-back. Complete, bounded,
-  non-secret multiline plain text may use an optional configured handler, but rich-text fidelity,
-  partial/virtualized whole-target writes, remote caret/selection, IME and clipboard integration
-  are NOT IMPLEMENTED.
-- Some Qt Text interfaces can crash their own bridge; failed probes quarantine only that generation.
-  Firefox read-back remains authoritative even when an application rejects/normalizes a write.
-- Partial/virtualized collections and tables only expose available semantic data. No guarantee of
-  complete logical contents from enumerated realized children, and `PartialRealized` content is
-  never treated as a writable whole target.
-- Native Value mutation is limited to enabled, non-read-only Slider/SpinButton-style controls with
-  finite current/min/max and a positive public increment. ProgressBar/LevelBar remain informational;
-  ScrollBars do not become generic writable UI noise.
-- External interaction handlers are optional, shell-free user configuration. They edit private
-  GUI2TUI-owned candidates, never application backing files. Compatibility is not universal: a
-  handler that replaces the owned inode is safely refused. PasswordText is never exported.
-- Broad Selection recovery and generic Expand/Collapse remain unimplemented. Anonymous actions
-  and action-index fallbacks are always refused.
-- Reader/search depend on accessibility text availability. This is not a document-format parser.
-- Static Image snapshots require reliable coordinates/provider and explicit action. They may be
-  composited/occluded and are labelled accordingly. Live graphics/streaming/remote desktop out of scope.
-- Wayland static acquisition, new-TTY attachment, remote production transport, persistent viewer
-  trust UI, native deb/rpm/AppImage/Flatpak packages: NOT IMPLEMENTED.
-- Electron remains best-effort/environment-dependent, not a v0.1 hard gate. No toolkit adapters,
-  DOM/CDP/UNO, OCR, visual inference or application-specific extraction are used.
-- Internal v0.7E x86_64 and aarch64 archives passed archive/ABI/install smoke. The recorded
-  aarch64 runtime qualification is native; x86_64 runtime evidence used amd64 container
-  emulation on an arm64 host, so native x86_64 hardware and a full x86_64 environment matrix
-  are not claimed. Other architectures must be built/tested independently. A matching filename
-  is not proof of binary compatibility.
+GUI2TUI is an Accessibility-driven semantic runtime. Its capabilities depend
+on what the target application exposes through public Linux AT-SPI interfaces.
+Read-only or unavailable is an honest result, not a reason to inject guessed
+input or use private application APIs.
 
-See [compatibility evidence](compatibility.md), [runtime recovery](phase4a-completion.md),
-[real examples](gui-to-tui-examples.md) and [architecture freeze](architecture-freeze.md).
+## Semantic and interaction boundaries
 
-Phase 4C real-application evidence is [tracked separately](phase4c-validation.md).
-Fresh Chrome profiles can force a multi-second correctness walk when Cache.GetItems
-is incomplete. Complete 5,158-item Cache startup remains about 0.2 seconds; five
-fresh incomplete samples had a 4.07-second median. This is a documented P2 startup
-limitation, not an invitation to accept a partial tree.
-Unqualified multiline editor buffers remain Reader-only, never atomic single-line edit targets.
-Writer long-document realized subsets do not imply complete-document search;
-search completion explicitly refers only to exposed semantic content.
+- Not every control exposes a compatible public action, selection truth or
+  authoritative readback. Missing or ambiguous semantics remain read-only or
+  are refused.
+- The v1.0 baseline covers structured forms, buttons/toggles, values, single
+  selection, table rows, PageTabs, qualified hierarchies, menus/dialogs,
+  Open File, Choose Folder, Reader, single-line text and qualified complete
+  non-secret plain-text external editing.
+- Broad or multi-selection recovery, arbitrary drag/drop, pointer-only context
+  menus, exhaustive virtualization and generic rich-text fidelity are not
+  promised.
+- Partial or virtualized collections expose only the realized semantic data.
+  `PartialRealized` content is never treated as a complete writable target.
+- Reader and search depend on exposed accessibility text; GUI2TUI is not a
+  document-format parser. Long documents may remain partial.
+- Some Qt transient choice shapes do not expose reliable selected/current
+  truth. GUI2TUI refuses false success for those shapes.
+
+## Text, secrets and external handlers
+
+- Qualified single-line editing uses bounded atomic replacement and
+  authoritative readback.
+- Complete, bounded, non-secret multiline plain text may use an optional local
+  handler. Rich, partial, virtualized, IME, clipboard and remote-caret editing
+  remain limited or read-only.
+- Handlers receive only a private GUI2TUI-owned candidate, are invoked without
+  a shell, and must preserve the owned artifact identity. Application backing
+  files are never used as the semantic backend.
+- `PasswordText` is never read, exported or passed to an external handler.
+- ProgressBar/LevelBar and other informational Values remain read-only; Value
+  mutation is limited to enabled controls with finite public bounds and an
+  advertised increment.
+
+## Environment boundaries
+
+The formal support contract is in the
+[v1.0 Final Support Matrix](validation/v1.0/final-support-matrix.md).
+
+- Managed Xvfb, the recorded unprivileged Docker/OCI interactive PTY, and
+  same-host SSH into Managed are supported within their recorded topology
+  boundaries.
+- Headless Native Wayland and XWayland are supported only in the recorded
+  Weston 13 headless/Pixman configuration, with geometry and compositor
+  limitations.
+- GNU/Linux aarch64 has native package and live evidence.
+- GNU/Linux x86_64 packages are available, but runtime evidence used amd64
+  emulation on an arm64 host. Native x86_64 hardware and a full native
+  environment matrix are not qualified.
+- Linux native VT, ordinary local X11/Wayland desktop sessions, same-host SSH
+  into an existing desktop and Wayland over SSH are not qualified.
+- Wayland static capture is unsupported/deferred. No compositor is bundled.
+- Cross-host Remote Companion and semantic transport are post-1.0 work.
+- Native deb/rpm/AppImage/Flatpak packages are not provided by the v1.0
+  release pipeline.
+
+## Deliberate safety exclusions
+
+Production behavior does not use DOM/CDP, UNO, private toolkit APIs, OCR,
+screen understanding, coordinate clicking, keyboard/mouse injection, action
+index guessing, fuzzy target migration or application-specific adapters.
+
+See [Troubleshooting](troubleshooting.md) for safe recovery guidance and
+[Compatibility](compatibility.md) for historical application evidence.

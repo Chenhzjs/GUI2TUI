@@ -1,46 +1,35 @@
-# Headless-first deployment and environment direction
+# Headless-first deployment
 
-The v1.0 support wording is consolidated in the
-[Phase 1.0C final support matrix](validation/v1.0/final-support-matrix.md).
-The table below remains the detailed evidence boundary; it does not broaden
-claims beyond the named topology, architecture and compositor.
+GUI2TUI v1.0 is designed for users who have a local TTY, SSH PTY or container
+terminal while the target GUI application runs in a same-host graphical and
+Accessibility session. The user does not need a visible GNOME/KDE desktop,
+VNC or RDP. The application may still require a background Xvfb or qualified
+Wayland compositor.
 
-The following table distinguishes the user-approved 1.0 development target
-from current qualification. A target is not a formal support claim.
+The exact contract is frozen in the
+[v1.0 Final Support Matrix](validation/v1.0/final-support-matrix.md).
 
-| Deployment | 1.0 direction | Current qualification |
-| --- | --- | --- |
-| GUI2TUI-managed Xvfb | Core support target | QUALIFIED on Ubuntu 24.04 aarch64 with the exact internal 0.7E package: create/reuse/stop/recreate, operation/readback, terminal/handler lifecycle and cleanup passed. |
-| Local Linux TTY -> Managed | Core candidate | Managed local PTY passed; real Linux virtual-console TTY is NOT TESTED. |
-| Same-host SSH -> Managed | Core candidate | QUALIFIED with the exact aarch64 package on the recorded Ubuntu 24.04 arm64 loopback OpenSSH interactive-PTY topology, with explicit client and disconnect limitations. |
-| Docker/OCI Headless | Important separately qualified candidate | QUALIFIED WITH EXPLICIT LIMITATIONS with the exact aarch64 package on one unprivileged Ubuntu 24.04 arm64 live topology; no production image is supplied. |
-| Local Linux X11, same user/session | Optional compatibility | NOT TESTED in a real local desktop; controlled Xvfb evidence is not a substitute. |
-| Same-host SSH -> existing Desktop | Optional compatibility | NOT TESTED; it is not a Headless-core prerequisite. |
-| Native Wayland | Evidence-driven candidate | QUALIFIED WITH EXPLICIT LIMITATIONS with the exact aarch64 package on Ubuntu 24.04 arm64, Weston 13 headless/Pixman and controlled GTK4/Qt6. |
-| XWayland | Separate evidence-driven candidate | QUALIFIED WITH EXPLICIT LIMITATIONS with that package/compositor and XWayland 23.2.6 plus controlled GTK4. |
-| Headless Wayland | Headless candidate | QUALIFIED WITH EXPLICIT LIMITATIONS with the exact aarch64 package for that non-privileged Weston topology; no compositor is bundled. |
-| Local TUI + GUI on another host | Deferred until after 1.0 | No Remote Companion, cross-host semantic transport, authentication, event/cache sync, or remote backend is implemented. |
-| Linux same-host graphical viewer | Existing optional modality | Explicit private socket, configured handler and local authorization; this is not Remote Companion. |
-| macOS/Windows GUI backend | Outside the Linux AT-SPI 1.0 baseline | macOS remains build/development verification only; no GUI semantic backend. |
-| New TTY attaches to existing runtime | Not implemented | Same-process/same-PTY detach/resume is distinct and verified. |
+## Supported deployment topologies
 
-The internal 0.7E package baseline is exact-source commit `eb5841f`. Its
-aarch64 archive is qualified on the recorded native arm64 container host. Its
-x86_64 archive passed ELF/ABI, extracted smoke, fresh install, installed
-Doctor/Managed setup/semantic smoke and safe uninstall through amd64
-Docker/OrbStack platform emulation on an arm64 host; native x86_64 hardware
-and the full x86_64 environment matrix remain outside that claim. Both
-archives reference at most glibc 2.34 and passed the declared glibc 2.35 gate.
-They are internal qualification artifacts, not a published v0.7 package. The
-combined evidence review closes v0.7 as an internal qualified milestone; it
-does not broaden this matrix or authorize v1.0 integration or release.
+| Topology | v1.0 status |
+| --- | --- |
+| Managed Xvfb | Supported within the recorded unprivileged arm64 topology |
+| Docker/OCI interactive PTY | Supported with the recorded limitations; no production container image is supplied |
+| Same-host SSH -> Managed | Supported with the recorded loopback OpenSSH/PTy limitations |
+| Headless Native Wayland | Supported with explicit Weston/Pixman and geometry limitations |
+| Headless XWayland | Supported with the recorded Weston/XWayland limitations |
+| GNU/Linux aarch64 | Qualified with native package/live evidence |
+| GNU/Linux x86_64 | Package and emulated-runtime qualified; native hardware not qualified |
+| Linux native VT | Not qualified |
+| Ordinary local X11/Wayland desktop | Optional compatibility, not qualified |
+| Wayland over SSH | Not qualified |
+| Cross-host Remote Companion | Post-1.0 |
 
-GUI2TUI's core user may have only a local TTY, SSH PTY or container TTY. The
-target GUI application can still require a background X11 display server or
-Wayland compositor. Headless-first means no directly interactive graphical
-desktop is required for the user; it does not mean the application has no
-graphical runtime dependency. A complete visible desktop environment is not a
-prerequisite for the Managed path.
+One PTY, compositor or display-server result never broadens another named
+topology. See the support matrix for the exact distribution, architecture,
+compositor and terminal boundaries.
+
+## Session selection
 
 Choose the connection environment before application discovery:
 
@@ -53,67 +42,96 @@ gui2tui --session managed doctor
 gui2tui --session managed
 ```
 
-Desktop selection never imports the managed descriptor. Managed selection
-requires the private current-user descriptor and fails on missing, invalid,
-stopped, unsafe or unreachable state; it neither creates a session nor falls
-back. With no flag, the documented compatibility mode reuses a valid managed
-descriptor if present, honors `GUI2TUI_NO_MANAGED_SESSION`, otherwise uses the
-inherited desktop environment, and reports the result. Session selection does
-not grant application authority: the selected registry is enumerated afresh
-and an exact current application must still be chosen.
+`desktop` uses the session environment inherited by the current process.
+`managed` requires a valid current-user-owned descriptor created by
+`gui2tui setup persistent`; it never silently falls back or creates a missing
+session. Omitting `--session` retains compatibility behavior: reuse a valid
+managed descriptor when present, otherwise use the inherited environment.
 
-## Installation and diagnosis foundation
+Session selection only chooses the Accessibility environment. It does not
+authorize an application. GUI2TUI enumerates the current registry and the user
+must explicitly select an application.
 
-Current source and future bundles use the same unprivileged prefix contract:
+## Managed Xvfb
+
+Persistent Managed mode creates a private Xvfb, session D-Bus and AT-SPI
+environment for future terminals:
 
 ```bash
-cargo build --release --locked --bins
-./scripts/install-user.sh --prefix "$HOME/.local"
-"$HOME/.local/bin/gui2tui" --session desktop doctor
+gui2tui setup persistent
+gui2tui setup status
+gui2tui --session managed doctor
 ```
 
-The installer copies only the main executable, inspector, Managed Headless
-helper, optional same-host modality helper and exact-file uninstaller. Private
-helpers are resolved relative to the running main executable, not the checkout
-or current directory. An owned mode-0600 hash manifest makes removal bounded;
-the uninstaller refuses changed files, symlinks and a remaining Managed
-descriptor, then preserves configuration, runtime/recovery data and unrelated
-prefix entries. It never uses `sudo` or recursively removes a prefix.
+Register and launch an application without invoking a shell:
 
-Doctor reports installation entry/helper integrity separately from terminal,
-session D-Bus, `org.a11y.Bus`, AT-SPI registry and accessible-application
-count. A reachable registry with zero applications is a warning, not a
-connection failure. Application presence is not semantic-capability
-qualification: Doctor performs no control traversal or mutation and reports
-application-level semantic sufficiency as NOT CHECKED. A configured complex
-text handler is validated as direct argv and executable without starting it or
-creating a candidate; an absent handler remains valid.
+```bash
+gui2tui --session managed app add mousepad
+gui2tui --session managed launch mousepad
+gui2tui --session managed
+```
 
-Headless does not mean launching GUI programs without any display server. It
-means the terminal frontend needs no graphical viewer. Managed Xvfb supplies
-one qualified background graphical environment; the bounded 0.7D evidence
-also qualifies Native Wayland and XWayland semantics on one Weston 13
-headless/Pixman topology. Those remain separate rows and do not qualify other
-compositors, distributions, architectures or ordinary desktop sessions.
-Wayland static capture is NOT IMPLEMENTED, and no compositor is bundled.
-Missing or collapsed global Wayland geometry degrades presentation and cannot
-by itself invalidate otherwise working semantic interaction.
+The application must be installed and must expose an AT-SPI application in that
+session. GUI2TUI cannot manufacture semantics for an inaccessible program.
+Use `gui2tui setup restart` to recreate the session and `gui2tui setup stop`
+to stop it and remove its active descriptor. Strict Snap confinement may block
+access to a private Managed bus; use a normal desktop session or a non-Snap
+build rather than weakening the sandbox.
 
-No viewer endpoint means no endpoint wait on startup. F4 resource tasks remain reference-first;
-materialization on the GUI2TUI host is independent of transport. A captured region is labelled
-RenderedSnapshot, never an original embedded resource. Only explicit user requests capture one frame.
+For an isolated shell, use:
 
-Use a private current-user runtime directory for broker sockets, artifacts and diagnostic logs.
-Artifact ownership/leases prevent one live session's files being scavenged by another. Running as
-root is unnecessary and does not solve access to another user's session bus.
+```bash
+gui2tui setup temporary
+```
 
-The current evidence is intentionally bounded. Managed Xvfb, unprivileged
-Docker interactive TTY, real SSH -> Managed, and the recorded Weston
-Native-Wayland/XWayland topology have matching live evidence. Real Linux
-virtual-console TTY, ordinary local X11, SSH -> existing Desktop, ordinary
-full-desktop Wayland and Wayland over SSH remain NOT TESTED. One PTY, display
-server or compositor result cannot substitute for another named environment.
+Temporary mode removes its private session state when the child command exits.
 
-See the
-[Headless-first product and environment contract](planning/v0.7-headless-first-contract.md)
-for the current classification and revised phase exits.
+## Docker and SSH
+
+The supported Docker contract is an unprivileged interactive PTY in the
+recorded Ubuntu 24.04 arm64 topology. It is not a general production image or
+a claim for every OCI runtime. The supported SSH contract is SSH into the same
+host's Managed session; it is not cross-host semantic transport and does not
+cover SSH into an existing desktop or Wayland-over-SSH.
+
+The terminal must provide UTF-8, cursor and alternate-screen support. The
+target GUI application's display/runtime remains on the same host as the
+Accessibility session.
+
+## Headless Wayland and XWayland
+
+The qualified Wayland evidence uses Weston 13 headless/Pixman, Ubuntu 24.04
+arm64 and controlled GTK4/Qt6/XWayland applications. Geometry is presentation
+evidence only. Collapsed or incomplete geometry degrades layout; it never
+creates operation authority. Other compositors, distributions, ordinary full
+Wayland desktops and Wayland over SSH are outside the v1.0 claim. Wayland
+static capture is not implemented and no compositor is bundled.
+
+## Installation and upgrade
+
+Use the official v1.0.0 archive and the unprivileged installer. It refuses
+pre-existing targets, symlinks and unsafe manifests rather than overwriting
+files. To replace an existing installation:
+
+1. Stop the owned Managed session.
+2. Run the installed exact-file uninstaller.
+3. Preserve configuration, runtime/recovery data and unrelated prefix files.
+4. Install the v1.0.0 archive into the same prefix.
+5. Run `gui2tui doctor` and a representative semantic smoke before normal use.
+
+Do not recursively delete `$HOME/.local` or use `sudo` for installation.
+
+## Diagnosis and recovery
+
+Run:
+
+```bash
+gui2tui doctor
+gui2tui doctor --json --report ./gui2tui-report.json
+```
+
+Doctor checks installation, terminal basics, selected session D-Bus,
+Accessibility services, registry and application presence without reading GUI
+content. A registry with zero applications is a warning, not proof that the
+session is unavailable. See [Troubleshooting](troubleshooting.md) for safe
+recovery by symptom.

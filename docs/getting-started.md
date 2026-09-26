@@ -1,23 +1,29 @@
-# Getting started
+# Getting started with GUI2TUI v1.0
 
-GUI2TUI `1.0.0` presents accessibility semantics, spatial relationships,
-and verified operations as a responsive terminal application. It provides native
-controls, bounded Value adjustment, a document Reader, and optional configured
-interaction for qualified complete plain text. Insufficient capability remains
-visibly read-only; operations are never guessed.
+GUI2TUI presents public Linux Accessibility semantics, spatial relationships
+and verified operations as a responsive terminal application. It provides
+native controls, bounded Value adjustment, a document Reader and optional
+configured interaction for qualified complete plain text. Insufficient
+capability remains visibly read-only; operations are never guessed.
 
 ## User-prefix installation
 
-Build the current source on Linux with the pinned dependencies, then install
-the complete runtime layout without root:
+For normal use, download the `v1.0.0` archive for `x86_64` or `aarch64` from
+the [GitHub release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v1.0.0),
+extract it, and install the complete runtime layout without root:
 
 ```bash
-cargo build --release --locked --bins
-./scripts/install-user.sh --prefix "$HOME/.local"
+tar -xzf gui2tui-1.0.0-linux-aarch64.tar.gz
+cd gui2tui-1.0.0-linux-aarch64
+./install-user.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-An extracted bundle that contains the installer uses the same contract:
+Use the matching `x86_64` directory and archive on that architecture. Building
+from source is documented under [Development](development.md), not required
+for a release installation.
+
+An extracted release bundle uses the same installer contract:
 
 ```bash
 ./install-user.sh --prefix "$HOME/.local"
@@ -183,10 +189,10 @@ Temporary mode removes its private Xvfb/runtime directory when the child shell
 or command exits. Neither mode installs packages automatically. Missing Ubuntu
 dependencies are reported with the corresponding `apt install` command.
 
-### Validation-only Docker and SSH topology
+### Maintainer validation environments
 
-The repository contains a reproducible v0.7C live environment for the exact
-qualified Ubuntu 24.04 arm64 container topology:
+The repository contains bounded live environments for the exact qualified
+Ubuntu 24.04 arm64 Docker, SSH and Weston topologies:
 
 ```bash
 RESULT_DIR=/tmp/gui2tui-v07c-evidence \
@@ -200,12 +206,11 @@ removes its exact temporary container, image, key and port. It requires Docker,
 OpenSSH client tools and Python 3 on the host. It does not use a host GUI,
 personal SSH keys, privileged mode, host PID namespace or a complete desktop.
 
-This is live qualification infrastructure, not a supported production image
-or general Docker installer. Its result applies only to the recorded topology.
-0.7E subsequently reran it using the exact internal aarch64 package; a Docker
-or SSH PTY result still does not qualify a Linux virtual-console TTY.
+These scripts are validation infrastructure, not a supported production image
+or general Docker installer. Their results apply only to the recorded
+topologies; a Docker or SSH PTY does not qualify a Linux virtual-console TTY.
 
-The repository also contains a bounded 0.7D Headless Wayland/XWayland live
+The repository also contains a bounded Headless Wayland/XWayland live
 environment:
 
 ```bash
