@@ -265,9 +265,10 @@ The next session must inherit:
 - Production Rust changes: **none**.
 - Validation change: added the bounded GTK3 chooser fixture described above;
   no production behavior or architecture changed.
-- Final-package production source: `4c3f3a8038bb33916e79092618b41dd41a9ac68e`
-  for the live evidence recorded in this pass; the final documentation close
-  commit records the complete repository state.
+- Final-package production source: `4f90f09621ac72965b8eff8d4db1c6f41fafbdc`
+  (`BUILD-INFO.json` verified; package version `0.3.0`; aarch64; glibc floor
+  2.34). The final-package rerun covered Open File, Choose Folder and Qt
+  Choice after this package was installed.
 - Targeted live package evidence: **PASS** for Open File, Choose Folder and
   Cancel; **safe refusal** with deterministic public-semantics classification
   for Qt Choice.
