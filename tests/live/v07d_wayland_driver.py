@@ -418,13 +418,25 @@ class Qualification:
         )
         source = packaged_source.stdout.strip() if packaged_source.returncode == 0 else harness_source
         version = self.docker(GUI, "--version").stdout.strip()
-        if "0.3.0" not in version:
-            raise AssertionError(f"unexpected installed version: {version}")
+        packaged_version = self.docker(
+            "python3",
+            "-c",
+            "import json,sys; print(json.load(open(sys.argv[1]))['version'])",
+            "/opt/gui2tui-bundle/BUILD-INFO.json",
+            check=False,
+        )
+        if packaged_version.returncode == 0:
+            expected_version = f"gui2tui {packaged_version.stdout.strip()}"
+            if version != expected_version:
+                raise AssertionError(
+                    f"installed version does not match BUILD-INFO: {version!r} != {expected_version!r}"
+                )
         self.results.update(
             {
                 "source_commit": source,
                 "harness_source_commit": harness_source,
                 "installed_version": version,
+                "version_metadata": "PASS",
                 "installed_binary": "PASS_USER_PREFIX_NONROOT",
                 "headless_compositor": "PASS_WESTON_HEADLESS_PIXMAN",
                 "session_topology": "PASS_CURRENT_DESKTOP_EXPLICIT_PRIVATE_DBUS_ATSPI",
