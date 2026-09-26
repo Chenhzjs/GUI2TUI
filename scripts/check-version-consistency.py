@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed version/provenance checks for an internal release candidate."""
+"""Fail-closed version/provenance checks for a release package."""
 
 import argparse
 import hashlib
@@ -46,7 +46,7 @@ if {archive.name for archive in archives} != {
     f"gui2tui-{args.version}-linux-aarch64.tar.gz",
     f"gui2tui-{args.version}-linux-x86_64.tar.gz",
 }:
-    raise SystemExit("package directory does not contain exactly both expected RC archives")
+    raise SystemExit("package directory does not contain exactly both expected release archives")
 
 expected_digests = {}
 checksum_file = package_dir / "SHA256SUMS"

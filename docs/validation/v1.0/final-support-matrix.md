@@ -1,11 +1,10 @@
 # v1.0 Final Support Matrix
 
-This matrix is the frozen v1.0 qualification contract produced by Phase 1.0C.
-It is based on the v1.0A/v1.0B and v0.7 evidence; it does not promote an
-untested topology by analogy. Public release and RC creation remain separately
-authorized actions.
+This matrix is the frozen v1.0 support contract. It is based on the
+v1.0A/v1.0B, v1.0C and final package evidence; it does not promote an untested
+topology by analogy.
 
-| Topology / capability | RC status | Boundary |
+| Topology / capability | v1.0 status | Boundary |
 | --- | --- | --- |
 | Managed Xvfb | Supported within evidence | Unprivileged user-prefix install, private session D-Bus/AT-SPI, recorded Ubuntu 24.04 arm64 topology. |
 | Docker/OCI Headless interactive PTY | Supported with explicit limitations | One unprivileged Ubuntu 24.04 arm64 topology; no production container image or broad OCI claim. |

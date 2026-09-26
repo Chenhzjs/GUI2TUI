@@ -35,8 +35,7 @@ backing file—into the semantic backend.
 
 ## Build, install and quick start
 
-This source is the internal `1.0.0-rc.1` candidate. The public release remains
-v0.3.0 until a separately authorized v1.0.0 release. Responsive spatial
+This source is the v1.0.0 release source. Responsive spatial
 presentation remains the default; `--layout flat` remains a compatibility
 fallback.
 
@@ -60,7 +59,7 @@ The GUI application must already be running in the explicitly selected Linux
 session whose AT-SPI bus is reachable. `--session desktop` preserves the
 current process's desktop/session environment as an optional compatibility
 path. Same-host SSH -> Managed is qualified on the recorded Ubuntu 24.04 arm64
-loopback OpenSSH interactive-PTY topology using the RC qualification package;
+loopback OpenSSH interactive-PTY topology using the qualified release package;
 this does not claim every SSH client, architecture or existing desktop
 attachment. No config file, root privilege, or companion viewer is required.
 
@@ -111,7 +110,7 @@ The installer writes only the fixed `bin/gui2tui` and private libexec layout,
 requires no root access, and records hashes for exact-file uninstall. See
 [Getting started](docs/getting-started.md) for alternate prefixes, Doctor and
 safe uninstall. Existing published archives retain their own documented
-checksums and provenance; no public v1.0.0 package has been published.
+checksums and provenance.
 
 Verify an existing downloaded release archive with its published checksums:
 
@@ -348,7 +347,7 @@ See [Limitations](docs/limitations.md) for exact safety boundaries.
 - [Development and live-test harnesses](docs/development.md)
 - [Project history](docs/history.md)
 - [v0.3.0 release notes](docs/release-notes-v0.3.0.md)
-- [v1.0.0 release notes draft](docs/release-notes-v1.0.0-draft.md) (unreleased)
+- [v1.0.0 release notes](docs/release-notes-v1.0.0.md)
 - [v0.2.0 release notes](docs/release-notes-v0.2.0.md)
 - [Unreleased corrective notes for v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release notes for v0.1.1](docs/release-notes-v0.1.1.md)
