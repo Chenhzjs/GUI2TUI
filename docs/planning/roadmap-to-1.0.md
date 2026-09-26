@@ -29,7 +29,7 @@ generic semantic tasks.
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **COMPLETE / MILESTONE QUALIFIED / INTERNAL** |
-| 1.0 | Integration, Stabilization & Release Qualification | **1.0A VALIDATED; 1.0B VALIDATED; 1.0C VALIDATED / RC READY** |
+| 1.0 | Integration, Stabilization & Release Qualification | **1.0A VALIDATED; 1.0B VALIDATED; 1.0C VALIDATED; final release preparation in progress** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
@@ -68,8 +68,8 @@ functional / architectural feature freeze
   -> v1.0 Integration Discovery (this review) — COMPLETE
   -> 1.0A–1.0C bounded Integration & Stabilization — VALIDATED / RC READY
   -> internal v1.0.0-rc.1 preparation — QUALIFIED (no tag or publication)
-  -> separately authorized v1.0.0 RC
-  -> separately authorized public v1.0.0 release
+  -> v1.0.0 final source/package qualification — IN PROGRESS
+  -> public v1.0.0 publication — gated by final checks
 ```
 
 This cadence avoids repeating public release engineering while the remaining
@@ -77,8 +77,9 @@ product layers are still tightly coupled. Release engineering remains
 essential; it is deliberately concentrated in the integrated 1.0
 stabilization/release effort. The next currently planned public GUI2TUI
 release after v0.3.0 is v1.0.0. 1.0C and internal `1.0.0-rc.1`
-preparation are validated, but RC tag creation and production release are not
-automatically authorized.
+preparation are validated. Final `1.0.0` source/package preparation is
+authorized under the final release gates; publication is not complete until
+those gates pass.
 
 The user may explicitly approve an exceptional pre-1.0 public release for a
 genuine collaboration, distribution-testing, major-public-milestone, or
@@ -870,8 +871,8 @@ is [v1.0 Integration Discovery](v1.0-integration-discovery.md), and its
 qualification handoff is
 [v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md).
 1.0A, 1.0B and 1.0C are validated, and internal `1.0.0-rc.1` preparation is
-qualified. These documents do not authorize an RC tag, public release,
-publication, or push.
+qualified. The current authorized scope is final `1.0.0` release preparation;
+publication still requires the documented final gates.
 
 ## 16. Immediate next decision
 
@@ -885,9 +886,10 @@ limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
 with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
 environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
 desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-The current direction is internal **v1.0.0-rc.1 RC preparation**. It is
-**QUALIFIED**. This is not an RC tag or publication; the v1.0.0 RC and public
-release remain separately unauthorized.
+The current direction is **v1.0.0 final release preparation** under the
+authorized final-release procedure. The internal `1.0.0-rc.1` identity remains
+untagged and unpublished; no public release claim is made until the final
+source, package, tag and remote-release checks all pass.
 
 ## 17. References
 
