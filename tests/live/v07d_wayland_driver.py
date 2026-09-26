@@ -196,6 +196,12 @@ class Qualification:
     def semantic_tui(self, label: str) -> None:
         shell = self.shell(label)
         try:
+            # The compositor/AT-SPI fixture can publish its application root
+            # before virtualized descendants are realized.  Start the TUI only
+            # after the same fresh public tree used by the operation evidence
+            # exposes the qualified control; this is validation synchronization,
+            # not a production readiness or capability rule.
+            self.wait_tree(SELECTION_APP, "Reorder current items", timeout=20)
             shell.start()
             shell.start_tui(SELECTION_APP)
             shell.wait_text("Reorder current items", timeout=20)

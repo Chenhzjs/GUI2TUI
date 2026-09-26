@@ -29,7 +29,7 @@ generic semantic tasks.
 | v0.5 | Task & Interaction Completeness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.6 | Runtime Continuity & Multi-Surface Robustness | **COMPLETED / MILESTONE QUALIFIED / INTERNAL** |
 | v0.7 | Deployment & Environment Completeness | **COMPLETE / MILESTONE QUALIFIED / INTERNAL** |
-| 1.0 | Integration, Stabilization & Release Qualification | **1.0A VALIDATED; 1.0B–1.0C NOT AUTHORIZED** |
+| 1.0 | Integration, Stabilization & Release Qualification | **1.0A VALIDATED; 1.0B AUTHORIZED / NOT YET VALIDATED; 1.0C NOT STARTED** |
 
 The default route after v0.7 is a functional feature freeze followed by an
 evidence-based 1.0 readiness decision. v0.8 and v0.9 are not assumed. If later
@@ -66,7 +66,7 @@ internal milestones:
 
 functional / architectural feature freeze
   -> v1.0 Integration Discovery (this review) — COMPLETE
-  -> 1.0A–1.0C bounded Integration & Stabilization — 1.0A validated / 1.0B–1.0C not authorized
+  -> 1.0A–1.0C bounded Integration & Stabilization — 1.0A validated / 1.0B not yet validated / 1.0C not started
   -> separately authorized v1.0.0 RC
   -> separately authorized public v1.0.0 release
 ```
@@ -75,7 +75,8 @@ This cadence avoids repeating public release engineering while the remaining
 product layers are still tightly coupled. Release engineering remains
 essential; it is deliberately concentrated in the integrated 1.0
 stabilization/release effort. The next currently planned public GUI2TUI
-release after v0.3.0 is v1.0.0, but neither its RC nor production release is
+release after v0.3.0 is v1.0.0. 1.0B still has one open soak-evidence gate;
+1.0C execution, its RC conclusion, and production release are not
 automatically authorized.
 
 The user may explicitly approve an exceptional pre-1.0 public release for a
@@ -867,9 +868,9 @@ The detailed exit conditions and final acceptance contract are in the
 is [v1.0 Integration Discovery](v1.0-integration-discovery.md), and its
 qualification handoff is
 [v1.0 Discovery HANDOFF](../validation/v1.0/integration-discovery/HANDOFF.md).
-The current task separately authorizes 1.0A only. These documents do not
-authorize 1.0B, 1.0C, an RC, a package-version change, a tag, or a public
-release.
+1.0B is authorized but not yet validated because of the open soak close gate.
+These documents do not authorize 1.0C, an RC, a package-version change, a tag,
+or a public release.
 
 ## 16. Immediate next decision
 
@@ -883,9 +884,10 @@ limitations. 0.7E qualified exact-source x86_64/aarch64 internal packages,
 with an explicit x86_64 emulated-runtime limitation, and the approved aarch64
 environment integrations. Linux native VT, ordinary X11 Desktop, ordinary
 desktop Wayland and Wayland over SSH remain NOT TESTED and are not claimed.
-The current direction is the authorized **1.0A — Product integration and task
-completeness** phase. It is not an RC; 1.0B, 1.0C, the v1.0.0 RC and public
-release remain separately unauthorized.
+The current direction is completion of the authorized **1.0B — Usability,
+Reliability & Stabilization** phase. Its only open gate is the fresh-prompt
+formal soak close recorded in the 1.0B HANDOFF. It is not an RC; 1.0C, the
+v1.0.0 RC and public release remain separately unauthorized.
 
 ## 17. References
 
