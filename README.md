@@ -130,12 +130,14 @@ and resulting state:
 
 ![Real GUI and TUI action confirmation](docs/assets/readme/action-confirmed.png)
 
-### Reader and content search
+### Reader and content search (read-only)
 
 An exposed document is reorganized as a terminal Reader; search operates on
-the available semantic content:
+the available semantic content. This is intentionally a read-only frame: the
+checkbox on the left remains `idle` because searching does not mutate the GUI.
+The corresponding GUI-to-TUI state-changing operation is shown above.
 
-![Real GUI2TUI Reader and semantic search](docs/assets/readme/reader-search.png)
+![Real GUI2TUI Reader and semantic search; the source GUI remains unchanged](docs/assets/readme/reader-search.png)
 
 ### End-to-end semantic scene
 

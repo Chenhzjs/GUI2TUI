@@ -38,7 +38,8 @@ PNG/GIF preview. These tools are not GUI2TUI runtime dependencies.
 
 ## Captured frames
 
-Reader and semantic search (semantic-operation walkthrough):
+Reader and semantic search (read-only semantic-content walkthrough; the GUI
+checkbox remains idle because search does not mutate application state):
 
 ![GUI2TUI Reader over a real GTK accessibility tree](../assets/readme/reader-search.png)
 
