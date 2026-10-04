@@ -327,6 +327,10 @@ impl NativeWindowResolver for X11WindowResolver {
             .map_err(NativeWindowResolveError::Protocol)?;
         let wm_pid =
             intern_atom(&connection, b"_NET_WM_PID").map_err(NativeWindowResolveError::Protocol)?;
+        let window_type = intern_atom(&connection, b"_NET_WM_WINDOW_TYPE")
+            .map_err(NativeWindowResolveError::Protocol)?;
+        let normal_window_type = intern_atom(&connection, b"_NET_WM_WINDOW_TYPE_NORMAL")
+            .map_err(NativeWindowResolveError::Protocol)?;
         let mut windows = property_values(&connection, root, client_list)
             .map_err(NativeWindowResolveError::Protocol)?;
         if windows.is_empty() {
@@ -340,6 +344,7 @@ impl NativeWindowResolver for X11WindowResolver {
                 .collect();
         }
         let mut matches = Vec::new();
+        let mut normal_matches = Vec::new();
         for window in windows {
             let Some(candidate_pid) = property_values(&connection, window, wm_pid)
                 .map_err(NativeWindowResolveError::Protocol)?
@@ -350,7 +355,21 @@ impl NativeWindowResolver for X11WindowResolver {
             };
             if candidate_pid == process_id {
                 matches.push(window);
+                if property_values(&connection, window, window_type)
+                    .map_err(NativeWindowResolveError::Protocol)?
+                    .contains(&normal_window_type)
+                {
+                    normal_matches.push(window);
+                }
             }
+        }
+        // Managed Xvfb commonly has no window manager, so _NET_CLIENT_LIST is
+        // absent and the root tree can contain the application's utility
+        // windows alongside its actual top-level window. Prefer the public
+        // EWMH normal-window classification, while retaining ambiguity refusal
+        // when more than one normal window belongs to the process.
+        if !normal_matches.is_empty() {
+            matches = normal_matches;
         }
         match matches.as_slice() {
             [window] => Ok(NativeWindowHandle::X11(u64::from(*window))),
