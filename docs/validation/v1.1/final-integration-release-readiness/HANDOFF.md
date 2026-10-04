@@ -14,35 +14,32 @@ push, publication or v1.0 artifact mutation was performed.
 
 `V1.1 FINAL INTEGRATION NOT YET VALIDATED`
 
-The exact-source audit passed: `git diff bbae179..2b8a23f` contains only the
-`Cargo.toml` and `Cargo.lock` package-version changes, so runtime, semantic,
-installer and native-input deltas are all zero. Qualification was then stopped
-at the release metadata gate. The existing release workflow checks for
-`docs/release-notes-v${version}.md`; with RC version `1.1.0-rc.1` it therefore
-requires `docs/release-notes-v1.1.0-rc.1.md`, but the RC source contains only
-`docs/release-notes-v1.1.0.md`.
+Attempt 1 stopped at the release metadata gate. The existing release workflow
+checks `docs/release-notes-v${version}.md`; RC version `1.1.0-rc.1` therefore
+required `docs/release-notes-v1.1.0-rc.1.md`, which was absent from `2b8a23f`.
 
-This is a release-qualification blocker, not a runtime defect. The exact RC
-source cannot pass its existing workflow version gate, so no package, ABI,
-archive, install, environment, Firefox-repeat, large-tree or soak result from
-this pass is claimed. Per the completion-pass rules, `2b8a23f` was not changed.
-The required correction must create a new RC source and repeat package and
-affected qualification; it must not be applied retroactively to this source.
+The metadata repair added that RC-specific note without changing runtime,
+semantic, installer or native-input behavior. The version gate then passed.
+Qualification resumed from the new source, built both exact-RC archives and
+passed their archive/ABI checks, but was stopped when the ARM64 installed
+package smoke exposed a supported external-text interaction failure. No
+runtime fix was made during this pass.
 
 ## Git
 
 - Starting HEAD: `de7504a` (`docs: define v1.1 native input capability contract`)
 - Behavioral qualification HEAD: `bbae179` (`fix: stabilize v1.1 integration and observation`)
-- RC source HEAD: `2b8a23f` (`chore: prepare v1.1.0-rc.1 candidate`)
+- Invalidated RC source HEAD: `2b8a23f` (`chore: prepare v1.1.0-rc.1 candidate`)
+- Repaired RC source HEAD: `63b8ebf` (`chore: complete v1.1.0-rc.1 release metadata`)
 - Final docs HEAD: `bc25b30` (`docs: record v1.1 final integration readiness`)
 - Branch: `v1.1`
 - Worktree: clean before this handoff; ignored `artifacts/` remains external evidence
 - Push: not performed; no upstream push was attempted
 - Tags: no `v1.1.0` or `v1.1.0-rc.1` tag; immutable `v1.0.0` unchanged
 
-The two release-candidate source commits are intentionally separate: runtime
-and documentation stabilization is in `bbae179`; the RC version mutation is
-the version-only child `2b8a23f`.
+The repaired candidate contains the RC release-note metadata only beyond
+`2b8a23f`. `git diff bbae179..63b8ebf -- src runtime scripts .github` is
+empty; runtime, semantic, installer and native-input deltas remain zero.
 
 ## Production delta: v1.0 to v1.1
 
@@ -292,3 +289,90 @@ glibc ≤2.35 builders, then run fresh package install/upgrade, Docker/SSH,
 Wayland/XWayland, the large-document measurement, repeated Firefox local-page
 cycles and the bounded resource soak. Any runtime change requires a new
 behavioral source and a new RC candidate.
+
+## Completion pass: RC metadata repair and qualification resume
+
+### Repair and provenance
+
+- Previous blocker: exact-version release-note metadata mismatch.
+- Repair commit: `63b8ebf` (`chore: complete v1.1.0-rc.1 release metadata`).
+- RC note added: `docs/release-notes-v1.1.0-rc.1.md`.
+- Version gate: `RELEASE_VERSION_GATE=PASS version=1.1.0-rc.1`.
+- `git diff bbae179..63b8ebf -- src runtime scripts .github`: empty.
+- `RUNTIME_DELTA=0`, `SEMANTIC_DELTA=0`, `INSTALLER_BEHAVIOR_DELTA=0`,
+  `NATIVE_INPUT_DELTA=0`.
+- `v1.1.0-rc.1` and `v1.1.0` tags remain absent; no push, publication or
+  release upload was performed.
+
+### Exact RC package evidence
+
+Both archives were built from `63b8ebf` in the existing Ubuntu 22.04
+qualified-container baseline with Rust/Cargo 1.88 and locked dependencies.
+Archive safety validation and the per-architecture ABI validator passed.
+The package output is external evidence under `/tmp`, not a tracked release
+artifact.
+
+| Arch | Archive | Bytes | SHA256 | Binary hashes (`gui2tui`, `inspect`, `local`) | ABI |
+| --- | --- | ---: | --- | --- | --- |
+| aarch64 | `gui2tui-1.1.0-rc.1-linux-aarch64.tar.gz` | 16,030,102 | `4b822bf751db8ba0758a9c788ad33b3b612e00fa20a333e522aed1f545985dbc` | `c9b8f7d1fc79cd7d000c9d638a46d421fc1b9accd9f8b1f99b712e449480b6c2` / `8f53814669cabc5189e2cea73688db94314859c3223e16a8344023a408027e79` / `7a14ebc9df4bc8fb317df70f92a1d065c54d240598fbea7a170e582a4a118424` | AArch64, glibc 2.34, no GLIBCXX |
+| x86_64 | `gui2tui-1.1.0-rc.1-linux-x86_64.tar.gz` | 16,237,817 | `348de97ee2d318babeec716a00712a0fa81784f969b44099597168e3d9504dea` | `2588875e28cfb1fefc05d13905a69be1966cb5e671876b424ce99bb234d8f073` / `f79cee91a58cdc0760fc76b28a266db1547880cb42c0bebde5328d9469087a8e` / `3c83650d9651f94733993ccbc4b9bafa35bfb63a3a9c30f1b3861b9a0eab0201` | AMD64, glibc 2.34, no GLIBCXX |
+
+Common metadata: `Cargo.lock` SHA256
+`0ee61c5901613f4877ff1b23752affbd218324dc5285a97b1bb545e389600165`;
+`BUILD-INFO.commit=63b8ebf`; `BUILD-INFO.version=1.1.0-rc.1`.
+The x86_64 result is emulated/container evidence only; native x86_64 remains
+unqualified.
+
+### Exact-RC installation result and stopping blocker
+
+The ARM64 archive was extracted and installed in the qualified package image.
+The following package checks passed before the smoke failure:
+
+- installed `--version` and package metadata resolution;
+- Doctor session-bus, AT-SPI absence, helper permissions and diagnostics;
+- Managed setup/stop and descriptor safety checks;
+- interactive terminal checks and invalid-terminal rejection paths;
+- safe uninstall preconditions and package-owned helper layout.
+
+The installed packaged semantic smoke then failed at the complete-text
+workflow while waiting for `Edit externally` in the extracted-package TUI.
+The captured frame exposed the external text control and its GUI controls, but
+the expected external-edit operation was not reachable through the packaged
+surface before the bounded wait expired. This is a candidate product/regression
+blocker for a v1.0-qualified external-text task, not an infrastructure or
+metadata failure. Qualification stopped at this point as required; no runtime
+code was changed to work around it.
+
+Result: `EXACT_RC_FRESH_INSTALL=BLOCKED`;
+`PRODUCT_P1_CANDIDATE=packaged external-text interaction not reachable`.
+The x86_64 install smoke, custom-prefix replay, v1.0 public-artifact upgrade,
+Docker/SSH/Wayland exact-RC runs, Firefox repeat, live large-document
+measurement, observation metrics and 30–45 minute soak were not run after this
+stop and are not claimed as PASS.
+
+### Gate status after repair
+
+| Gate | Result |
+| --- | --- |
+| RC exact-version metadata | PASS |
+| aarch64/x86_64 package build | PASS (x86_64 emulated) |
+| ABI and archive audit | PASS |
+| aarch64 fresh install | BLOCKED by packaged external-text smoke |
+| x86_64 emulated install | NOT RUN after blocker |
+| Firefox exact-RC signature/repeat | NOT RUN after blocker |
+| large-document measurement | NOT RUN after blocker |
+| observation measurement | NOT RUN after blocker |
+| Docker / SSH / Wayland / XWayland | NOT RUN after blocker |
+| resource soak | NOT RUN after blocker |
+| full exact-RC quality matrix | NOT RUN after blocker |
+
+### Severity and release state
+
+- Product P0: 0 observed.
+- Product P1: 1 candidate blocker — packaged external-text interaction did not
+  reach `Edit externally` in the exact-RC smoke.
+- Qualification blockers: package qualification cannot continue until that
+  behavior is triaged and, if confirmed as a product defect, fixed in a new
+  behavioral source and rebuilt RC.
+- Current status remains: `V1.1 FINAL INTEGRATION NOT YET VALIDATED`.
+- No tag, push, GitHub Release or public upload was performed.
