@@ -16,7 +16,8 @@ fi
 scratch=$(mktemp -d /tmp/gui2tui-v07c-headless.XXXXXX)
 commit=$(git -C "$project_root" rev-parse HEAD)
 short_commit=${commit:0:12}
-image="gui2tui-v07c-headless:$short_commit"
+image_override=${GUI2TUI_V07C_IMAGE:-}
+image=${image_override:-"gui2tui-v07c-headless:$short_commit"}
 container="gui2tui-v07c-headless-$short_commit-$$"
 private_key=$scratch/id_ed25519
 known_hosts=$scratch/known_hosts
@@ -78,13 +79,17 @@ docker info >/dev/null
 ssh-keygen -q -t ed25519 -N '' -f "$private_key"
 chmod 600 "$private_key"
 
-docker build \
-    --label org.gui2tui.validation=v07c-headless \
-    --build-arg "GUI2TUI_SOURCE_COMMIT=$commit" \
-    --file "$project_root/tests/live/Dockerfile.v07c-headless" \
-    --tag "$image" \
-    "$project_root" >"$result_dir/docker-build.log"
-image_created=true
+if [[ -n $image_override ]]; then
+    docker image inspect "$image" >"$result_dir/docker-image-inspect.json"
+else
+    docker build \
+        --label org.gui2tui.validation=v07c-headless \
+        --build-arg "GUI2TUI_SOURCE_COMMIT=$commit" \
+        --file "$project_root/tests/live/Dockerfile.v07c-headless" \
+        --tag "$image" \
+        "$project_root" >"$result_dir/docker-build.log"
+    image_created=true
+fi
 
 docker run -d \
     --name "$container" \
