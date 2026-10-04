@@ -19,6 +19,8 @@ not create a public tag, GitHub Release or downloadable public artifact.
 - Qualified complete multiline text targets expose the existing external-edit
   command from their current Surface representation; candidate files remain
   GUI2TUI-owned and writes still require authoritative GUI readback.
+- Managed headless shutdown recognizes a supervisor that has completed cleanup
+  but remains temporarily visible as a zombie in a minimal container.
 - Semantic Submit remains distinct from low-level keyboard delivery. Public
   Accessibility semantics are required for Semantic Submit.
 - `Send Enter to current control` is an explicit Raw Enter capability. It
