@@ -123,6 +123,18 @@ fn verify_private(path: &Path, directory: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn linux_process_is_zombie(status: &[u8]) -> bool {
+    status.split(|byte| *byte == b'\n').any(|line| {
+        line.strip_prefix(b"State:").and_then(|value| {
+            value
+                .iter()
+                .copied()
+                .find(|byte| !byte.is_ascii_whitespace())
+        }) == Some(b'Z')
+    })
+}
+
 pub fn load() -> Result<Option<ManagedSession>, String> {
     let descriptor = descriptor_path()?;
     if !descriptor.exists() {
@@ -156,11 +168,20 @@ pub fn load() -> Result<Option<ManagedSession>, String> {
     #[cfg(target_os = "linux")]
     {
         let process = PathBuf::from(format!("/proc/{}", session.supervisor_pid));
-        let metadata = fs::metadata(process).map_err(|_| {
+        let metadata = fs::metadata(&process).map_err(|_| {
             "Managed headless supervisor is not running; run `gui2tui setup persistent`".to_owned()
         })?;
         if metadata.uid() != rustix::process::geteuid().as_raw() {
             return Err("Managed headless supervisor belongs to another user".into());
+        }
+        let status = fs::read(process.join("status")).map_err(|_| {
+            "Managed headless supervisor is not running; run `gui2tui setup persistent`".to_owned()
+        })?;
+        if linux_process_is_zombie(&status) {
+            return Err(
+                "Managed headless supervisor is not running; run `gui2tui setup persistent`"
+                    .to_owned(),
+            );
         }
     }
     Ok(Some(session))
@@ -270,5 +291,16 @@ mod tests {
             PathBuf::from("/home/user/.local/state/gui2tui/headless")
         );
         assert!(state_root_from(None, None).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn zombie_process_status_is_not_a_running_supervisor() {
+        assert!(linux_process_is_zombie(
+            b"Name:\theadless-session\nState:\tZ (zombie)\n"
+        ));
+        assert!(!linux_process_is_zombie(
+            b"Name:\theadless-session\nState:\tS (sleeping)\n"
+        ));
     }
 }
