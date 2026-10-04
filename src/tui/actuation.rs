@@ -486,7 +486,7 @@ fn property_values(
     window: u32,
     property: u32,
 ) -> Result<Vec<u32>, String> {
-    connection
+    let reply = connection
         .get_property(
             false,
             window,
@@ -497,7 +497,15 @@ fn property_values(
         )
         .map_err(|error| error.to_string())?
         .reply()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    // WM-less X11 sessions legitimately omit optional EWMH properties such
+    // as _NET_CLIENT_LIST. Treat an absent property as an empty value so the
+    // resolver can use its root-tree fallback; reject present non-32-bit
+    // properties instead of silently interpreting them as window IDs.
+    if reply.format == 0 {
+        return Ok(Vec::new());
+    }
+    reply
         .value32()
         .map(|values| values.collect())
         .ok_or_else(|| "X11 property is not 32-bit".into())
