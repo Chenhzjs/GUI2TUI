@@ -16,6 +16,9 @@ not create a public tag, GitHub Release or downloadable public artifact.
 - Text editing requires strict authoritative Accessibility readback. An
   accepted write that reads back differently is not a successful edit and
   cannot be followed by automatic Submit.
+- Qualified complete multiline text targets expose the existing external-edit
+  command from their current Surface representation; candidate files remain
+  GUI2TUI-owned and writes still require authoritative GUI readback.
 - Semantic Submit remains distinct from low-level keyboard delivery. Public
   Accessibility semantics are required for Semantic Submit.
 - `Send Enter to current control` is an explicit Raw Enter capability. It
