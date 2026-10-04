@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     content::{ContentBlockKind, ContentSearchResult, ReaderBlock, SearchProgress, SearchState},
+    semantic::SemanticCapability,
     transcompile::ChoiceOption,
     transcompile::{
         LayoutImportance, LayoutNode, RegionPresentationKind, SceneElement, SceneElementId,
@@ -83,6 +84,11 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     let navigator = context
         .spatial
         .map(|plan| RegionNavigator::derive(plan, context.scene));
+    let focused_element = context.focused.and_then(|id| context.scene.element(id));
+    let focused_external_edit = focused_element
+        .is_some_and(|element| element_supports_external_edit(context.scene, element));
+    let focused_document_summary = focused_element
+        .is_some_and(|element| matches!(element.kind, SceneElementKind::DocumentSummary { .. }));
     let hints = if context.edit_session.is_some() {
         "? Help · Enter Apply · Esc Cancel"
     } else if context.choice.is_some() {
@@ -114,23 +120,15 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         .is_some_and(|element| element.capability() == InteractionCapability::AdjustValue)
     {
         "? Help · ↑/↓ Adjust · Tab Control · F6 Region"
-    } else if context
-        .focused
-        .and_then(|id| context.scene.element(id))
-        .is_some_and(|element| {
-            matches!(
-                element.kind,
-                SceneElementKind::DocumentSummary {
-                    external_edit: true,
-                    ..
-                }
-            )
-        })
-    {
+    } else if focused_external_edit {
         if context.external_text_handler_available {
-            "? Help · Enter Read · e Edit externally · Tab Control"
+            if focused_document_summary {
+                "? Help · Enter Read · e Edit externally · Tab Control"
+            } else {
+                "? Help · Enter Edit · e Edit externally · Tab Control"
+            }
         } else {
-            "? Help · Enter Read · external edit not configured"
+            "? Help · external edit not configured · Tab Control"
         }
     } else if navigator
         .as_ref()
@@ -187,6 +185,24 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         footer_area,
     );
     hit_regions
+}
+
+fn element_supports_external_edit(scene: &TuiScene, element: &SceneElement) -> bool {
+    matches!(
+        element.kind,
+        SceneElementKind::DocumentSummary {
+            external_edit: true,
+            ..
+        }
+    ) || element
+        .binding
+        .as_ref()
+        .and_then(|binding| scene.node_metadata(binding.runtime_id))
+        .is_some_and(|metadata| {
+            metadata
+                .capabilities
+                .contains(&SemanticCapability::EditComplexText)
+        })
 }
 
 fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
@@ -1637,6 +1653,70 @@ mod tests {
             element_lines(&unavailable, false),
             vec!["  Read only · Tree"]
         );
+    }
+
+    #[test]
+    fn qualified_complex_text_field_advertises_external_edit_command() {
+        let root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/node/1"),
+            index_in_parent: None,
+            role: SemanticRole::TextInput,
+            name: Some("Notes".into()),
+            description: None,
+            value: Some("alpha\nbeta\n".into()),
+            text_input_kind: Some(crate::semantic::TextInputKind::Plain),
+            states: vec![SemanticState::Enabled],
+            actions: Vec::new(),
+            capabilities: vec![
+                SemanticCapability::EditText,
+                SemanticCapability::EditComplexText,
+            ],
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: DebugInfo::default(),
+        };
+        let mut field = element(SceneElementKind::Field {
+            label: "Notes".into(),
+            display: "alpha…".into(),
+            input_kind: crate::semantic::TextInputKind::Plain,
+        });
+        field.binding.as_mut().unwrap().semantic_role = SemanticRole::TextInput;
+        field.binding.as_mut().unwrap().capability = InteractionCapability::EditText;
+        field.binding.as_mut().unwrap().default_intent = UiIntent::BeginEdit;
+        let field_id = field.id;
+        let scene = TuiScene::new("Editor".into(), &root, vec![field]);
+        let mut terminal = Terminal::new(TestBackend::new(100, 12)).unwrap();
+        terminal
+            .draw(|frame| {
+                render(
+                    frame,
+                    RenderContext {
+                        scene: &scene,
+                        focused: Some(field_id),
+                        scroll_offset: 0,
+                        status: "ready",
+                        application_available: true,
+                        external_text_handler_available: true,
+                        edit_session: None,
+                        palette: None,
+                        choice: None,
+                        content: None,
+                        spatial: None,
+                        active_region: None,
+                        inline_content: None,
+                    },
+                );
+            })
+            .unwrap();
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(rendered.contains("e Edit externally"));
     }
 
     #[test]

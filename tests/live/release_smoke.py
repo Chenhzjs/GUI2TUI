@@ -27,8 +27,13 @@ def run(args, ok=True, env=None):
     return out
 
 def launch(args, env_updates=None):
-    global transcript
+    global transcript, screen, stream
     transcript = ""
+    # Each GUI2TUI process owns a fresh terminal lifecycle. Reusing pyte's
+    # previous alternate-screen contents merges unrelated application frames
+    # and can hide current semantic commands from bounded transcript checks.
+    screen = pyte.Screen(130, 38)
+    stream = pyte.Stream(screen)
     environment = os.environ.copy()
     environment.update(env_updates or {})
     return pexpect.spawn(
