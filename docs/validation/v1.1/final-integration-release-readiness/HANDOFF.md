@@ -10,6 +10,25 @@ current Docker/SSH and Wayland qualification, large-document measurement and
 the required bounded soak were not completed in this environment. No tag,
 push, publication or v1.0 artifact mutation was performed.
 
+## Completion pass result
+
+`V1.1 FINAL INTEGRATION NOT YET VALIDATED`
+
+The exact-source audit passed: `git diff bbae179..2b8a23f` contains only the
+`Cargo.toml` and `Cargo.lock` package-version changes, so runtime, semantic,
+installer and native-input deltas are all zero. Qualification was then stopped
+at the release metadata gate. The existing release workflow checks for
+`docs/release-notes-v${version}.md`; with RC version `1.1.0-rc.1` it therefore
+requires `docs/release-notes-v1.1.0-rc.1.md`, but the RC source contains only
+`docs/release-notes-v1.1.0.md`.
+
+This is a release-qualification blocker, not a runtime defect. The exact RC
+source cannot pass its existing workflow version gate, so no package, ABI,
+archive, install, environment, Firefox-repeat, large-tree or soak result from
+this pass is claimed. Per the completion-pass rules, `2b8a23f` was not changed.
+The required correction must create a new RC source and repeat package and
+affected qualification; it must not be applied retroactively to this source.
+
 ## Git
 
 - Starting HEAD: `de7504a` (`docs: define v1.1 native input capability contract`)
