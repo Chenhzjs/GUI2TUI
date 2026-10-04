@@ -52,8 +52,20 @@ inputs.
   GTK/Qt private APIs, VS Code APIs, or Flutter hooks.
 - No OCR, vision, screenshot understanding, framebuffer-to-ANSI rendering, or
   GUI screenshot recreation as the semantic source.
-- No keyboard/mouse injection, coordinate clicking, XTest/uinput fallback, or
-  scripted guesses such as “press Down three times then Enter”.
+- Native keyboard input is an explicit low-level interaction capability, not
+  semantic authority. Raw key delivery may occur only after the current
+  `RuntimeSession`, application generation, interaction scope, exact target,
+  owning window, exact Accessibility focus, and operation ticket have been
+  freshly verified inside the normal operation authority chain.
+- A semantic operation such as `Submit` MUST NOT silently fall back to a raw
+  key merely because that key commonly performs a similar GUI action.
+  Successful native delivery does not prove semantic success; report the
+  consequence only through fresh public Accessibility observation.
+- Native text input MAY be a bounded `EditText` delivery strategy only when
+  authoritative Accessibility readback strictly confirms the requested text.
+- Coordinate clicking, pointer guessing, mouse injection, unverified input
+  replay, uinput, arbitrary key sequences, and scripted guesses such as
+  “press Down three times then Enter” remain prohibited.
 - No anonymous action guessing (including `action[0]`).
 - No proportional GUI-coordinate-to-terminal scaling. Geometry is evidence for
   topology, not semantic truth or a pixel layout.

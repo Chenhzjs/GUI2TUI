@@ -135,8 +135,10 @@ detailed identities, conditions, and event evidence remain diagnostic-only.
 - `src/modality/`: references, artifacts, static snapshots, broker/transport,
   and handler boundaries. Do not make modality a semantic backend.
 - `src/tui/`: scene rendering, focus/input, operation dispatch, overlays,
-  help, content view, palette, and `RegionNavigator`. Do not introduce a
-  second semantic or focus authority.
+  help, content view, palette, `RegionNavigator`, bounded native-input
+  delivery, and Accessibility observation. `NativeInputDelivery` is a
+  backend detail, not a second semantic or focus authority. Raw Enter is an
+  explicit low-level intent; semantic Submit never falls back to it.
 - `src/product/`: CLI configuration, launcher, doctor, paths, and headless
   session management.
 - `tests/`, `scripts/`, and `docs/`: regression/workflow validation,
@@ -168,6 +170,23 @@ operation-specific exact-locator, scope, capability, and authoritative
 readback contract. `BackendLocator` remains exact object authority within the
 generation; neither a retained `RuntimeNodeId` nor descriptive similarity can
 authorize a replacement object.
+
+### v1.1 Surface and interaction convergence
+
+Document-like Accessibility subtrees are normalized into semantic regions and
+controls before presentation. Implementation-only wrappers may collapse, but
+named landmarks, forms, documents, lists, toolbars, navigation, and other
+meaningful multi-child groups remain boundaries. The ordinary Surface shows
+regions, controls, relationships, and a bounded content preview. Reader is an
+explicit projection of the same content model and owns continuous text,
+outline, search, and paging; it does not replace the Surface.
+
+Native input follows the same authority path as every other operation:
+`SceneBinding` → `UiIntent` / `SemanticOperation` → current runtime authority
+→ fresh target resolution → delivery → bounded authoritative observation.
+Only the small explicit Raw Enter operation is currently exposed. A key being
+delivered is recorded separately from any observed GUI consequence, and an
+observed change is not silently reclassified as a semantic Submit.
 
 Transport recovery restores AT-SPI communication, not application authority.
 After transport loss or explicit application reselection, GUI2TUI keeps the

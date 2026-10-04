@@ -45,6 +45,35 @@ Input travels in the reverse direction through bindings:
       → BackendOperation
       → AT-SPI
 
+### v1.1 intent, delivery, and observation
+
+The reverse path has three deliberately separate layers:
+
+```text
+semantic intent       EditText / Submit / Select
+explicit raw intent   SendKeyEnter
+        ↓
+delivery              AT-SPI Action / EditableText / bounded NativeInput
+        ↓
+observation           fresh authoritative readback / relevant Surface change
+```
+
+Intent is not a delivery mechanism, delivery is not semantic success, and
+observation is evidence rather than invented semantics. `Submit` resolves
+only against a fresh, publicly advertised compatible Accessibility action. It
+never falls back to Enter. `SendKeyEnter` is a separate, explicitly named
+low-level capability and reports `Enter delivered` plus an observed
+consequence such as `DocumentChanged`, `TextChanged`, or
+`NoDetectableChange`; it never reports `Submit succeeded`.
+
+Before native input, the normal `RuntimeSession` / generation / scope /
+operation-ticket authority chain resolves the current locator, owning native
+window, and exact Accessibility focus. Window activation and focus are
+verified immediately before the backend emits the key. Native text fallback
+is restricted to `EditText` and remains valid only after strict authoritative
+Accessibility readback equals the requested text. The current native input
+implementation is X11-only; this is not an automation API.
+
 Verified v0.3 mutations follow the same authority rule. Native single-line
 text and bounded Value operations invoke explicit public interfaces and then
 refresh from independent application read-back. Qualified complete multiline
