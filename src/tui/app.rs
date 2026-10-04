@@ -14,7 +14,7 @@ use crate::{
     },
     content::{
         ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget,
-        SearchBudget, SearchState, TextCapabilityStatus,
+        SearchBudget, SearchState,
     },
     events::{DirtyScope, NormalizedEvent, coalesce_dirty_scopes},
     semantic::{
@@ -795,6 +795,12 @@ impl TuiApplication {
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
         let relations_elapsed = started.elapsed();
         let mut content = ContentRuntime::new(&cache, ContentCacheBudget::default());
+        // Qualify complete multiline editing before the bounded inline Surface
+        // materialization probes the same Text interface.  A provider may
+        // support the authoritative complete read while rejecting the
+        // paragraph-oriented Reader probe; that reader result must not
+        // quarantine an otherwise valid external-edit capability.
+        qualify_complex_text_capabilities(&backend, &mut cache, &content).await;
         if spatial_layout {
             // The spatial main scene gets a small inline semantic viewport.
             // Reuse ContentRuntime's bounded reader substrate; this is not a
@@ -819,7 +825,6 @@ impl TuiApplication {
                     .await;
             }
         }
-        qualify_complex_text_capabilities(&backend, &mut cache, &content).await;
         let content_elapsed = started.elapsed();
         let (scene, scopes, commands, choices) =
             build_contextual_view(&cache, presentation_mode, content.catalog())?;
@@ -1743,22 +1748,20 @@ impl TuiApplication {
             .is_some_and(|element| {
                 matches!(element.kind, SceneElementKind::DocumentSummary { .. })
             });
-        if focused_document {
+        let focused_external_text = self
+            .focus
+            .current()
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .and_then(|binding| self.cache.node(binding.runtime_id))
+            .is_some_and(|node| {
+                node.capabilities
+                    .contains(&SemanticCapability::EditComplexText)
+            });
+        if focused_document || focused_external_text {
             match key.code {
                 crossterm::event::KeyCode::Char('e')
-                    if self
-                        .focus
-                        .current()
-                        .and_then(|id| self.scene.element(id))
-                        .is_some_and(|element| {
-                            matches!(
-                                element.kind,
-                                SceneElementKind::DocumentSummary {
-                                    external_edit: true,
-                                    ..
-                                }
-                            )
-                        }) =>
+                    if focused_document || focused_external_text =>
                 {
                     self.handle_intent(UiIntent::BeginExternalEdit).await;
                     return false;
@@ -3107,15 +3110,6 @@ impl TuiApplication {
             .scene
             .element(scene_id)
             .ok_or_else(|| "Focused text target disappeared".to_owned())?;
-        if !matches!(
-            element.kind,
-            SceneElementKind::DocumentSummary {
-                external_edit: true,
-                ..
-            }
-        ) {
-            return Err("Focused document is not qualified for external text editing".into());
-        }
         let binding = element
             .binding
             .as_ref()
@@ -5721,7 +5715,7 @@ async fn qualify_complex_text_capabilities(
         .visible_models()
         .filter(|model| model.completeness == ContentCompleteness::Complete)
         .map(|model| model.root)
-        .filter(|root| content.text_capability(*root) == TextCapabilityStatus::Verified)
+        .filter(|root| content.text_capability(*root).should_probe())
         .filter(|root| {
             cache.node(*root).is_some_and(|node| {
                 node.role == SemanticRole::TextInput

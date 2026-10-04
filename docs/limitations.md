@@ -1,9 +1,9 @@
-# GUI2TUI v1.0 limitations
+# GUI2TUI v1.1 limitations
 
 GUI2TUI is an Accessibility-driven semantic runtime. Its capabilities depend
 on what the target application exposes through public Linux AT-SPI interfaces.
-Read-only or unavailable is an honest result, not a reason to inject guessed
-input or use private application APIs.
+Read-only or unavailable is an honest result, not a reason to invent
+capability or use private application APIs.
 
 ## Semantic and interaction boundaries
 
@@ -23,6 +23,8 @@ input or use private application APIs.
   document-format parser. Long documents may remain partial.
 - Some Qt transient choice shapes do not expose reliable selected/current
   truth. GUI2TUI refuses false success for those shapes.
+- Surface content is bounded: large document bodies belong to Reader, not a
+  second unbounded copy in the ordinary Surface.
 
 ## Text, secrets and external handlers
 
@@ -31,6 +33,9 @@ input or use private application APIs.
 - Complete, bounded, non-secret multiline plain text may use an optional local
   handler. Rich, partial, virtualized, IME, clipboard and remote-caret editing
   remain limited or read-only.
+- Native text fallback is a bounded delivery strategy for verified EditText
+  only. The current qualified native fallback accepts printable ASCII; a
+  non-ASCII request is refused rather than silently transliterated or damaged.
 - Handlers receive only a private GUI2TUI-owned candidate, are invoked without
   a shell, and must preserve the owned artifact identity. Application backing
   files are never used as the semantic backend.
@@ -41,8 +46,10 @@ input or use private application APIs.
 
 ## Environment boundaries
 
-The formal support contract is in the
-[v1.0 Final Support Matrix](validation/v1.0/final-support-matrix.md).
+The formal v1.1 support contract is in the
+[v1.1 Final Support Matrix](validation/v1.1/final-support-matrix.md). The
+[v1.0 matrix](validation/v1.0/final-support-matrix.md) remains the historical
+public-release record.
 
 - Managed Xvfb, the recorded unprivileged Docker/OCI interactive PTY, and
   same-host SSH into Managed are supported within their recorded topology
@@ -57,15 +64,20 @@ The formal support contract is in the
 - Linux native VT, ordinary local X11/Wayland desktop sessions, same-host SSH
   into an existing desktop and Wayland over SSH are not qualified.
 - Wayland static capture is unsupported/deferred. No compositor is bundled.
+- Semantic AT-SPI operations remain available on the qualified headless
+  Wayland topology, but Raw Enter is unsupported when no qualified X11 native
+  backend is available.
 - Cross-host Remote Companion and semantic transport are post-1.0 work.
-- Native deb/rpm/AppImage/Flatpak packages are not provided by the v1.0
+- Native deb/rpm/AppImage/Flatpak packages are not provided by the v1.1
   release pipeline.
 
 ## Deliberate safety exclusions
 
 Production behavior does not use DOM/CDP, UNO, private toolkit APIs, OCR,
-screen understanding, coordinate clicking, keyboard/mouse injection, action
-index guessing, fuzzy target migration or application-specific adapters.
+screen understanding, coordinate clicking, mouse injection, uinput, arbitrary
+key scripting, action index guessing, fuzzy target migration or
+application-specific adapters. Explicit Raw Enter is a narrowly bounded X11
+capability, never an implicit Semantic Submit fallback.
 
 See [Troubleshooting](troubleshooting.md) for safe recovery guidance and
 [Compatibility](compatibility.md) for historical application evidence.

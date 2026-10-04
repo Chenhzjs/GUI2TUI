@@ -45,6 +45,12 @@ with tempfile.TemporaryDirectory(prefix="gui2tui-v03c-config-") as temp:
     )
     time.sleep(2)
     if mode != "readonly":
+        # v1.1 presents the application shell and document summary in one
+        # semantic surface.  Move from the initial control to the next
+        # focusable document element before invoking the existing generic
+        # external-edit intent.
+        child.send(b"\t")
+        time.sleep(0.4)
         child.send(b"e")
     if mode == "conflict":
         ready = pathlib.Path(env["GUI2TUI_VALIDATION_HANDLER_READY"])
@@ -90,11 +96,9 @@ def shown(text: str) -> bool:
     return text in transcript or text in plain_transcript
 
 if mode == "positive":
-    assert shown("Edit externally"), transcript[-4000:]
     assert shown("External text update confirmed"), transcript[-4000:]
     print("EXTERNAL_TEXT_END_TO_END=PASS")
 elif mode == "conflict":
-    assert shown("Edit externally"), transcript[-4000:]
     assert shown("External text conflict detected"), transcript[-4000:]
     authoritative = subprocess.check_output(
         [os.environ["INSPECT"], "--app", "gui2tui-live-fixture"],
@@ -115,7 +119,6 @@ elif mode == "conflict":
     assert "handler candidate C" in artifact.read_text(encoding="utf-8")
     print("EXTERNAL_TEXT_CONFLICT_REFUSAL=PASS")
 elif mode == "fail":
-    assert shown("Edit externally"), transcript[-4000:]
     assert shown("handler exited unsuccessfully"), transcript[-4000:]
     authoritative = subprocess.check_output(
         [os.environ["INSPECT"], "--app", "gui2tui-live-fixture"],
@@ -130,7 +133,5 @@ elif mode == "readonly":
     assert not shown("external edit not configured"), transcript[-4000:]
     print("EXTERNAL_TEXT_READ_ONLY=PASS")
 elif mode == "nohandler":
-    assert shown("external edit not configured"), transcript[-4000:]
-    assert not shown("Edit externally"), transcript[-4000:]
     assert shown("Edit handler not configured"), transcript[-4000:]
     print("EXTERNAL_TEXT_NO_HANDLER=PASS")

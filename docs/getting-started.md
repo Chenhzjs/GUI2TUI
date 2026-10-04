@@ -1,10 +1,12 @@
-# Getting started with GUI2TUI v1.0
+# Getting started with GUI2TUI v1.1
 
 GUI2TUI presents public Linux Accessibility semantics, spatial relationships
 and verified operations as a responsive terminal application. It provides
 native controls, bounded Value adjustment, a document Reader and optional
 configured interaction for qualified complete plain text. Insufficient
-capability remains visibly read-only; operations are never guessed.
+capability remains visibly read-only; operations are never guessed. The v1.1
+Surface keeps application regions and document context together, while Reader
+remains an explicit continuous-reading projection.
 
 ## User-prefix installation
 
@@ -231,12 +233,28 @@ SSH. Wayland static capture remains unavailable.
 
 1. Select an application with arrows, Enter or click. `/` starts a name filter; Enter applies,
    Esc clears. `r`/F5 refreshes discovery. The selector scrolls to keep selection visible.
-2. Tab/Shift-Tab focuses controls. Enter uses a safe supported operation. Passwords remain read-only.
+2. Tab/Shift-Tab focuses controls. Enter uses a safe advertised semantic
+   operation. Passwords remain read-only.
 3. Enter a plain field to edit locally, Enter commits with GUI read-back, Esc discards. No implicit
    commit on Tab. If the GUI changes externally, cancel and reopen the field.
 4. `:` opens scoped commands; F2 inside it toggles global search. Enter a document summary for Reader.
 5. `?` shows help for the current view. F1 always opens help, including search/edit input. Esc returns.
 6. `q` exits from Scene; Reader/Choice use Esc to return first. Ctrl-C always quits and restores terminal modes.
+
+### Explicit Raw Enter
+
+`Send Enter to current control` is a separate, low-level command. It is only
+available after the current runtime generation, interaction scope, owning X11
+window and exact Accessibility focus have been freshly verified. It reports
+key delivery and any observed consequence; it does not claim that the control
+performed Submit, Activate or navigation. Semantic Submit never silently
+falls back to Raw Enter.
+
+Raw Enter is currently qualified only through the X11 NativeInputBackend. On
+Wayland without a qualified native backend, public Accessibility operations
+remain available but Raw Enter is reported unsupported. Use the command
+palette or the explicitly documented shortcut where the current terminal
+supports it; ordinary Enter is not changed into an implicit raw key.
 
 ## Optional complex-text handler
 

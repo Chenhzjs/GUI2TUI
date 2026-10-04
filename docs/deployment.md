@@ -1,17 +1,18 @@
 # Headless-first deployment
 
-GUI2TUI v1.0 is designed for users who have a local TTY, SSH PTY or container
+GUI2TUI v1.1 is designed for users who have a local TTY, SSH PTY or container
 terminal while the target GUI application runs in a same-host graphical and
 Accessibility session. The user does not need a visible GNOME/KDE desktop,
 VNC or RDP. The application may still require a background Xvfb or qualified
 Wayland compositor.
 
-The exact contract is frozen in the
-[v1.0 Final Support Matrix](validation/v1.0/final-support-matrix.md).
+The exact v1.1 contract is frozen in the
+[v1.1 Final Support Matrix](validation/v1.1/final-support-matrix.md). The
+v1.0 matrix remains historical evidence.
 
 ## Supported deployment topologies
 
-| Topology | v1.0 status |
+| Topology | v1.1 status |
 | --- | --- |
 | Managed Xvfb | Supported within the recorded unprivileged arm64 topology |
 | Docker/OCI interactive PTY | Supported with the recorded limitations; no production container image is supplied |
@@ -28,6 +29,11 @@ The exact contract is frozen in the
 One PTY, compositor or display-server result never broadens another named
 topology. See the support matrix for the exact distribution, architecture,
 compositor and terminal boundaries.
+
+Raw Enter is a capability-specific exception to the semantic-only baseline:
+it is available only through the qualified X11 NativeInputBackend after exact
+window and Accessibility focus verification. Semantic AT-SPI operations do
+not depend on Raw Enter and remain the supported path on qualified Wayland.
 
 ## Session selection
 
@@ -104,19 +110,22 @@ The qualified Wayland evidence uses Weston 13 headless/Pixman, Ubuntu 24.04
 arm64 and controlled GTK4/Qt6/XWayland applications. Geometry is presentation
 evidence only. Collapsed or incomplete geometry degrades layout; it never
 creates operation authority. Other compositors, distributions, ordinary full
-Wayland desktops and Wayland over SSH are outside the v1.0 claim. Wayland
-static capture is not implemented and no compositor is bundled.
+Wayland desktops and Wayland over SSH are outside the v1.1 claim. Wayland
+static capture is not implemented and no compositor is bundled. Raw Enter is
+reported unavailable where the qualified native backend is absent.
 
 ## Installation and upgrade
 
-Use the official v1.0.0 archive and the unprivileged installer. It refuses
+Use the official v1.0.0 archive for the stable public baseline, or the internal
+v1.1.0-rc.1 archive for qualification. Both use the same unprivileged
+installer, which refuses
 pre-existing targets, symlinks and unsafe manifests rather than overwriting
 files. To replace an existing installation:
 
 1. Stop the owned Managed session.
 2. Run the installed exact-file uninstaller.
 3. Preserve configuration, runtime/recovery data and unrelated prefix files.
-4. Install the v1.0.0 archive into the same prefix.
+4. Install the selected archive into the same prefix.
 5. Run `gui2tui doctor` and a representative semantic smoke before normal use.
 
 Do not recursively delete `$HOME/.local` or use `sudo` for installation.
