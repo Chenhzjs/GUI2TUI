@@ -15,7 +15,7 @@ push, publication or v1.0 artifact mutation was performed.
 - Starting HEAD: `de7504a` (`docs: define v1.1 native input capability contract`)
 - Behavioral qualification HEAD: `bbae179` (`fix: stabilize v1.1 integration and observation`)
 - RC source HEAD: `2b8a23f` (`chore: prepare v1.1.0-rc.1 candidate`)
-- Final docs HEAD: pending this evidence-only handoff commit
+- Final docs HEAD: `bc25b30` (`docs: record v1.1 final integration readiness`)
 - Branch: `v1.1`
 - Worktree: clean before this handoff; ignored `artifacts/` remains external evidence
 - Push: not performed; no upstream push was attempted
