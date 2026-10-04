@@ -332,14 +332,22 @@ class Qualification:
             raise AssertionError("native Wayland modal scope did not retire after close")
         self.results["native_modal_scope"] = "PASS_ENTER_EXIT_PUBLIC_SEMANTICS"
 
-    @staticmethod
-    def begin_vim(shell: WaylandShell) -> None:
+    def begin_vim(self, shell: WaylandShell) -> None:
+        # The document text is already rendered in the Surface before the
+        # handler starts. Confirm the actual handler process instead of using
+        # body text as a proxy for successful focus and handoff.
         for _ in range(20):
             shell.send(b"e")
             deadline = time.monotonic() + 1.0
             while time.monotonic() < deadline:
-                frame = shell.pump(0.08)
-                if "alphaline" in re.sub(r"\s+", "", frame):
+                shell.pump(0.08)
+                running = self.docker(
+                    "bash",
+                    "-c",
+                    "ps -u $(id -u) -o comm= | grep -qx vim",
+                    check=False,
+                )
+                if running.returncode == 0:
                     return
             shell.send(b"\t")
         raise AssertionError("could not focus the qualified native-Wayland text target")
