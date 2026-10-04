@@ -351,18 +351,20 @@ print(f'{namespaces}:{artifacts}')
         self.results["ssh_external_writeback_readback"] = "PASS"
         self.results["ssh_external_candidate_cleanup"] = "PASS"
 
-    @staticmethod
-    def begin_vim(terminal: "ScreenDriver") -> None:
+    def begin_vim(self, terminal: "ScreenDriver") -> None:
         # Focus order is derived from the current scene. Traverse it through
         # normal TUI navigation until the current complete plain-text target
         # advertises and accepts external editing, as in the existing lifecycle
-        # qualification. No application identity enters production behavior.
+        # qualification. Confirm the handler process itself: the document text
+        # is already visible in the Surface, so transcript matching would
+        # falsely report that Vim had started before focus reached the target.
+        # No application identity enters production behavior.
         for _ in range(20):
             terminal.send(b"e")
             deadline = time.monotonic() + 1.0
             while time.monotonic() < deadline:
-                frame = terminal.pump(0.08)
-                if "alphaline" in re.sub(r"\s+", "", frame):
+                terminal.pump(0.08)
+                if "vim" in self.remote_processes():
                     return
             terminal.send(b"\t")
         raise AssertionError("could not focus the current qualified external-text target")
