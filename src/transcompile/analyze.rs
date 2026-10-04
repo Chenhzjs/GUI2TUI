@@ -100,6 +100,7 @@ struct Analyzer {
     next_region: u64,
     metrics: RegionMetrics,
     relations: RelationHints,
+    collapsible_wrappers: HashSet<RuntimeNodeId>,
 }
 
 pub fn analyze_regions(root: &SemanticNode) -> RegionAnalysis {
@@ -170,8 +171,45 @@ impl Analyzer {
                 SemanticRegionKind::OpaqueContent,
                 vec![node.runtime_id],
             );
-            region.label = semantic_label(node).or_else(|| Some("Graphical content".to_owned()));
+            // Keep anonymous graphical/diagnostic objects in the semantic
+            // surface for inspection, but do not manufacture a user-facing
+            // label. Presentation decides whether an unnamed object is worth
+            // showing.
+            region.label = semantic_label(node);
             region.modality = ModalityPolicy::FidelityPreferred;
+            return region;
+        }
+        if let Some(kind) = semantic_container_kind(node) {
+            let children = self.analyze_children(node, command_path);
+            let field_count = children
+                .iter()
+                .filter(|child| child.kind == SemanticRegionKind::Field)
+                .count();
+            let form_control_count = children
+                .iter()
+                .filter(|child| {
+                    child.kind == SemanticRegionKind::Field
+                        || (child.kind == SemanticRegionKind::Control
+                            && !child.interactions.is_empty())
+                })
+                .count();
+            let kind = if field_count >= 2 && form_control_count >= 2 {
+                self.metrics.reconstructed += 1;
+                SemanticRegionKind::Form
+            } else {
+                kind
+            };
+            if matches!(
+                kind,
+                SemanticRegionKind::Group | SemanticRegionKind::Unknown
+            ) && is_implementation_wrapper(node)
+            {
+                self.collapsible_wrappers.insert(node.runtime_id);
+            }
+            let mut region =
+                SemanticRegion::terminal_native(self.id(), kind, vec![node.runtime_id]);
+            region.label = semantic_label(node);
+            region.children = children;
             return region;
         }
         if node.role == SemanticRole::TextInput
@@ -257,13 +295,19 @@ impl Analyzer {
             self.metrics.direct_controls += 1;
             return self.control_region(node, parent_capabilities, parent_states, command_path);
         }
-        if matches!(node.role, SemanticRole::Label | SemanticRole::Text) {
+        if is_content_role(node) {
             let mut region = SemanticRegion::terminal_native(
                 self.id(),
                 SemanticRegionKind::Content,
                 vec![node.runtime_id],
             );
             region.label = semantic_label(node);
+            region.children = self.analyze_children(node, command_path);
+            if let Some(interaction) =
+                interaction_for_node(node, parent_capabilities, parent_states)
+            {
+                region.interactions.push(interaction);
+            }
             return region;
         }
 
@@ -283,7 +327,7 @@ impl Analyzer {
             self.metrics.reconstructed += 1;
             SemanticRegionKind::Form
         } else if matches!(node.role, SemanticRole::Application | SemanticRole::Window) {
-            SemanticRegionKind::Navigation
+            SemanticRegionKind::ApplicationShell
         } else if matches!(node.role, SemanticRole::Container | SemanticRole::Dialog) {
             SemanticRegionKind::Group
         } else {
@@ -396,14 +440,19 @@ impl Analyzer {
             index += 1;
         }
 
-        // Layout-only wrappers do not deserve terminal rows. Conservatively
-        // flatten only unnamed groups with no interaction and one child.
+        // Layout-only wrappers do not deserve terminal rows. Collapse only
+        // unnamed, non-semantic implementation containers. Named landmarks,
+        // forms, documents and other structural regions remain boundaries.
         let mut compressed = Vec::new();
         for region in regions {
             if region.kind == SemanticRegionKind::Group
                 && region.label.is_none()
                 && region.interactions.is_empty()
-                && region.children.len() == 1
+                && region
+                    .source_nodes
+                    .first()
+                    .is_some_and(|id| self.collapsible_wrappers.contains(id))
+                && safe_to_collapse_wrapper(&region)
             {
                 self.metrics.compressed += 1;
                 compressed.extend(region.children);
@@ -411,27 +460,11 @@ impl Analyzer {
                 compressed.push(region);
             }
         }
-        let mut summaries: Vec<SemanticRegion> = Vec::new();
-        for region in compressed {
-            if region.kind == SemanticRegionKind::Content
-                && let Some(previous) = summaries.last_mut()
-                && previous.kind == SemanticRegionKind::Content
-            {
-                previous.source_nodes.extend(region.source_nodes);
-                if let Some(label) = region.label
-                    && previous.label.as_deref() != Some(label.as_str())
-                {
-                    previous
-                        .label
-                        .get_or_insert_default()
-                        .push_str(&format!(" · {label}"));
-                }
-                self.metrics.compressed += 1;
-            } else {
-                summaries.push(region);
-            }
-        }
-        summaries
+        // Do not merge adjacent content nodes here. Their parent Region is
+        // the Surface's structural boundary; Reader gets its own reading
+        // order from SemanticContentModel. Merging at this stage was the
+        // second source of document flattening.
+        compressed
     }
 
     fn relation_field(
@@ -555,6 +588,23 @@ impl Analyzer {
     }
 }
 
+/// Collapse only implementation-only groups. A multi-child wrapper is kept
+/// when it contains another structural region, because that grouping may be
+/// the only public evidence of a meaningful semantic boundary. A wrapper
+/// around direct controls/fields is safe to remove: the controls remain
+/// independently bound and the parent semantic region remains intact.
+fn safe_to_collapse_wrapper(region: &SemanticRegion) -> bool {
+    region.children.len() <= 1
+        || region.children.iter().all(|child| {
+            matches!(
+                child.kind,
+                SemanticRegionKind::Control
+                    | SemanticRegionKind::Field
+                    | SemanticRegionKind::Content
+            )
+        })
+}
+
 fn collect_commands(
     analyzer: &mut Analyzer,
     node: &SemanticNode,
@@ -604,6 +654,104 @@ fn collect_commands(
     }
 }
 
+fn semantic_container_kind(node: &SemanticNode) -> Option<SemanticRegionKind> {
+    if is_direct_control(node) {
+        return None;
+    }
+    let kind = match &node.role {
+        SemanticRole::Application | SemanticRole::Window => SemanticRegionKind::ApplicationShell,
+        SemanticRole::Dialog => SemanticRegionKind::Dialog,
+        SemanticRole::Document => SemanticRegionKind::Document,
+        SemanticRole::Toolbar => SemanticRegionKind::Toolbar,
+        SemanticRole::TabList => SemanticRegionKind::TabBar,
+        SemanticRole::Main => SemanticRegionKind::Main,
+        SemanticRole::Search => SemanticRegionKind::Search,
+        SemanticRole::Section => SemanticRegionKind::Section,
+        SemanticRole::Article => SemanticRegionKind::Article,
+        SemanticRole::Sidebar => SemanticRegionKind::Sidebar,
+        SemanticRole::Footer => SemanticRegionKind::Footer,
+        SemanticRole::Navigation => SemanticRegionKind::Navigation,
+        SemanticRole::Landmark => landmark_kind(node),
+        SemanticRole::Form => SemanticRegionKind::Form,
+        SemanticRole::Container => SemanticRegionKind::Group,
+        SemanticRole::Unknown(value) => unknown_container_kind(value),
+        _ => return None,
+    };
+    Some(kind)
+}
+
+fn landmark_kind(node: &SemanticNode) -> SemanticRegionKind {
+    let text = node
+        .name
+        .as_deref()
+        .or(node.description.as_deref())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if text.contains("search") || text.contains("filter") {
+        SemanticRegionKind::Search
+    } else if text.contains("sidebar") || text.contains("aside") {
+        SemanticRegionKind::Sidebar
+    } else if text.contains("main") || text.contains("content") {
+        SemanticRegionKind::Main
+    } else if text.contains("navigation") || text == "nav" || text.contains("menu") {
+        SemanticRegionKind::Navigation
+    } else {
+        SemanticRegionKind::Landmark
+    }
+}
+
+fn unknown_container_kind(value: &str) -> SemanticRegionKind {
+    let value = value.to_ascii_lowercase();
+    if value.contains("tool bar") || value.contains("toolbar") {
+        SemanticRegionKind::Toolbar
+    } else if value.contains("navigation") || value == "nav" {
+        SemanticRegionKind::Navigation
+    } else if value.contains("search") || value.contains("filter") {
+        SemanticRegionKind::Search
+    } else if value.contains("sidebar") || value.contains("aside") {
+        SemanticRegionKind::Sidebar
+    } else if value == "main" || value.contains("main content") {
+        SemanticRegionKind::Main
+    } else if value == "section" {
+        SemanticRegionKind::Section
+    } else if value == "article" {
+        SemanticRegionKind::Article
+    } else if value == "footer" {
+        SemanticRegionKind::Footer
+    } else if matches!(
+        value.as_str(),
+        "generic" | "panel" | "box" | "container" | "layout"
+    ) {
+        SemanticRegionKind::Group
+    } else {
+        SemanticRegionKind::Unknown
+    }
+}
+
+fn is_implementation_wrapper(node: &SemanticNode) -> bool {
+    node.name
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+        && node
+            .description
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        && node
+            .value
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        && node.actions.is_empty()
+        && node.capabilities.is_empty()
+        && match &node.role {
+            SemanticRole::Container => true,
+            SemanticRole::Unknown(value) => matches!(
+                value.to_ascii_lowercase().as_str(),
+                "generic" | "panel" | "box" | "container" | "layout"
+            ),
+            _ => false,
+        }
+}
+
 fn conservative_label_match(
     label: &SemanticNode,
     control: &SemanticNode,
@@ -635,7 +783,8 @@ fn normalize(value: &str) -> String {
 fn semantic_label(node: &SemanticNode) -> Option<String> {
     node.name
         .clone()
-        .or_else(|| node.value.clone())
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| node.value.clone().filter(|value| !value.trim().is_empty()))
         .or_else(|| {
             let mut labels = Vec::new();
             collect_text_labels(node, &mut labels);
@@ -677,20 +826,36 @@ fn unique_descendant_text_input(node: &SemanticNode) -> Option<&SemanticNode> {
 }
 
 fn is_direct_control(node: &SemanticNode) -> bool {
-    matches!(
-        node.role,
-        SemanticRole::Button
-            | SemanticRole::ToggleButton
-            | SemanticRole::CheckBox
-            | SemanticRole::RadioButton
-            | SemanticRole::TextInput
-            | SemanticRole::ComboBox
-            | SemanticRole::ListItem
-            | SemanticRole::TreeItem
-            | SemanticRole::MenuItem
-            | SemanticRole::Table
-    ) || (node.role == SemanticRole::Slider
-        && node.capabilities.contains(&SemanticCapability::Value))
+    let capability = interaction_capability(
+        &node.role,
+        &node.states,
+        &node.actions,
+        &node.capabilities,
+        &[],
+        &[],
+    );
+    capability != InteractionCapability::None
+        || node.capabilities.iter().any(|capability| {
+            matches!(
+                capability,
+                SemanticCapability::EditText | SemanticCapability::Value
+            )
+        })
+        || matches!(
+            node.role,
+            SemanticRole::Button
+                | SemanticRole::ToggleButton
+                | SemanticRole::CheckBox
+                | SemanticRole::RadioButton
+                | SemanticRole::TextInput
+                | SemanticRole::ComboBox
+                | SemanticRole::ListItem
+                | SemanticRole::TreeItem
+                | SemanticRole::MenuItem
+                | SemanticRole::Table
+        )
+        || (node.role == SemanticRole::Slider
+            && node.capabilities.contains(&SemanticCapability::Value))
 }
 
 fn page_tab_list_is_interactive(node: &SemanticNode) -> bool {
@@ -735,13 +900,32 @@ fn is_explicitly_noncurrent(node: &SemanticNode) -> bool {
 
 fn is_command_container(node: &SemanticNode) -> bool {
     node.role == SemanticRole::MenuBar
-        || matches!(&node.role, SemanticRole::Unknown(role) if role == "tool bar" || role == "toolbar")
+        || (matches!(node.role, SemanticRole::Toolbar)
+            && !has_editable_descendant(node)
+            && node.children.iter().any(has_command_descendant))
+        || (matches!(&node.role, SemanticRole::Unknown(role) if role == "tool bar" || role == "toolbar")
+            && !has_editable_descendant(node)
+            && node.children.iter().any(has_command_descendant))
         || (matches!(node.role, SemanticRole::Container)
             && node.children.len() >= 3
             && node.children.iter().all(|child| {
                 matches!(child.role, SemanticRole::Button | SemanticRole::MenuItem)
                     && !child.actions.is_empty()
             }))
+}
+
+fn has_editable_descendant(node: &SemanticNode) -> bool {
+    node.capabilities.contains(&SemanticCapability::EditText)
+        || matches!(node.role, SemanticRole::TextInput)
+        || node.children.iter().any(has_editable_descendant)
+}
+
+fn has_command_descendant(node: &SemanticNode) -> bool {
+    (matches!(
+        node.role,
+        SemanticRole::Button | SemanticRole::ToggleButton | SemanticRole::MenuItem
+    ) && !node.actions.is_empty())
+        || node.children.iter().any(has_command_descendant)
 }
 
 fn is_opaque_candidate(node: &SemanticNode) -> bool {
@@ -768,6 +952,45 @@ fn has_semantic_signal(node: &SemanticNode) -> bool {
 
 fn has_interactive_descendant(node: &SemanticNode) -> bool {
     is_direct_control(node) || node.children.iter().any(has_interactive_descendant)
+}
+
+fn is_content_role(node: &SemanticNode) -> bool {
+    matches!(
+        node.role,
+        SemanticRole::Label
+            | SemanticRole::Text
+            | SemanticRole::Heading
+            | SemanticRole::Paragraph
+            | SemanticRole::Quote
+            | SemanticRole::Comment
+    ) || (node.role == SemanticRole::Link
+        && interaction_capability(
+            &node.role,
+            &node.states,
+            &node.actions,
+            &node.capabilities,
+            &[],
+            &[],
+        ) == InteractionCapability::None)
+}
+
+fn interaction_for_node(
+    node: &SemanticNode,
+    parent_capabilities: &[SemanticCapability],
+    parent_states: &[SemanticState],
+) -> Option<RegionInteraction> {
+    let capability = interaction_capability(
+        &node.role,
+        &node.states,
+        &node.actions,
+        &node.capabilities,
+        parent_capabilities,
+        parent_states,
+    );
+    intent_for_capability(capability).map(|intent| RegionInteraction {
+        source: node.runtime_id,
+        intent,
+    })
 }
 
 fn intent_for_capability(capability: InteractionCapability) -> Option<UiIntent> {
@@ -925,6 +1148,98 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_application_and_document_surface_without_flattening_regions() {
+        let mut toolbar = node(1, SemanticRole::Toolbar, "Toolbar");
+        let mut search = node(2, SemanticRole::Unknown("search-box".to_owned()), "Query");
+        search.text_input_kind = Some(TextInputKind::Plain);
+        search.capabilities.push(SemanticCapability::EditText);
+        let mut toolbar_action = node(13, SemanticRole::Button, "Reload");
+        toolbar_action.actions.push(action("Click"));
+        toolbar.children = vec![search, toolbar_action];
+
+        let mut navigation = node(4, SemanticRole::Navigation, "Navigation");
+        navigation
+            .children
+            .push(node(5, SemanticRole::Link, "Home"));
+        let mut form = node(6, SemanticRole::Form, "Search Form");
+        let mut wrapper = node(7, SemanticRole::Container, "");
+        let mut query = node(8, SemanticRole::TextInput, "Query");
+        query.text_input_kind = Some(TextInputKind::Plain);
+        query.capabilities.push(SemanticCapability::EditText);
+        let mut submit = node(9, SemanticRole::Button, "Submit");
+        submit.actions.push(action("Click"));
+        wrapper.children = vec![query, submit];
+        form.children.push(wrapper);
+        let mut list = node(11, SemanticRole::List, "Results");
+        list.capabilities
+            .push(SemanticCapability::SelectCurrentChild);
+        let mut item = node(12, SemanticRole::ListItem, "Result");
+        item.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("showing".to_owned()),
+        ];
+        item.actions.push(action("Toggle"));
+        list.children.push(item);
+        let mut main = node(10, SemanticRole::Main, "Main");
+        main.children.push(list);
+        let mut document = node(3, SemanticRole::Document, "Document");
+        document.children = vec![navigation, form, main];
+
+        let mut window = node(0, SemanticRole::Window, "Application");
+        window.children = vec![toolbar, document];
+        let analysis = analyze_regions(&window);
+
+        assert_eq!(analysis.root.kind, SemanticRegionKind::ApplicationShell);
+        assert_eq!(analysis.root.children.len(), 2);
+        assert_eq!(analysis.root.children[0].kind, SemanticRegionKind::Toolbar);
+        assert_eq!(analysis.root.children[1].kind, SemanticRegionKind::Document);
+        assert!(
+            analysis.root.children[0]
+                .children
+                .iter()
+                .any(|region| region.source_nodes.contains(&RuntimeNodeId::new(2)))
+        );
+        assert!(
+            analysis.root.children[0]
+                .children
+                .iter()
+                .any(|region| region.source_nodes.contains(&RuntimeNodeId::new(13)))
+        );
+        let document_region = &analysis.root.children[1];
+        assert_eq!(
+            document_region
+                .children
+                .iter()
+                .map(|region| region.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                SemanticRegionKind::Navigation,
+                SemanticRegionKind::Form,
+                SemanticRegionKind::Main,
+            ]
+        );
+        let form_region = &document_region.children[1];
+        assert_eq!(form_region.children.len(), 2);
+        assert!(
+            form_region
+                .children
+                .iter()
+                .any(|region| region.source_nodes.contains(&RuntimeNodeId::new(8)))
+        );
+        assert!(
+            form_region
+                .children
+                .iter()
+                .any(|region| region.source_nodes.contains(&RuntimeNodeId::new(9)))
+        );
+        assert_eq!(
+            document_region.children[2].children[0].kind,
+            SemanticRegionKind::Selection
+        );
+        assert!(analysis.metrics.compressed >= 1);
+    }
+
+    #[test]
     fn labeled_fields_and_multiple_fields_form_a_form_region() {
         let mut root = node(0, SemanticRole::Window, "Profile");
         let label_a = node(1, SemanticRole::Label, "Username");
@@ -962,7 +1277,23 @@ mod tests {
     }
 
     #[test]
-    fn consecutive_content_nodes_are_structurally_compressed() {
+    fn multi_child_structural_wrapper_is_not_collapsed() {
+        let mut root = node(0, SemanticRole::Window, "Application");
+        let mut wrapper = node(1, SemanticRole::Container, "");
+        wrapper.children = vec![
+            node(2, SemanticRole::Navigation, "Navigation"),
+            node(3, SemanticRole::Main, "Main"),
+        ];
+        root.children.push(wrapper);
+
+        let result = analyze_regions(&root);
+        assert_eq!(result.root.children.len(), 1);
+        assert_eq!(result.root.children[0].kind, SemanticRegionKind::Group);
+        assert_eq!(result.root.children[0].children.len(), 2);
+    }
+
+    #[test]
+    fn consecutive_content_nodes_retain_surface_boundaries() {
         let mut root = node(0, SemanticRole::Window, "Summary");
         root.children = vec![
             node(1, SemanticRole::Label, "CPU"),
@@ -970,13 +1301,17 @@ mod tests {
             node(3, SemanticRole::Label, "Memory"),
         ];
         let result = analyze_regions(&root);
-        assert_eq!(result.root.children.len(), 1);
-        assert_eq!(result.root.children[0].source_nodes.len(), 3);
+        assert_eq!(result.root.children.len(), 3);
         assert_eq!(
-            result.root.children[0].label.as_deref(),
-            Some("CPU · 23% · Memory")
+            result
+                .root
+                .children
+                .iter()
+                .filter_map(|region| region.label.as_deref())
+                .collect::<Vec<_>>(),
+            vec!["CPU", "23%", "Memory"]
         );
-        assert_eq!(result.metrics.compressed, 2);
+        assert_eq!(result.metrics.compressed, 0);
     }
 
     #[test]

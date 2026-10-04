@@ -1,4 +1,5 @@
 pub mod action;
+pub mod actuation;
 pub mod app;
 pub mod choice_overlay;
 pub mod content_view;
@@ -9,6 +10,7 @@ pub mod help;
 pub mod hit_test;
 pub mod input;
 pub mod modality_view;
+pub mod observation;
 pub mod operation;
 pub mod palette;
 pub mod region_navigation;

@@ -26,6 +26,8 @@ pub enum UiIntent {
     BeginEdit,
     BeginExternalEdit,
     CommitEdit,
+    Submit,
+    SendKeyEnter,
     CancelEdit,
     IncreaseValue,
     DecreaseValue,
@@ -112,10 +114,10 @@ pub fn interaction_capability(
             };
         }
     }
-    if *role == SemanticRole::TextInput && capabilities.contains(&SemanticCapability::EditText) {
+    if capabilities.contains(&SemanticCapability::EditText) {
         return InteractionCapability::EditText;
     }
-    if *role == SemanticRole::Slider && capabilities.contains(&SemanticCapability::Value) {
+    if capabilities.contains(&SemanticCapability::Value) {
         return InteractionCapability::AdjustValue;
     }
     if *role == SemanticRole::Table {
@@ -172,6 +174,8 @@ pub fn interaction_capability(
             }
             UiIntent::Activate
         }
+        SemanticRole::Link if is_current_action_target(states) => UiIntent::Activate,
+        SemanticRole::Link => return InteractionCapability::None,
         SemanticRole::Tab => {
             let multiselectable = parent_states.iter().chain(states).any(
                 |state| matches!(state, SemanticState::Other(value) if value == "multiselectable"),
@@ -188,7 +192,60 @@ pub fn interaction_capability(
         // Choice interactivity depends on exposed named options and their safe
         // selection strategies. It is assigned by the ChoiceCatalog, not by role.
         SemanticRole::ComboBox => return InteractionCapability::None,
-        _ => return InteractionCapability::None,
+        SemanticRole::TextInput
+        | SemanticRole::Text
+        | SemanticRole::Label
+        | SemanticRole::Document
+        | SemanticRole::Container
+        | SemanticRole::Application
+        | SemanticRole::Window
+        | SemanticRole::Dialog
+        | SemanticRole::Toolbar
+        | SemanticRole::Navigation
+        | SemanticRole::Search
+        | SemanticRole::Main
+        | SemanticRole::Section
+        | SemanticRole::Article
+        | SemanticRole::Sidebar
+        | SemanticRole::Footer
+        | SemanticRole::Heading
+        | SemanticRole::Paragraph
+        | SemanticRole::Image
+        | SemanticRole::Quote
+        | SemanticRole::Landmark
+        | SemanticRole::Form
+        | SemanticRole::Comment
+        | SemanticRole::Audio
+        | SemanticRole::Video
+        | SemanticRole::MenuBar
+        | SemanticRole::Menu
+        | SemanticRole::List
+        | SemanticRole::TabList
+        | SemanticRole::Tree
+        | SemanticRole::Table
+        | SemanticRole::Row
+        | SemanticRole::Cell
+        | SemanticRole::ProgressBar
+        | SemanticRole::StatusBar => return InteractionCapability::None,
+        _ => {
+            // A role outside the concrete widget set is still actionable when
+            // it exposes an explicit safe activation action. This is the
+            // generic fallback for extended/search/custom accessibility roles;
+            // arbitrary action names are never accepted.
+            if is_current_action_target(states)
+                && resolve_action(role, actions, UiIntent::Activate).is_ok()
+                && (capabilities.contains(&SemanticCapability::Activate)
+                    || actions.iter().any(|action| {
+                        matches!(
+                            action.name.to_ascii_lowercase().as_str(),
+                            "activate" | "click" | "press"
+                        )
+                    }))
+            {
+                return InteractionCapability::Activate;
+            }
+            return InteractionCapability::None;
+        }
     };
     if resolve_action(role, actions, intent).is_err() {
         InteractionCapability::None
@@ -230,6 +287,7 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
         (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
+        (SemanticRole::Link, UiIntent::Activate) => &["activate", "click", "press"],
         // Table content view may expose this exact public action for the
         // current TableCell. It does not imply a file/directory kind.
         (SemanticRole::Cell, UiIntent::Activate) => &["activate"],
@@ -244,6 +302,18 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         // popup open. Until a backend advertises an explicit, verified close
         // semantic, closing remains unavailable rather than guessed.
         (SemanticRole::ComboBox, UiIntent::ClosePopup) => &[],
+        // Submit is deliberately narrower than generic activation. A plain
+        // editable control may use an explicitly advertised submit/activate
+        // action, while every other role must advertise Submit itself. Raw
+        // Enter is a separate user intent and never reaches this resolver.
+        (SemanticRole::TextInput | SemanticRole::ComboBox, UiIntent::Submit) => {
+            &["submit", "activate", "press"]
+        }
+        (_, UiIntent::Submit) => &["submit"],
+        // Extended/unknown roles may expose only a generic but explicit
+        // activation name. The resolver still requires one of these names;
+        // it never falls back to an action index.
+        (_, UiIntent::Activate) => &["activate", "click", "press"],
         _ => &[],
     }
 }
@@ -252,10 +322,17 @@ pub(crate) fn is_current_action_target(states: &[SemanticState]) -> bool {
     if states.is_empty() {
         return true;
     }
-    let enabled = states.iter().any(|state| {
-        matches!(state, SemanticState::Enabled)
-            || matches!(state, SemanticState::Other(value) if value == "sensitive")
-    });
+    // Accessibility providers do not all expose the Enabled state on custom
+    // or web controls.  Absence is therefore not the same as disabled; an
+    // explicit disabled/defunct/read-only state remains authoritative below.
+    let enabled = states.is_empty()
+        || states.iter().any(|state| {
+            matches!(state, SemanticState::Enabled)
+                || matches!(state, SemanticState::Other(value) if value == "sensitive")
+        })
+        || !states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == "disabled"));
     let visible = states.iter().any(
         |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
     );
@@ -427,6 +504,45 @@ mod tests {
                 UiIntent::ClosePopup
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn extended_role_uses_advertised_capability_and_safe_activation_name() {
+        let mut editable_states = vec![SemanticState::Other("focusable".to_owned())];
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::Unknown("search-box".to_owned()),
+                &editable_states,
+                &[],
+                &[SemanticCapability::EditText],
+                &[],
+                &[],
+            ),
+            InteractionCapability::EditText
+        );
+        editable_states.push(SemanticState::Other("disabled".to_owned()));
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::Unknown("custom control".to_owned()),
+                &editable_states,
+                &actions(&["click"]),
+                &[SemanticCapability::Activate],
+                &[],
+                &[],
+            ),
+            InteractionCapability::None
+        );
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::Unknown("custom control".to_owned()),
+                &[SemanticState::Other("focusable".to_owned())],
+                &actions(&["click"]),
+                &[SemanticCapability::Activate],
+                &[],
+                &[],
+            ),
+            InteractionCapability::Activate
         );
     }
 

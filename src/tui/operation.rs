@@ -20,6 +20,8 @@ pub enum SemanticOperation {
     SwitchPage(RuntimeNodeId),
     OpenMenu(RuntimeNodeId),
     ClosePopup(RuntimeNodeId),
+    SubmitNode(RuntimeNodeId),
+    SendKeyEnter(RuntimeNodeId),
     ReplaceText {
         target: RuntimeNodeId,
         text: String,
@@ -46,6 +48,8 @@ impl SemanticOperation {
             UiIntent::SwitchPage => Some(Self::SwitchPage(runtime_id)),
             UiIntent::OpenMenu => Some(Self::OpenMenu(runtime_id)),
             UiIntent::ClosePopup => Some(Self::ClosePopup(runtime_id)),
+            UiIntent::Submit => Some(Self::SubmitNode(runtime_id)),
+            UiIntent::SendKeyEnter => Some(Self::SendKeyEnter(runtime_id)),
             UiIntent::IncreaseValue => Some(Self::AdjustValue {
                 target: runtime_id,
                 increase: true,
@@ -67,7 +71,9 @@ impl SemanticOperation {
             | Self::CollapseNode(id)
             | Self::SwitchPage(id)
             | Self::OpenMenu(id)
-            | Self::ClosePopup(id) => *id,
+            | Self::ClosePopup(id)
+            | Self::SubmitNode(id)
+            | Self::SendKeyEnter(id) => *id,
             Self::ReplaceText { target, .. }
             | Self::ReplaceComplexText { target, .. }
             | Self::AdjustValue { target, .. } => *target,
@@ -84,6 +90,8 @@ impl SemanticOperation {
             Self::SwitchPage(_) => UiIntent::SwitchPage,
             Self::OpenMenu(_) => UiIntent::OpenMenu,
             Self::ClosePopup(_) => UiIntent::ClosePopup,
+            Self::SubmitNode(_) => UiIntent::Submit,
+            Self::SendKeyEnter(_) => UiIntent::SendKeyEnter,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
             Self::ReplaceComplexText { .. } => UiIntent::BeginExternalEdit,
             Self::AdjustValue { increase, .. } => {
@@ -111,6 +119,20 @@ pub fn resolve_cached_node_operation(
         .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
     if matches!(operation, SemanticOperation::SwitchPage(_)) {
         return resolve_cached_page_switch(cache, runtime_id);
+    }
+    if matches!(operation, SemanticOperation::SendKeyEnter(_)) {
+        let focusable = node.states.iter().any(
+            |state| matches!(state, SemanticState::Other(value) if value.eq_ignore_ascii_case("focusable")),
+        );
+        if !focusable {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "explicit raw Enter requires a currently focusable target".to_owned(),
+            ));
+        }
+        return Ok(BackendOperation::NativeKey {
+            locator: node.backend_locator.clone(),
+            key: NativeKeyOperation::Enter,
+        });
     }
     if matches!(
         operation,
@@ -165,6 +187,17 @@ pub enum BackendOperation {
         locator: BackendLocator,
         increase: bool,
     },
+    NativeKey {
+        locator: BackendLocator,
+        key: NativeKeyOperation,
+    },
+}
+
+/// A deliberately tiny experimental delivery vocabulary. This records what
+/// the user explicitly requested; it does not claim a semantic operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeKeyOperation {
+    Enter,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -336,6 +369,24 @@ pub fn resolve_backend_operation(
         return Ok(BackendOperation::AdjustValue {
             locator: binding.backend_locator.clone(),
             increase,
+        });
+    }
+
+    if matches!(operation, SemanticOperation::SendKeyEnter(_)) {
+        let metadata = scene
+            .node_metadata(runtime_id)
+            .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
+        let focusable = metadata.states.iter().any(
+            |state| matches!(state, SemanticState::Other(value) if value.eq_ignore_ascii_case("focusable")),
+        );
+        if !focusable {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "explicit raw Enter requires a currently focusable target".to_owned(),
+            ));
+        }
+        return Ok(BackendOperation::NativeKey {
+            locator: binding.backend_locator.clone(),
+            key: NativeKeyOperation::Enter,
         });
     }
 
@@ -813,5 +864,61 @@ mod tests {
                 increase: true,
             })
         );
+    }
+
+    #[test]
+    fn multiline_without_submit_evidence_rejects_submit_but_allows_explicit_raw_enter() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut text = node(1, SemanticRole::TextInput, "Notes");
+        text.states = vec![
+            SemanticState::Editable,
+            SemanticState::Other("focusable".to_owned()),
+            SemanticState::Other("multiline".to_owned()),
+        ];
+        text.capabilities.push(SemanticCapability::EditComplexText);
+        root.children.push(text);
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let target = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/node/1"))
+            .unwrap();
+
+        assert!(matches!(
+            resolve_cached_node_operation(&cache, SemanticOperation::SubmitNode(target)),
+            Err(OperationResolutionError::NoCompatibleOperation(_))
+        ));
+        assert_eq!(
+            resolve_cached_node_operation(&cache, SemanticOperation::SendKeyEnter(target)),
+            Ok(BackendOperation::NativeKey {
+                locator: BackendLocator::new(":1.2", "/node/1"),
+                key: NativeKeyOperation::Enter,
+            })
+        );
+    }
+
+    #[test]
+    fn submit_resolution_uses_fresh_action_identity_not_an_old_index() {
+        let mut root = node(0, SemanticRole::Window, "Demo");
+        let mut input = node(1, SemanticRole::TextInput, "Query");
+        input.states = vec![SemanticState::Other("focusable".to_owned())];
+        input.actions.push(SemanticAction {
+            index: 17,
+            name: "Submit".to_owned(),
+            description: None,
+            keybinding: None,
+        });
+        root.children.push(input);
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let target = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/node/1"))
+            .unwrap();
+
+        assert!(matches!(
+            resolve_cached_node_operation(
+                &cache,
+                SemanticOperation::SubmitNode(target)
+            ),
+            Ok(BackendOperation::InvokeAction { action, .. })
+                if action.name == "Submit" && action.index == 17
+        ));
     }
 }

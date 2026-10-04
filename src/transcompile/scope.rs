@@ -197,9 +197,27 @@ impl InteractionScopes {
                     InteractionScopeKind::Popup | InteractionScopeKind::MenuPopup
                 )
         });
+        // A focused internal/document window can sit below the application's
+        // ordinary shell in the accessibility hierarchy. Keep that shell
+        // reachable while no modal/popup scope owns interaction; otherwise a
+        // toolbar/address field disappears merely because content focus moved
+        // into the nested window.
+        let permits_shell_ancestor = self.scopes.get(&self.active).is_some_and(|scope| {
+            !scope.modal
+                && !matches!(
+                    scope.kind,
+                    InteractionScopeKind::Popup | InteractionScopeKind::MenuPopup
+                )
+        });
         node_scope == self.active
             || (permits_descendant_scope
                 && is_descendant_or_same(&self.scopes, node_scope, self.active))
+            || (permits_shell_ancestor
+                && self
+                    .scopes
+                    .get(&node_scope)
+                    .is_some_and(|scope| scope.kind == InteractionScopeKind::Window)
+                && is_descendant_or_same(&self.scopes, self.active, node_scope))
     }
 }
 
@@ -437,6 +455,43 @@ mod tests {
             scopes.scope(scopes.active()).unwrap().kind,
             InteractionScopeKind::Window
         );
+    }
+
+    #[test]
+    fn focused_nested_content_window_keeps_ancestor_shell_controls_available() {
+        let mut app = node(0, SemanticRole::Application, "App");
+        let mut outer = node(1, SemanticRole::Window, "Shell");
+        let toolbar = node(2, SemanticRole::Button, "Address");
+        let mut content = node(3, SemanticRole::Window, "Document");
+        content.states.push(SemanticState::Focused);
+        content
+            .children
+            .push(node(4, SemanticRole::TextInput, "Body"));
+        outer.children = vec![toolbar, content];
+        app.children.push(outer);
+        let cache = SemanticCache::from_snapshot(app).unwrap();
+        let toolbar_id = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("Address"))
+            .unwrap()
+            .runtime_id;
+        let body_id = cache
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("Body"))
+            .unwrap()
+            .runtime_id;
+        let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+
+        assert_eq!(
+            scopes.scope(scopes.active()).unwrap().root,
+            cache
+                .nodes()
+                .find(|node| node.name.as_deref() == Some("Document"))
+                .unwrap()
+                .runtime_id
+        );
+        assert!(scopes.allows_node(toolbar_id));
+        assert!(scopes.allows_node(body_id));
     }
 
     #[test]

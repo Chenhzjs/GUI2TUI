@@ -23,6 +23,19 @@ impl fmt::Display for RegionId {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SemanticRegionKind {
+    ApplicationShell,
+    Document,
+    Toolbar,
+    TabBar,
+    Main,
+    Search,
+    Section,
+    Article,
+    Sidebar,
+    Footer,
+    Landmark,
+    Dialog,
+    Overlay,
     Control,
     Field,
     Form,

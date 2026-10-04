@@ -11,6 +11,7 @@ name = "gui2tui-inspect"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = "0.1"
 atspi = { version = "0.30", features = ["tracing", "zbus"] }
 base64 = "0.22"
 clap = { version = "4.6", features = ["derive"] }
@@ -29,6 +30,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus = "5.19"
 url = "2.5.8"
+x11rb = { version = "0.13", features = ["xtest"] }
 
 [[bin]]
 name = "gui2tui"

@@ -75,7 +75,10 @@ fn byte_index(text: &str, character_index: usize) -> usize {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EditSession {
     pub target: RuntimeNodeId,
+    /// Locator of the semantic control selected in the TUI.
     pub backend_locator: BackendLocator,
+    /// Fresh Text reads are taken from this independently resolved target.
+    pub readback_locator: BackendLocator,
     pub original_value: String,
     pub buffer: EditBuffer,
     pub source_generation: u64,
@@ -90,9 +93,26 @@ impl EditSession {
         original_value: String,
         source_generation: u64,
     ) -> Self {
+        Self::new_with_readback(
+            target,
+            backend_locator.clone(),
+            backend_locator,
+            original_value,
+            source_generation,
+        )
+    }
+
+    pub fn new_with_readback(
+        target: RuntimeNodeId,
+        backend_locator: BackendLocator,
+        readback_locator: BackendLocator,
+        original_value: String,
+        source_generation: u64,
+    ) -> Self {
         Self {
             target,
             backend_locator,
+            readback_locator,
             buffer: EditBuffer::new(original_value.clone()),
             original_value,
             source_generation,
@@ -121,6 +141,7 @@ pub enum EditCommand {
     End,
     Backspace,
     Delete,
+    CommitOnly,
     Commit,
     Cancel,
     BlockedTab,
@@ -135,6 +156,12 @@ pub fn key_to_edit_command(event: KeyEvent) -> EditCommand {
     match (event.code, event.modifiers) {
         (KeyCode::Char('c'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
             EditCommand::Quit
+        }
+        (KeyCode::Char('s'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+            EditCommand::CommitOnly
+        }
+        (KeyCode::Enter, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+            EditCommand::CommitOnly
         }
         (KeyCode::Enter, _) => EditCommand::Commit,
         (KeyCode::Esc, _) => EditCommand::Cancel,
@@ -185,6 +212,22 @@ mod tests {
         assert_eq!(
             key_to_edit_command(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
             EditCommand::BlockedTab
+        );
+    }
+
+    #[test]
+    fn control_enter_is_an_edit_only_commit() {
+        assert_eq!(
+            key_to_edit_command(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL)),
+            EditCommand::CommitOnly
+        );
+        assert_eq!(
+            key_to_edit_command(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            EditCommand::Commit
+        );
+        assert_eq!(
+            key_to_edit_command(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL)),
+            EditCommand::CommitOnly
         );
     }
 

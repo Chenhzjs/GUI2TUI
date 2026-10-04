@@ -608,6 +608,14 @@ fn block_kind(node: &CachedSemanticNode) -> ContentBlockKind {
         SemanticRole::ListItem => ContentBlockKind::ListItem,
         SemanticRole::Quote => ContentBlockKind::Quote,
         SemanticRole::Landmark => ContentBlockKind::Landmark,
+        SemanticRole::Navigation
+        | SemanticRole::Search
+        | SemanticRole::Main
+        | SemanticRole::Section
+        | SemanticRole::Article
+        | SemanticRole::Sidebar
+        | SemanticRole::Footer => ContentBlockKind::Landmark,
+        SemanticRole::Toolbar | SemanticRole::TabList => ContentBlockKind::Group,
         SemanticRole::TextInput if is_readable_text(node) => ContentBlockKind::Text,
         SemanticRole::Form | SemanticRole::TextInput => ContentBlockKind::FormAnchor,
         SemanticRole::Table => ContentBlockKind::TableAnchor,
@@ -648,6 +656,7 @@ fn is_ui_chrome_role(role: &SemanticRole) -> bool {
             | SemanticRole::Menu
             | SemanticRole::MenuItem
             | SemanticRole::StatusBar
+            | SemanticRole::Toolbar
             | SemanticRole::Window
             | SemanticRole::Dialog
     )
@@ -663,6 +672,7 @@ fn is_control(role: &SemanticRole) -> bool {
             | SemanticRole::TextInput
             | SemanticRole::ComboBox
             | SemanticRole::ListItem
+            | SemanticRole::Link
     )
 }
 

@@ -18,7 +18,7 @@ impl HelpContext {
     pub fn text(self) -> &'static str {
         match self {
             Self::Scene => {
-                "Scene\nF6 / Shift-F6: next/previous major region\nCtrl-Tab / Ctrl-Shift-Tab: next/previous pane in the active region group\nTab / Shift-Tab: focus controls in the active pane\nEnter: use the focused control, edit a plain field, choose a value, or read a document\ne: external edit when a complete plain-text target and configured handler are available\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll the active pane\n: open commands in the current scope\nr: force refresh\nb: choose a current application\nF4: resources and visual tasks\nq / Esc: quit\n\nRead-only wording means no safe operation is available. Password editing is disabled."
+                "Scene\nF6 / Shift-F6: next/previous major region\nCtrl-Tab / Ctrl-Shift-Tab: next/previous pane in the active region group\nTab / Shift-Tab: focus controls in the active pane\nEnter: use the focused control, edit a plain field, choose a value, or read a document\nAlt-Enter: experimental raw Enter to the exact authority-checked focused control (not Semantic Submit)\ne: external edit when a complete plain-text target and configured handler are available\nSpace: safe toggle/action (no anonymous action fallback)\nUp/Down / PageUp/PageDown: scroll the active pane\n: open commands in the current scope\nr: force refresh\nb: choose a current application\nF4: resources and visual tasks\nq / Esc: quit\n\nRead-only wording means no safe operation is available. Password editing is disabled."
             }
             Self::Reader => {
                 "Reader\nj/k or Down/Up: move semantic blocks\nPageDown/PageUp: move ten blocks\no: outline\n/: search loaded content; Ctrl-F there searches progressively\nEnter: open a table or collection at this block\nF4: resources\nEsc: return to Scene"
@@ -45,7 +45,7 @@ impl HelpContext {
                 "Commands\nType: search current scope\nF2: toggle all-scope search\nUp/Down: select\nEnter/Right: execute safe command or open a group\nLeft: parent group when query is empty\nEsc: back or close\nF1: help (question mark remains query text)"
             }
             Self::Edit => {
-                "Plain text editing\nType: edit the local buffer (q/r/? are text)\nLeft/Right/Home/End: local cursor\nBackspace/Delete: remove characters\nEnter: submit entire value and wait for GUI confirmation\nEsc: cancel without writing\nTab: ignored; commit or cancel first\nExternal changes block commit. Password editing is disabled.\nF1: help; this is not remote caret synchronization."
+                "Plain text editing\nType: edit the local buffer (q/r/? are text)\nLeft/Right/Home/End: local cursor\nBackspace/Delete: remove characters\nCtrl-S / Ctrl-Enter: verify Edit only\nEnter: verify Edit, then attempt Semantic Submit only when fresh Accessibility semantics support it\nEsc: cancel without writing\nTab: ignored; commit or cancel first\nExternal changes block commit. Password editing is disabled.\nF1: help; this is not remote caret synchronization."
             }
             Self::Modality => {
                 "Resources\nUp/Down: select resource\nEnter: request handoff if an endpoint is available\nm: explicitly materialize an available artifact on this host\no: open a materialized artifact using a same-host viewer\nEsc: return\nNo endpoint is valid. No fake Open; no unsolicited capture/transport. Unavailable operations explain why."

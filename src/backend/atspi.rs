@@ -79,6 +79,8 @@ pub struct SelectionMutation {
 
 pub const MAX_EXTERNAL_TEXT_BYTES: usize = 256 * 1024;
 pub const MAX_EXTERNAL_TEXT_CHARACTERS: i32 = 256 * 1024;
+const TEXT_WRITE_VERIFICATION_TIMEOUT: Duration = Duration::from_millis(750);
+const TEXT_WRITE_VERIFICATION_POLL: Duration = Duration::from_millis(25);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComplexTextMutation {
@@ -184,6 +186,8 @@ pub enum BackendError {
     ObjectUnavailable(String, atspi::AtspiError),
     #[error("AT-SPI object {0} does not expose the Action interface")]
     ActionUnsupported(String),
+    #[error("AT-SPI focus request was rejected for object {0}")]
+    FocusRejected(String),
     #[error("AT-SPI object {0} exposes the Action interface but has no available actions")]
     NoActions(String),
     #[error("AT-SPI container {0} does not expose the Selection interface")]
@@ -227,6 +231,10 @@ pub enum BackendError {
     },
     #[error("application rejected text update for AT-SPI object {0}")]
     TextUpdateRejected(String),
+    #[error(
+        "application accepted text update for AT-SPI object {0}, but authoritative readback did not match"
+    )]
+    TextUpdateNotVerified(String),
     #[error("AT-SPI object {0} is not a complete writable multiline plain-text target")]
     ComplexTextUnsupported(String),
     #[error("AT-SPI text target {0} is incomplete or exceeds the external-edit bound")]
@@ -603,6 +611,30 @@ impl AtspiBackend {
                 )
             })?
             .map_err(|error| BackendError::SemanticCache(error.to_string()))
+    }
+
+    /// Resolve the process identity of the exact AT-SPI bus owner captured by
+    /// a locator. This is used only to map an accessible top-level Window to a
+    /// native window; it never selects an application by name or title.
+    pub async fn locator_process_id(&self, locator: &BackendLocator) -> Result<u32, BackendError> {
+        let bus = zbus::fdo::DBusProxy::new(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        let name = zbus::names::BusName::try_from(locator.bus_name())
+            .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
+        tokio::time::timeout(
+            self.operation_timeout,
+            bus.get_connection_unix_process_id(name),
+        )
+        .await
+        .map_err(|_| {
+            timeout_error(
+                self.operation_timeout,
+                "resolve AT-SPI owner process identity",
+                locator.encode(),
+            )
+        })?
+        .map_err(|error| BackendError::SemanticCache(error.to_string()))
     }
 
     /// Read screen-space component bounds for a presentation-side spatial
@@ -1068,6 +1100,44 @@ impl AtspiBackend {
         Ok(node)
     }
 
+    /// Request semantic focus through the public AT-SPI Component interface.
+    /// Callers must refresh and verify the resulting Focused state before any
+    /// native-input fallback is allowed.
+    pub async fn focus_node(&self, locator: &BackendLocator) -> Result<(), BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for focus",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let component = atspi_operation(
+            self.operation_timeout,
+            "create Component proxy for focus",
+            &encoded_id,
+            proxies.component(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "request semantic focus",
+            &encoded_id,
+            component.grab_focus(),
+        )
+        .await?;
+        if accepted {
+            Ok(())
+        } else {
+            Err(BackendError::FocusRejected(encoded_id))
+        }
+    }
+
     /// Read one object's AT-SPI RelationSet without traversing its subtree.
     pub async fn relations(
         &self,
@@ -1153,7 +1223,21 @@ impl AtspiBackend {
         &self,
         locator: &BackendLocator,
     ) -> Result<String, BackendError> {
-        let (encoded_id, object) = self.validate_plain_editable_text(locator).await?;
+        self.validate_plain_editable_text(locator).await?;
+        self.read_authoritative_text(locator).await
+    }
+
+    /// Read a fresh complete value from the public AT-SPI Text interface.
+    ///
+    /// The readback target may differ from the node exposing EditableText (for
+    /// example, a semantic ComboBox container with a Text-bearing descendant),
+    /// so this method deliberately validates readable plain text rather than a
+    /// mutation capability. Password nodes remain unavailable.
+    pub async fn read_authoritative_text(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<String, BackendError> {
+        let (encoded_id, object) = self.validate_plain_text_readback(locator).await?;
         let proxy = object
             .as_accessible_proxy(self.connection.connection())
             .await
@@ -1821,13 +1905,15 @@ impl AtspiBackend {
         Ok((encoded_id, object, interfaces, role))
     }
 
-    /// Atomically replace a plain editable text control through AT-SPI.
-    pub async fn set_text_contents(
+    /// Deliver an atomic replacement request through AT-SPI EditableText.
+    /// A true return value only confirms provider acceptance; callers must use
+    /// authoritative Text readback before treating the semantic edit as done.
+    pub async fn deliver_set_text_contents(
         &self,
         locator: &BackendLocator,
         new_text: &str,
     ) -> Result<(), BackendError> {
-        let (encoded_id, object) = self.validate_plain_editable_text(locator).await?;
+        let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
         let proxy = object
             .as_accessible_proxy(self.connection.connection())
             .await
@@ -1839,6 +1925,19 @@ impl AtspiBackend {
             proxy.proxies(),
         )
         .await?;
+        // Some accessibility providers accept EditableText writes only after
+        // the public Component focus has been granted. This is a semantic
+        // focus request, not keyboard/mouse injection, and keeps the backend
+        // authoritative for the subsequent text readback.
+        if let Ok(component) = proxies.component().await {
+            let _ = dbus_operation(
+                self.operation_timeout,
+                "focus editable text control",
+                &encoded_id,
+                component.grab_focus(),
+            )
+            .await;
+        }
         let editable = atspi_operation(
             self.operation_timeout,
             "create EditableText proxy",
@@ -1853,14 +1952,134 @@ impl AtspiBackend {
             editable.set_text_contents(new_text),
         )
         .await?;
-        if accepted {
-            Ok(())
-        } else {
-            Err(BackendError::TextUpdateRejected(encoded_id))
+        if !accepted {
+            return Err(BackendError::TextUpdateRejected(encoded_id));
+        }
+        Ok(())
+    }
+
+    /// Deliver a replacement using the other public EditableText primitives.
+    /// This is useful for providers that advertise SetTextContents but do not
+    /// apply it. As with SetTextContents, acceptance is not verification.
+    pub async fn deliver_delete_and_insert_text(
+        &self,
+        locator: &BackendLocator,
+        existing_characters: usize,
+        new_text: &str,
+    ) -> Result<(), BackendError> {
+        let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create interface proxies for text replacement",
+            &encoded_id,
+            proxy.proxies(),
+        )
+        .await?;
+        let editable = atspi_operation(
+            self.operation_timeout,
+            "create EditableText proxy",
+            &encoded_id,
+            proxies.editable_text(),
+        )
+        .await?;
+        let existing_characters = i32::try_from(existing_characters)
+            .map_err(|_| BackendError::TextEditUnsupported(encoded_id.clone()))?;
+        if existing_characters > 0 {
+            let accepted = dbus_operation(
+                self.operation_timeout,
+                "delete existing editable text",
+                &encoded_id,
+                editable.delete_text(0, existing_characters),
+            )
+            .await?;
+            if !accepted {
+                return Err(BackendError::TextUpdateRejected(encoded_id));
+            }
+        }
+        if !new_text.is_empty() {
+            let new_characters = i32::try_from(new_text.chars().count())
+                .map_err(|_| BackendError::TextEditUnsupported(encoded_id.clone()))?;
+            let accepted = dbus_operation(
+                self.operation_timeout,
+                "insert replacement editable text",
+                &encoded_id,
+                editable.insert_text(0, new_text, new_characters),
+            )
+            .await?;
+            if !accepted {
+                return Err(BackendError::TextUpdateRejected(encoded_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// Compatibility entry point for callers that require one verified
+    /// SetTextContents attempt. New semantic edit orchestration lives in the
+    /// actuation layer where alternate strategies can be selected safely.
+    pub async fn set_text_contents(
+        &self,
+        locator: &BackendLocator,
+        new_text: &str,
+    ) -> Result<(), BackendError> {
+        let encoded_id = locator.encode();
+        self.deliver_set_text_contents(locator, new_text).await?;
+
+        // A provider returning true only acknowledges the AT-SPI method call.
+        // It does not establish that the application's authoritative value was
+        // changed. Poll the same semantic target through the public Text
+        // interface before allowing a later action such as Submit to proceed.
+        let deadline = Instant::now() + TEXT_WRITE_VERIFICATION_TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(BackendError::TextUpdateNotVerified(encoded_id));
+            }
+            let readback =
+                tokio::time::timeout(remaining, self.read_authoritative_text(locator)).await;
+            match readback {
+                Ok(Ok(value)) if text_update_is_verified(new_text, &value) => return Ok(()),
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(_) => {
+                    return Err(BackendError::OperationTimeout {
+                        operation: "verify text update",
+                        node_id: encoded_id,
+                        timeout_ms: TEXT_WRITE_VERIFICATION_TIMEOUT.as_millis(),
+                    });
+                }
+            }
+            tokio::time::sleep(TEXT_WRITE_VERIFICATION_POLL.min(remaining)).await;
         }
     }
 
     async fn validate_plain_editable_text(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(String, ObjectRefOwned), BackendError> {
+        let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "validate readable editable text interface",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        if !interfaces.contains(Interface::Text) {
+            return Err(BackendError::TextEditUnsupported(encoded_id));
+        }
+        drop(proxy);
+        Ok((encoded_id, object))
+    }
+
+    async fn validate_plain_editable_target(
         &self,
         locator: &BackendLocator,
     ) -> Result<(String, ObjectRefOwned), BackendError> {
@@ -1896,13 +2115,48 @@ impl AtspiBackend {
         .await?;
         let semantic_role =
             SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText));
-        if semantic_role != SemanticRole::TextInput
-            || !interfaces.contains(Interface::EditableText)
-            || !interfaces.contains(Interface::Text)
+        if !matches!(
+            semantic_role,
+            SemanticRole::TextInput | SemanticRole::ComboBox
+        ) || !interfaces.contains(Interface::EditableText)
             || !states.contains(State::Editable)
             || states.contains(State::MultiLine)
         {
             return Err(BackendError::TextEditUnsupported(encoded_id));
+        }
+        drop(proxy);
+        Ok((encoded_id, object))
+    }
+
+    async fn validate_plain_text_readback(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(String, ObjectRefOwned), BackendError> {
+        let encoded_id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = object
+            .as_accessible_proxy(self.connection.connection())
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "validate text readback role",
+            &encoded_id,
+            proxy.get_role(),
+        )
+        .await?;
+        if role == Role::PasswordText {
+            return Err(BackendError::SecretContentDisabled(encoded_id));
+        }
+        let interfaces = dbus_operation(
+            self.operation_timeout,
+            "validate text readback interface",
+            &encoded_id,
+            proxy.get_interfaces(),
+        )
+        .await?;
+        if !interfaces.contains(Interface::Text) {
+            return Err(BackendError::ContentTextUnsupported(encoded_id));
         }
         drop(proxy);
         Ok((encoded_id, object))
@@ -3878,12 +4132,16 @@ async fn read_value(
     None
 }
 
+fn text_update_is_verified(requested: &str, readback: &str) -> bool {
+    requested == readback
+}
+
 fn role_allows_text_value(role: Role, interfaces: atspi::InterfaceSet) -> bool {
     role != Role::PasswordText
         && interfaces.contains(Interface::EditableText)
         && matches!(
             role,
-            Role::Text | Role::Entry | Role::DateEditor | Role::Editbar
+            Role::Text | Role::Entry | Role::DateEditor | Role::Editbar | Role::ComboBox
         )
 }
 
@@ -3893,12 +4151,18 @@ fn semantic_role_and_input_kind(
 ) -> (SemanticRole, Option<TextInputKind>) {
     let semantic_role =
         SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText));
-    let input_kind =
-        (semantic_role == SemanticRole::TextInput).then_some(if role == Role::PasswordText {
-            TextInputKind::Password
-        } else {
-            TextInputKind::Plain
-        });
+    // Providers may expose a location/search bar as an editable ComboBox.
+    // Keep the concrete role for structure, but use the common text-input
+    // model whenever the public EditableText capability is present.
+    let editable_text_control = matches!(
+        semantic_role,
+        SemanticRole::TextInput | SemanticRole::ComboBox
+    ) && interfaces.contains(Interface::EditableText);
+    let input_kind = editable_text_control.then_some(if role == Role::PasswordText {
+        TextInputKind::Password
+    } else {
+        TextInputKind::Plain
+    });
     (semantic_role, input_kind)
 }
 
@@ -3925,10 +4189,8 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::SelectCurrentTableRow);
     }
-    if role == SemanticRole::TextInput
-        && input_kind == Some(TextInputKind::Plain)
+    if input_kind == Some(TextInputKind::Plain)
         && interfaces.contains(Interface::EditableText)
-        && interfaces.contains(Interface::Text)
         && states.contains(&SemanticState::Editable)
         // Atomic single-line editing must not replace an entire document buffer.
         && !states.contains(&SemanticState::Other("multi-line".to_owned()))
@@ -4208,6 +4470,7 @@ mod tests {
         assert!(role_allows_text_value(Role::Entry, editable_text));
         assert!(role_allows_text_value(Role::Text, editable_text));
         assert!(role_allows_text_value(Role::Editbar, editable_text));
+        assert!(role_allows_text_value(Role::ComboBox, editable_text));
         assert!(!role_allows_text_value(Role::PasswordText, editable_text));
     }
 
@@ -4222,6 +4485,28 @@ mod tests {
             semantic_role_and_input_kind(Role::PasswordText, editable_text),
             (SemanticRole::TextInput, Some(TextInputKind::Password))
         );
+    }
+
+    #[test]
+    fn editable_combobox_uses_plain_text_input_model() {
+        let mut editable = InterfaceSet::new(Interface::Accessible);
+        editable.insert(Interface::EditableText);
+        assert_eq!(
+            semantic_role_and_input_kind(Role::ComboBox, editable),
+            (SemanticRole::ComboBox, Some(TextInputKind::Plain))
+        );
+    }
+
+    #[test]
+    fn editable_write_requires_exact_authoritative_readback() {
+        assert!(text_update_is_verified(
+            "https://www.example.org",
+            "https://www.example.org"
+        ));
+        assert!(!text_update_is_verified(
+            "https://www.example.org",
+            "https://www.example.com"
+        ));
     }
 
     #[test]

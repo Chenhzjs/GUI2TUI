@@ -1,6 +1,6 @@
 use crate::{
     content::ContentCatalog,
-    semantic::{RuntimeNodeId, SemanticCache},
+    semantic::SemanticCache,
     tui::action::{InteractionCapability, UiIntent},
 };
 
@@ -157,31 +157,14 @@ pub fn compress_content_scene(
         next_id = next_id.saturating_add(1);
     }
     let mut elements = Vec::with_capacity(scene.elements.len() + summaries.len());
+    // Reader is an explicit projection now. Keep the normalized Surface
+    // elements, including structural groups and unbound content rows, and add
+    // one bounded Reader entry point per model. Removing every content-only
+    // element here used to turn a Document into a linear Reader by default.
+    elements.extend(scene.elements.iter().cloned());
+    // Append the Reader entry point so initial focus remains on the ordinary
+    // Surface controls rather than silently entering the reading projection.
     elements.extend(summaries);
-    let content_roots: std::collections::HashSet<RuntimeNodeId> =
-        content.visible_models().map(|model| model.root).collect();
-    elements.extend(
-        scene
-            .elements
-            .iter()
-            .filter(|element| {
-                // Content-only presentation is replaced by a bounded Reader.
-                // Existing semantic bindings (forms, choices, links, commands)
-                // remain reachable.
-                let content_root_presentation = element
-                    .binding
-                    .as_ref()
-                    .is_some_and(|binding| content_roots.contains(&binding.runtime_id));
-                !content_root_presentation
-                    && (element.binding.is_some()
-                        || element.sources.is_empty()
-                        || !element
-                            .sources
-                            .iter()
-                            .all(|source| content.is_content_source(*source)))
-            })
-            .cloned(),
-    );
     let summaries_count = summaries_len(content);
     let preserved_bound_elements = elements
         .iter()
@@ -208,7 +191,8 @@ mod tests {
     use crate::{
         content::ContentCatalog,
         semantic::{
-            BackendLocator, DebugInfo, SemanticAction, SemanticCache, SemanticNode, SemanticRole,
+            BackendLocator, DebugInfo, SemanticAction, SemanticCache, SemanticCapability,
+            SemanticNode, SemanticRole, SemanticState, TextInputKind,
         },
         transcompile::{SceneElementKind, analyze_regions, compile_scene},
     };
@@ -254,17 +238,17 @@ mod tests {
         let mut scene = compile_scene(&tree, &analysis);
         let catalog = ContentCatalog::analyze(&cache);
         let metrics = compress_content_scene(&mut scene, &cache, &catalog);
-        assert!(metrics.after_elements < metrics.before_elements + 1);
+        assert!(metrics.after_elements <= metrics.before_elements + 1);
         assert!(
             scene.elements.iter().any(|element| {
                 matches!(element.kind, SceneElementKind::DocumentSummary { .. })
             })
         );
-        assert!(!scene.elements.iter().any(|element| {
-            element
-                .sources
-                .contains(&crate::semantic::RuntimeNodeId::new(2))
-                && element.binding.is_none()
+        assert!(scene.elements.iter().any(|element| {
+            matches!(
+                element.kind,
+                SceneElementKind::Text { ref text } if text == "Body paragraph"
+            )
         }));
         assert!(scene.elements.iter().any(|element| {
             matches!(
@@ -279,5 +263,95 @@ mod tests {
         assert_eq!(audit.form_controls, 1);
         assert_eq!(audit.reachable, 1);
         assert!(audit.unreachable.is_empty());
+    }
+
+    #[test]
+    fn surface_and_reader_share_the_document_source_without_replacing_regions() {
+        let mut window = node(1, SemanticRole::Window, "Application");
+        let mut toolbar = node(2, SemanticRole::Toolbar, "Toolbar");
+        let mut toolbar_input = node(
+            3,
+            SemanticRole::Unknown("search-box".to_owned()),
+            "Global search",
+        );
+        toolbar_input.text_input_kind = Some(TextInputKind::Plain);
+        toolbar_input
+            .capabilities
+            .push(SemanticCapability::EditText);
+        toolbar.children.push(toolbar_input);
+
+        let mut document = node(4, SemanticRole::Document, "Article");
+        document.states.push(SemanticState::Other("showing".into()));
+        document
+            .children
+            .push(node(5, SemanticRole::Navigation, "Navigation"));
+        let mut form = node(6, SemanticRole::Form, "Search Form");
+        let mut wrapper = node(7, SemanticRole::Container, "");
+        let mut query = node(8, SemanticRole::TextInput, "Query");
+        query.text_input_kind = Some(TextInputKind::Plain);
+        query.capabilities.push(SemanticCapability::EditText);
+        let mut submit = node(9, SemanticRole::Button, "Submit");
+        submit.actions.push(SemanticAction {
+            index: 0,
+            name: "click".into(),
+            description: None,
+            keybinding: None,
+        });
+        wrapper.children = vec![query, submit];
+        form.children.push(wrapper);
+        let mut main = node(10, SemanticRole::Main, "Main");
+        let mut list = node(11, SemanticRole::List, "Results");
+        list.capabilities
+            .push(SemanticCapability::SelectCurrentChild);
+        let mut item = node(12, SemanticRole::ListItem, "Result");
+        item.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("showing".into()),
+        ];
+        item.actions.push(SemanticAction {
+            index: 0,
+            name: "toggle".into(),
+            description: None,
+            keybinding: None,
+        });
+        list.children.push(item);
+        main.children.push(list);
+        document.children.extend([form, main]);
+        window.children.extend([toolbar, document]);
+
+        let cache = SemanticCache::from_snapshot(window).unwrap();
+        let tree = cache.materialize_tree().unwrap();
+        let analysis = analyze_regions(&tree);
+        let mut scene = compile_scene(&tree, &analysis);
+        let catalog = ContentCatalog::analyze(&cache);
+        compress_content_scene(&mut scene, &cache, &catalog);
+
+        for label in ["Toolbar", "Article", "Navigation", "Search Form", "Main"] {
+            assert!(scene.elements.iter().any(|element| {
+                matches!(&element.kind, SceneElementKind::Group { label: value } if value == label)
+            }), "missing surface region {label}");
+        }
+        assert!(scene.elements.iter().any(|element| {
+            matches!(&element.kind, SceneElementKind::Field { label, .. } if label == "Query")
+                && element.binding.is_some()
+        }));
+        assert!(scene.elements.iter().any(|element| {
+            matches!(&element.kind, SceneElementKind::Button { label } if label == "Submit")
+                && element.binding.is_some()
+        }));
+        let summary = scene
+            .elements
+            .iter()
+            .find(|element| matches!(element.kind, SceneElementKind::DocumentSummary { .. }))
+            .expect("Reader projection entry point");
+        assert_eq!(
+            summary.binding.as_ref().unwrap().runtime_id,
+            summary.sources[0]
+        );
+        assert!(
+            summary
+                .sources
+                .contains(&summary.binding.as_ref().unwrap().runtime_id)
+        );
     }
 }

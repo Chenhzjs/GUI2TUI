@@ -113,6 +113,14 @@ pub enum SemanticRole {
     Text,
     TextInput,
     Document,
+    Toolbar,
+    Navigation,
+    Search,
+    Main,
+    Section,
+    Article,
+    Sidebar,
+    Footer,
     Heading,
     Paragraph,
     Link,
@@ -163,9 +171,9 @@ impl From<Role> for SemanticRole {
             | Role::RootPane
             | Role::ScrollPane
             | Role::Viewport
-            | Role::Grouping
-            | Role::Section
-            | Role::Article => Self::Container,
+            | Role::Grouping => Self::Container,
+            Role::Section => Self::Section,
+            Role::Article => Self::Article,
             Role::Form => Self::Form,
             Role::Label | Role::Static | Role::Caption => Self::Label,
             Role::Button | Role::PushButtonMenu => Self::Button,
@@ -182,6 +190,9 @@ impl From<Role> for SemanticRole {
             | Role::DocumentWeb
             | Role::DocumentEmail
             | Role::HTMLContainer => Self::Document,
+            Role::ToolBar => Self::Toolbar,
+            Role::DirectoryPane => Self::Sidebar,
+            Role::Footer => Self::Footer,
             Role::Heading | Role::Header => Self::Heading,
             Role::Link => Self::Link,
             Role::Image | Role::ImageMap | Role::Icon => Self::Image,
@@ -213,7 +224,10 @@ impl From<Role> for SemanticRole {
 
 impl SemanticRole {
     pub fn from_atspi(role: Role, editable: bool) -> Self {
-        if role == Role::Text && editable {
+        // Some providers expose editable controls such as search boxes as an
+        // unknown/extended text role. EditableText is the stronger semantic
+        // signal, so normalize those nodes to the common text-input model.
+        if matches!(role, Role::Text | Role::Unknown) && editable {
             Self::TextInput
         } else {
             Self::from(role)
@@ -236,6 +250,14 @@ impl fmt::Display for SemanticRole {
             Self::Text => f.write_str("Text"),
             Self::TextInput => f.write_str("TextInput"),
             Self::Document => f.write_str("Document"),
+            Self::Toolbar => f.write_str("Toolbar"),
+            Self::Navigation => f.write_str("Navigation"),
+            Self::Search => f.write_str("Search"),
+            Self::Main => f.write_str("Main"),
+            Self::Section => f.write_str("Section"),
+            Self::Article => f.write_str("Article"),
+            Self::Sidebar => f.write_str("Sidebar"),
+            Self::Footer => f.write_str("Footer"),
             Self::Heading => f.write_str("Heading"),
             Self::Paragraph => f.write_str("Paragraph"),
             Self::Link => f.write_str("Link"),
@@ -333,6 +355,8 @@ pub struct SemanticAction {
 /// Backend-independent capabilities advertised by a semantic node.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SemanticCapability {
+    /// The node advertises a safe generic activation operation.
+    Activate,
     /// The container can select one of its direct children.
     SelectChildren,
     /// A single-selection collection can select one exact current direct child.
@@ -454,6 +478,10 @@ mod tests {
         );
         assert_eq!(SemanticRole::from(Role::Entry), SemanticRole::TextInput);
         assert_eq!(SemanticRole::from(Role::ComboBox), SemanticRole::ComboBox);
+        assert_eq!(SemanticRole::from(Role::ToolBar), SemanticRole::Toolbar);
+        assert_eq!(SemanticRole::from(Role::Section), SemanticRole::Section);
+        assert_eq!(SemanticRole::from(Role::Article), SemanticRole::Article);
+        assert_eq!(SemanticRole::from(Role::Footer), SemanticRole::Footer);
         assert_eq!(SemanticRole::from(Role::PageTab), SemanticRole::Tab);
         assert_eq!(
             SemanticRole::from_atspi(Role::Text, true),
@@ -462,6 +490,10 @@ mod tests {
         assert_eq!(
             SemanticRole::from_atspi(Role::Text, false),
             SemanticRole::Text
+        );
+        assert_eq!(
+            SemanticRole::from_atspi(Role::Unknown, true),
+            SemanticRole::TextInput
         );
         assert_eq!(SemanticRole::from(Role::Image), SemanticRole::Image);
         assert_eq!(

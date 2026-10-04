@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use async_trait::async_trait;
 use crossterm::event::KeyEvent;
 use ratatui::Frame;
 
@@ -33,6 +34,10 @@ use crate::{
 
 use super::{
     action::{InteractionCapability, UiIntent, is_current_action_target, resolve_action},
+    actuation::{
+        ActuationError, ActuationStrategy, ActuationTrace, DeliveryStatus, NativeInputDelivery,
+        SemanticActionKind, SemanticActuation,
+    },
     choice_overlay::{ChoiceOverlay, ChoiceOverlayOutcome},
     content_view::{ContentViewCommand, ContentViewMode, ContentViewState, move_index},
     edit::{EditCommand, EditSession, key_to_edit_command},
@@ -40,8 +45,11 @@ use super::{
     focus::{FocusModel, Viewport},
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
+    observation::{
+        ActuationObserver, ObservationPolicy, SurfaceSnapshot, SurfaceSnapshotRefresher,
+    },
     operation::{
-        BackendOperation, SemanticOperation, resolve_backend_operation,
+        BackendOperation, NativeKeyOperation, SemanticOperation, resolve_backend_operation,
         resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
@@ -70,6 +78,7 @@ pub struct TuiApplication {
     modality_cancel: crate::modality::CancellationToken,
     materialized_artifacts: Vec<crate::modality::materialize::MaterializedArtifact>,
     backend: AtspiBackend,
+    native_input: NativeInputDelivery,
     application_locator: crate::semantic::BackendLocator,
     inspect_options: InspectOptions,
     settle_delay: Duration,
@@ -866,6 +875,7 @@ impl TuiApplication {
             modality_cancel: Default::default(),
             materialized_artifacts: Vec::new(),
             backend,
+            native_input: NativeInputDelivery::default(),
             application_locator,
             inspect_options,
             settle_delay,
@@ -1066,10 +1076,14 @@ impl TuiApplication {
                     .as_deref()
                     .unwrap_or("semantic content")
             )];
+            // Surface is a bounded structural/contextual projection. Reader
+            // owns the complete reading stream and its progressive materializer;
+            // a large document must not expand the normal application scene.
+            const SURFACE_CONTENT_PREVIEW_LINES: usize = 96;
             let row_budget = usize::from(self.viewport_height)
                 .saturating_mul(3)
                 .saturating_add(usize::from(self.viewport.offset))
-                .max(24);
+                .clamp(24, SURFACE_CONTENT_PREVIEW_LINES);
             let mut total_lines = 1_usize;
             for id in model.reading_order().into_iter().take(row_budget) {
                 let Some(block) = model.block(id) else {
@@ -1461,7 +1475,9 @@ impl TuiApplication {
             }
             UiIntent::BeginEdit => self.begin_edit().await,
             UiIntent::BeginExternalEdit => self.external_text_requested = true,
-            UiIntent::CommitEdit => self.commit_edit().await,
+            UiIntent::CommitEdit => self.commit_edit(true).await,
+            UiIntent::Submit => self.submit_focused_semantically().await,
+            UiIntent::SendKeyEnter => self.send_raw_enter_to_focused().await,
             UiIntent::CancelEdit => self.cancel_edit(),
             UiIntent::OpenCommandPalette => {
                 let palette = CommandPalette::new(
@@ -1704,6 +1720,10 @@ impl TuiApplication {
                 }
                 EditCommand::Delete => {
                     self.edit_session.as_mut().unwrap().buffer.delete();
+                    false
+                }
+                EditCommand::CommitOnly => {
+                    self.commit_edit(false).await;
                     false
                 }
                 EditCommand::Commit => self.handle_intent(UiIntent::CommitEdit).await,
@@ -2687,6 +2707,9 @@ impl TuiApplication {
                 unreachable!("complex text commits use the external text session")
             }
             BackendOperation::AdjustValue { .. } => unreachable!("Value operations handled above"),
+            BackendOperation::NativeKey { .. } => {
+                unreachable!("raw native input uses the authority-checked experimental path")
+            }
         };
         match result {
             Ok(_) => {
@@ -2809,6 +2832,9 @@ impl TuiApplication {
             BackendOperation::AdjustValue { .. } => {
                 unreachable!("command palette never adjusts Value controls")
             }
+            BackendOperation::NativeKey { .. } => {
+                unreachable!("command palette never sends raw input")
+            }
         };
         match result {
             Ok(()) => {
@@ -2919,6 +2945,7 @@ impl TuiApplication {
                 unreachable!("choice never edits complex text")
             }
             BackendOperation::AdjustValue { .. } => unreachable!("choice never adjusts Value"),
+            BackendOperation::NativeKey { .. } => unreachable!("choice never sends raw input"),
         };
         match result {
             Ok(()) => {
@@ -3040,19 +3067,25 @@ impl TuiApplication {
             self.status = "Text field has no semantic binding".to_owned();
             return;
         };
+        let binding = binding.clone();
         let runtime_id = binding.runtime_id;
         let locator = binding.backend_locator.clone();
         let label = element_label(element).to_owned();
-        match self.backend.read_full_editable_text(&locator).await {
-            Ok(value) => {
-                self.edit_session = Some(EditSession::new(
+        match self
+            .native_input
+            .read_authoritative_text(&self.backend, &self.cache, &binding)
+            .await
+        {
+            Ok((targets, value)) => {
+                self.edit_session = Some(EditSession::new_with_readback(
                     runtime_id,
                     locator,
+                    targets.readback_target.locator,
                     value,
                     self.cache.generation(),
                 ));
                 self.status = format!(
-                    "Editing \"{label}\" — Enter Commit | Esc Cancel | ←/→ Move | Backspace/Delete Edit"
+                    "Editing \"{label}\" — Ctrl+S Apply only | Enter Apply+Submit | Esc Cancel | ←/→ Move"
                 );
             }
             Err(error) => self.status = format!("Cannot edit \"{label}\": {error}"),
@@ -3337,7 +3370,7 @@ impl TuiApplication {
         }
     }
 
-    async fn commit_edit(&mut self) {
+    async fn commit_edit(&mut self, submit_after_edit: bool) {
         let Some(session) = self.edit_session.as_ref() else {
             return;
         };
@@ -3347,145 +3380,389 @@ impl TuiApplication {
                 "Input changed externally; cancel or reload before editing again".to_owned();
             return;
         }
-        let Some(current) = self.cache.node(session.target) else {
-            self.status = "Edited control disappeared; edit cancelled".to_owned();
-            self.edit_session = None;
-            return;
-        };
-        if current.backend_locator != session.backend_locator
-            || current.role != crate::semantic::SemanticRole::TextInput
-            || current.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
-            || !current
-                .capabilities
-                .contains(&crate::semantic::SemanticCapability::EditText)
-        {
-            self.status = "Edited control was replaced; edit cancelled".to_owned();
-            self.edit_session = None;
-            return;
-        }
-        let operation = SemanticOperation::ReplaceText {
-            target: session.target,
-            text: session.buffer.text().to_owned(),
-        };
-        let operation = match resolve_backend_operation(&self.scene, operation) {
-            Ok(operation) => operation,
-            Err(error) => {
-                self.status = format!("Cannot commit text edit: {error}");
-                return;
-            }
-        };
-        let BackendOperation::SetTextContents { locator, text } = operation else {
-            unreachable!("ReplaceText must resolve to SetTextContents")
-        };
+        let source_locator = session.backend_locator.clone();
+        let text = session.buffer.text().to_owned();
         if let Some(session) = self.edit_session.as_mut() {
             session.commit_pending = true;
         }
-        tracing::debug!(target = %locator, chars = text.chars().count(), "replacing editable text");
-        if let Err(error) = self.backend.set_text_contents(&locator, &text).await {
+
+        let Some(binding) = self
+            .refresh_current_binding(target, &source_locator, true)
+            .await
+        else {
             if let Some(session) = self.edit_session.as_mut() {
                 session.commit_pending = false;
             }
-            if matches!(error, BackendError::ObjectUnavailable(_, _)) {
-                self.edit_session = None;
-                self.status = "Edited control was replaced; edit cancelled".to_owned();
+            self.status = "Edited control became stale; Edit was not delivered".to_owned();
+            return;
+        };
+        let edit_operation = SemanticOperation::ReplaceText {
+            target,
+            text: text.clone(),
+        };
+        let edit_backend_operation = match resolve_backend_operation(&self.scene, edit_operation) {
+            Ok(operation) => operation,
+            Err(error) => {
+                if let Some(session) = self.edit_session.as_mut() {
+                    session.commit_pending = false;
+                }
+                self.status = format!("Text edit is no longer supported: {error}");
                 return;
             }
-            self.status = match error {
-                BackendError::TextUpdateRejected(_) => {
-                    "Application rejected text update; edit buffer retained".to_owned()
-                }
-                _ => format!("Text update failed: {error}"),
-            };
+        };
+        if !matches!(
+            edit_backend_operation,
+            BackendOperation::SetTextContents { ref locator, .. } if locator == &source_locator
+        ) {
+            if let Some(session) = self.edit_session.as_mut() {
+                session.commit_pending = false;
+            }
+            self.status = "Text edit target changed before delivery".to_owned();
             return;
         }
-
-        let started = Instant::now();
-        let mut events = Vec::new();
-        let relevant_event = loop {
-            let remaining = self.settle_delay.saturating_sub(started.elapsed());
-            if remaining.is_zero() {
-                break false;
-            }
-            match tokio::time::timeout(remaining, self.event_subscription.recv()).await {
-                Ok(Some(EventDelivery::Event(event))) => {
-                    let relevant =
-                        event_targets(&event, &locator) && event_is_text_value_change(&event);
-                    events.push(event);
-                    if relevant {
-                        break true;
-                    }
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            target,
+            &source_locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(outcome) => {
+                if let Some(session) = self.edit_session.as_mut() {
+                    session.commit_pending = false;
                 }
-                Ok(Some(EventDelivery::ResyncRequired { dropped })) => {
-                    self.edit_session = None;
-                    self.resynchronize_after_overflow(dropped).await;
-                    return;
-                }
-                _ => break false,
+                self.status = transition_status(outcome, "text input", UiIntent::CommitEdit);
+                return;
             }
         };
-        tokio::time::sleep(Duration::from_millis(40)).await;
-        while let Ok(event) = self.event_subscription.try_recv() {
-            events.push(event);
-        }
-        // The target is always refreshed explicitly below from the GUI's
-        // authoritative Text/EditableText interfaces.  Do not feed echoed
-        // target events through the generic dirty-scope path: older Qt emits
-        // a legacy PropertyChange body alongside TextChanged, and treating an
-        // otherwise-unparsed echo as Unknown would unnecessarily promote this
-        // local commit to a full-application refresh.
-        discard_target_echoes(&mut events, &locator);
-        if !events.is_empty() {
-            self.apply_event_batch(events, None).await;
-        }
-
-        let current_locator_matches = self
-            .cache
-            .node(target)
-            .is_some_and(|node| node.backend_locator == locator);
-        if !current_locator_matches {
-            self.status = "Edited control was replaced; edit cancelled".to_owned();
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::TextInteraction,
+            crate::modality::CancellationToken::default(),
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                if let Some(session) = self.edit_session.as_mut() {
+                    session.commit_pending = false;
+                }
+                self.status = error.to_string();
+                return;
+            }
+        };
+        tracing::debug!(target = %target, chars = text.chars().count(), "executing semantic text edit");
+        let edit_delivery = {
+            let authority_check = || {
+                if !self.runtime.validates_ticket(&ticket) {
+                    return Err(ActuationError::AuthorityRejected(
+                        "operation ticket is no longer authorized".to_owned(),
+                    ));
+                }
+                authority
+                    .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+                    .map_err(|outcome| ActuationError::AuthorityRejected(format!("{outcome:?}")))
+            };
+            self.native_input
+                .edit(
+                    &self.backend,
+                    &self.cache,
+                    &binding,
+                    SemanticActuation::Edit(text),
+                    &authority_check,
+                )
+                .await
+        };
+        if let Err(completion) = self.runtime.complete(&ticket) {
+            tracing::debug!(
+                ?completion,
+                "retired text edit result discarded before publication"
+            );
             self.edit_session = None;
             return;
         }
-        let confirmed = match self.backend.read_full_editable_text(&locator).await {
-            Ok(value) => value,
+        let edit_result = match edit_delivery {
+            Ok(result) => result,
             Err(error) => {
-                self.status = format!("Text was submitted but confirmation failed: {error}");
-                self.edit_session = None;
+                if let Some(session) = self.edit_session.as_mut() {
+                    session.commit_pending = false;
+                }
+                self.status = format!(
+                    "Text edit was not verified by authoritative readback; Submit aborted: {error}"
+                );
                 return;
             }
         };
-        match self.backend.refresh_node(&locator, false).await {
-            Ok(mut node) => {
-                node.value = Some(confirmed.clone());
-                if let Err(error) = self.cache.refresh_node(node) {
-                    self.status = format!("Text confirmation cache update failed: {error}");
-                    self.edit_session = None;
-                    return;
+        let readback_locator = edit_result.trace.targets.readback_target.locator.clone();
+
+        // Text replacement and form/navigation submission are separate
+        // semantic operations. Establish the post-edit baseline from the
+        // authoritative node before observing the explicit Submit action, so
+        // the observer reports Submit's effects rather than the text write.
+        let before_surface = match self.backend.refresh_node(&readback_locator, false).await {
+            Ok(node) => {
+                if self.cache.refresh_node(node).is_ok() {
+                    self.rebuild_view_preserving_focus().await;
                 }
-                self.rebuild_view_preserving_focus().await;
+                SurfaceSnapshot::from_cache(&self.cache)
             }
-            Err(error) => {
-                self.status = format!("Text was submitted but node refresh failed: {error}");
-                self.edit_session = None;
-                return;
-            }
+            Err(_) => SurfaceSnapshot::from_cache(&self.cache),
+        };
+
+        if !submit_after_edit {
+            self.edit_session = None;
+            self.status = format!(
+                "Text edit verified by authoritative readback ({} characters); Submit not requested",
+                edit_result.observed_text.chars().count()
+            );
+            return;
         }
         self.edit_session = None;
-        self.status = if confirmed == text {
-            format!(
-                "Text update confirmed — chars={} event={} node_refresh=1 full_snapshots={}",
-                confirmed.chars().count(),
-                relevant_event,
-                self.cache.full_snapshot_count()
-            )
-        } else {
-            format!(
-                "Application normalized or rejected submitted text; showing GUI value — event={} node_refresh=1 full_snapshots={}",
-                relevant_event,
-                self.cache.full_snapshot_count()
-            )
+        self.status = match self
+            .execute_semantic_submit(target, &source_locator, before_surface)
+            .await
+        {
+            Ok(trace) => format_actuation_status("Semantic Submit", &trace),
+            Err(reason) => format!(
+                "Edit verified ({} characters); Semantic Submit unsupported or unconfirmed: {reason}. Alt-Enter is the explicit Raw Enter experiment",
+                edit_result.observed_text.chars().count()
+            ),
         };
+    }
+
+    async fn refresh_current_binding(
+        &mut self,
+        target: RuntimeNodeId,
+        locator: &BackendLocator,
+        require_editable: bool,
+    ) -> Option<SceneBinding> {
+        let fresh = self.backend.refresh_node(locator, false).await.ok()?;
+        if fresh.backend_locator != *locator
+            || (require_editable
+                && (fresh.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
+                    || !fresh.capabilities.contains(&SemanticCapability::EditText)))
+        {
+            return None;
+        }
+        self.cache.refresh_node(fresh).ok()?;
+        self.rebuild_view_preserving_focus().await;
+        self.scene
+            .scene_id_for_runtime(target)
+            .and_then(|scene_id| self.scene.element(scene_id))
+            .and_then(|element| element.binding.clone())
+            .filter(|binding| binding.backend_locator == *locator)
+    }
+
+    async fn execute_semantic_submit(
+        &mut self,
+        target: RuntimeNodeId,
+        locator: &BackendLocator,
+        before_surface: SurfaceSnapshot,
+    ) -> Result<ActuationTrace, String> {
+        let _binding = self
+            .refresh_current_binding(target, locator, false)
+            .await
+            .ok_or_else(|| "target became stale before Submit".to_owned())?;
+        let operation =
+            resolve_cached_node_operation(&self.cache, SemanticOperation::SubmitNode(target))
+                .map_err(|error| error.to_string())?;
+        let BackendOperation::InvokeAction { action, .. } = operation else {
+            return Err("fresh operation did not resolve to a semantic action".to_owned());
+        };
+        let authority = OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            target,
+            locator,
+            &self.cache,
+            &self.scopes,
+        )
+        .map_err(|outcome| format!("authority rejected Submit: {outcome:?}"))?;
+        let ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::NativeInput,
+                crate::modality::CancellationToken::default(),
+            )
+            .map_err(|error| error.to_string())?;
+        let delivery = async {
+            if !self.runtime.validates_ticket(&ticket) {
+                return Err("operation ticket is no longer authorized".to_owned());
+            }
+            if let Err(outcome) =
+                authority.validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+            {
+                return Err(format!("authority became stale: {outcome:?}"));
+            }
+
+            // Resolve by the fresh action name at invocation time. The
+            // provider's numeric index captured in an older SceneBinding is
+            // never used.
+            if !self.runtime.validates_ticket(&ticket) {
+                return Err("operation ticket is no longer authorized".to_owned());
+            }
+            let direct = self
+                .backend
+                .do_action_by_name(&locator.encode(), &action.name)
+                .await;
+            match direct {
+                Ok(delivered) => Ok(ActuationTrace {
+                    target,
+                    action: SemanticActionKind::Submit,
+                    strategy: ActuationStrategy::AccessibilityAction(delivered),
+                    delivery: DeliveryStatus::Success,
+                    observation: None,
+                    window: None,
+                    native_window: None,
+                    window_activation_requested: false,
+                    window_activation_verified: false,
+                    focus_target: None,
+                    focus_requested: false,
+                    focus_verified: false,
+                    key_sent: false,
+                    result: "delivery-succeeded".to_owned(),
+                }),
+                Err(direct_error) => Err(format!(
+                    "semantic Submit delivery failed; raw Enter is a separate explicit operation: {direct_error}"
+                )),
+            }
+        }
+        .await;
+        let mut trace = match delivery {
+            Ok(trace) => trace,
+            Err(error) => {
+                let _ = self.runtime.complete(&ticket);
+                return Err(error);
+            }
+        };
+        let observer = ActuationObserver::new(ObservationPolicy::default());
+        let context = before_surface.context(target, locator.clone(), "SemanticSubmit");
+        let observation = observer.observe(&before_surface, &context, self).await;
+        trace.observation = Some(observation);
+
+        self.runtime
+            .complete(&ticket)
+            .map_err(|error| format!("operation ticket retired: {error}"))?;
+        Ok(trace)
+    }
+
+    async fn submit_focused_semantically(&mut self) {
+        let Some(binding) = self
+            .focus
+            .current()
+            .and_then(|scene_id| self.scene.element(scene_id))
+            .and_then(|element| element.binding.clone())
+        else {
+            self.status = "No exact semantic target for Submit".to_owned();
+            return;
+        };
+        let before = SurfaceSnapshot::from_cache(&self.cache);
+        self.status = match self
+            .execute_semantic_submit(binding.runtime_id, &binding.backend_locator, before)
+            .await
+        {
+            Ok(trace) => format_actuation_status("Semantic Submit", &trace),
+            Err(reason) => format!("Semantic Submit unsupported: {reason}"),
+        };
+    }
+
+    async fn send_raw_enter_to_focused(&mut self) {
+        let Some(binding) = self
+            .focus
+            .current()
+            .and_then(|scene_id| self.scene.element(scene_id))
+            .and_then(|element| element.binding.clone())
+        else {
+            self.status = "Raw Enter refused: no exact semantic target".to_owned();
+            return;
+        };
+        let target = binding.runtime_id;
+        let locator = binding.backend_locator.clone();
+        let Some(fresh_binding) = self.refresh_current_binding(target, &locator, false).await
+        else {
+            self.status = "Raw Enter refused: target became stale".to_owned();
+            return;
+        };
+        let operation = match resolve_cached_node_operation(
+            &self.cache,
+            SemanticOperation::SendKeyEnter(target),
+        ) {
+            Ok(operation) => operation,
+            Err(error) => {
+                self.status = format!("Raw Enter unsupported: {error}");
+                return;
+            }
+        };
+        if !matches!(
+            operation,
+            BackendOperation::NativeKey {
+                key: NativeKeyOperation::Enter,
+                ..
+            }
+        ) {
+            self.status = "Raw Enter refused: operation resolution was ambiguous".to_owned();
+            return;
+        }
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            target,
+            &locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(outcome) => {
+                self.status = format!("Raw Enter refused by current authority: {outcome:?}");
+                return;
+            }
+        };
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::NativeInput,
+            crate::modality::CancellationToken::default(),
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        let before = SurfaceSnapshot::from_cache(&self.cache);
+        let delivery = {
+            let authority_check = || {
+                if !self.runtime.validates_ticket(&ticket) {
+                    return Err(ActuationError::AuthorityRejected(
+                        "operation ticket is no longer authorized".to_owned(),
+                    ));
+                }
+                authority
+                    .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+                    .map_err(|outcome| ActuationError::AuthorityRejected(format!("{outcome:?}")))
+            };
+            self.native_input
+                .deliver_raw_enter(&self.backend, &self.cache, &fresh_binding, &authority_check)
+                .await
+        };
+        let mut trace = match delivery {
+            Ok(trace) => trace,
+            Err(error) => {
+                let _ = self.runtime.complete(&ticket);
+                self.status = format!("Raw Enter delivery rejected: {error}");
+                return;
+            }
+        };
+        let context = before.context(target, locator, "RawEnter");
+        let observation = ActuationObserver::new(ObservationPolicy::default())
+            .observe(&before, &context, self)
+            .await;
+        trace.observation = Some(observation);
+        if let Err(error) = self.runtime.complete(&ticket) {
+            tracing::debug!(
+                ?error,
+                "retired Raw Enter result discarded before publication"
+            );
+            return;
+        }
+        self.status = format_actuation_status("Raw Enter", &trace);
     }
 
     async fn full_reload(&mut self, success_status: Option<String>) {
@@ -4660,7 +4937,9 @@ impl TuiApplication {
         if let Some(session) = self.edit_session.as_mut()
             && !session.commit_pending
             && events.iter().any(|event| {
-                event_targets(event, &session.backend_locator) && event_is_text_value_change(event)
+                (event_targets(event, &session.backend_locator)
+                    || event_targets(event, &session.readback_locator))
+                    && event_is_text_value_change(event)
             })
         {
             session.mark_external_change();
@@ -5081,6 +5360,19 @@ fn completed_search_status(
     )
 }
 
+#[async_trait(?Send)]
+impl SurfaceSnapshotRefresher for TuiApplication {
+    async fn refresh_surface_snapshot(&mut self) -> Result<SurfaceSnapshot, String> {
+        let generation = self.cache.generation();
+        self.full_reload(None).await;
+        if self.cache.generation() == generation {
+            Err(self.status.clone())
+        } else {
+            Ok(SurfaceSnapshot::from_cache(&self.cache))
+        }
+    }
+}
+
 impl Drop for TuiApplication {
     fn drop(&mut self) {
         self.modality_cancel.cancel();
@@ -5151,6 +5443,7 @@ fn event_is_text_value_change(event: &NormalizedEvent) -> bool {
     }
 }
 
+#[cfg(test)]
 fn discard_target_echoes(
     events: &mut Vec<NormalizedEvent>,
     target: &crate::semantic::BackendLocator,
@@ -5200,9 +5493,35 @@ fn operation_verb(intent: UiIntent) -> &'static str {
         | UiIntent::BeginExternalEdit
         | UiIntent::CommitEdit
         | UiIntent::CancelEdit => "Edited",
+        UiIntent::Submit => "Submitted",
+        UiIntent::SendKeyEnter => "Sent raw Enter to",
         UiIntent::IncreaseValue => "Increased",
         UiIntent::DecreaseValue => "Decreased",
         _ => "Activated",
+    }
+}
+
+fn format_actuation_status(label: &str, trace: &ActuationTrace) -> String {
+    let delivery = if trace.result == "success" || trace.result == "delivery-succeeded" {
+        format!("{label} delivery: succeeded")
+    } else {
+        format!("{label} delivery: {}", trace.result)
+    };
+    let Some(observation) = trace.observation.as_ref() else {
+        return format!("{delivery}; observed consequence: unavailable");
+    };
+    if observation.document_changed {
+        format!("{delivery}; observed consequence: DocumentChanged")
+    } else if observation.target_became_stale {
+        format!("{delivery}; observed consequence: TargetBecameStale")
+    } else if observation.value_changed {
+        format!("{delivery}; observed consequence: ValueChanged")
+    } else if observation.state_changed {
+        format!("{delivery}; observed consequence: StateChanged")
+    } else if observation.structure_changed {
+        format!("{delivery}; observed consequence: StructureChanged")
+    } else {
+        format!("{delivery}; observed consequence: {:?}", observation.status)
     }
 }
 
@@ -5278,6 +5597,7 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             "Value.decrease"
         }
         .to_owned(),
+        BackendOperation::NativeKey { key, .. } => format!("NativeKey::{key:?}"),
     }
 }
 
@@ -5706,6 +6026,15 @@ fn build_contextual_view(
         let Some(owner) = cache.node(choice.owner) else {
             continue;
         };
+        // An editable ComboBox is a text-entry surface (for example a
+        // browser location/search bar), not a choice-only selector. Keep its
+        // Field binding so generic EditText remains available even when the
+        // provider also exposes Selection/has-popup metadata.
+        if owner.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
+            && owner.capabilities.contains(&SemanticCapability::EditText)
+        {
+            continue;
+        }
         let existing_label = match &scene.elements[index].kind {
             SceneElementKind::Group { label } | SceneElementKind::Selector { label } => {
                 Some(label.clone())
@@ -5737,6 +6066,35 @@ fn build_contextual_view(
                 || !promoted_choice_options.contains(&binding.runtime_id)
         })
     });
+    // Choice discovery may consume a ComboBox's presentation even when the
+    // same node also exposes the stronger plain-text editing capability.
+    // Restore that authoritative edit binding before scope filtering so an
+    // editable field cannot become an unbound decorative selector.
+    for element in &mut scene.elements {
+        if element.binding.is_some() || !matches!(element.kind, SceneElementKind::Field { .. }) {
+            continue;
+        }
+        let Some(node) = element
+            .sources
+            .iter()
+            .find_map(|source| cache.node(*source))
+        else {
+            continue;
+        };
+        if node.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
+            || !node.capabilities.contains(&SemanticCapability::EditText)
+        {
+            continue;
+        }
+        element.binding = Some(SceneBinding {
+            runtime_id: node.runtime_id,
+            backend_locator: node.backend_locator.clone(),
+            semantic_role: node.role.clone(),
+            actions: node.actions.clone(),
+            capability: InteractionCapability::EditText,
+            default_intent: UiIntent::BeginEdit,
+        });
+    }
     let commands = CommandHierarchy::build(cache, &scopes);
     for element in &mut scene.elements {
         if let Some(binding) = &element.binding
@@ -5849,6 +6207,60 @@ mod tests {
         assert!(
             default_surface_task_rank(RegionPresentationKind::Form)
                 > default_surface_task_rank(RegionPresentationKind::CommandBar)
+        );
+    }
+
+    #[test]
+    fn editable_combobox_remains_a_text_field_when_choice_discovery_runs() {
+        let mut root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/window"),
+            index_in_parent: None,
+            role: SemanticRole::Window,
+            name: Some("Window".to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![SemanticState::Other("showing".to_owned())],
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        };
+        root.children.push(SemanticNode {
+            runtime_id: RuntimeNodeId::new(2),
+            backend_locator: BackendLocator::new(":1.2", "/location"),
+            index_in_parent: Some(0),
+            role: SemanticRole::ComboBox,
+            name: Some("Search or enter address".to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: Some(crate::semantic::TextInputKind::Plain),
+            states: vec![SemanticState::Other("editable".to_owned())],
+            actions: Vec::new(),
+            capabilities: vec![SemanticCapability::EditText],
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        });
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let content = crate::content::ContentCatalog::analyze(&cache);
+        let (scene, _, _, _) =
+            build_contextual_view(&cache, PresentationMode::Transcompiled, &content).unwrap();
+        let field = scene.elements.iter().find(|element| {
+            matches!(
+                element.kind,
+                SceneElementKind::Field { ref label, .. }
+                    if label == "Search or enter address"
+            )
+        });
+        assert!(field.is_some());
+        assert_eq!(
+            field
+                .and_then(|element| element.binding.as_ref())
+                .map(|binding| binding.capability),
+            Some(InteractionCapability::EditText)
         );
     }
 

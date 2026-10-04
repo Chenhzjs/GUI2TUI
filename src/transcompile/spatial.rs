@@ -1399,6 +1399,19 @@ fn semantic_title(region: &SemanticRegion, source: Option<&SemanticNode>) -> Str
         .clone()
         .filter(|label| !label.trim().is_empty() && label.chars().count() <= 80)
         .unwrap_or_else(|| match region.kind {
+            SemanticRegionKind::ApplicationShell => "Application".to_owned(),
+            SemanticRegionKind::Document => "Document".to_owned(),
+            SemanticRegionKind::Toolbar => "Toolbar".to_owned(),
+            SemanticRegionKind::TabBar => "Tabs".to_owned(),
+            SemanticRegionKind::Main => "Main".to_owned(),
+            SemanticRegionKind::Search => "Search".to_owned(),
+            SemanticRegionKind::Section => "Section".to_owned(),
+            SemanticRegionKind::Article => "Article".to_owned(),
+            SemanticRegionKind::Sidebar => "Sidebar".to_owned(),
+            SemanticRegionKind::Footer => "Footer".to_owned(),
+            SemanticRegionKind::Landmark => "Landmark".to_owned(),
+            SemanticRegionKind::Dialog => "Dialog".to_owned(),
+            SemanticRegionKind::Overlay => "Overlay".to_owned(),
             SemanticRegionKind::Navigation => "Navigation".to_owned(),
             SemanticRegionKind::Selection => "Selection".to_owned(),
             SemanticRegionKind::CommandSet => "Commands".to_owned(),
@@ -1445,6 +1458,34 @@ fn presentation_for_region(
             meaningful_items: 0,
             dominant_eligible: false,
             reasons: vec!["structural-only object retained for layout diagnostics".into()],
+        };
+    }
+
+    if region.kind == SemanticRegionKind::OpaqueContent
+        && !source.is_some_and(|node| {
+            node.name
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+                || node
+                    .description
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                || !node.actions.is_empty()
+                || node.debug.geometry.is_some()
+                || !region.interactions.is_empty()
+        })
+    {
+        return RegionPresentation {
+            kind: RegionPresentationKind::DiagnosticOnly,
+            title,
+            source_regions,
+            source_nodes,
+            meaningful_items: 0,
+            dominant_eligible: false,
+            reasons: vec![
+                "anonymous graphical accessibility object is available only in Inspect/Debug"
+                    .into(),
+            ],
         };
     }
 
@@ -1828,7 +1869,8 @@ fn is_persistent_surface_anchor(node: &SemanticNode) -> bool {
 }
 
 fn is_single_line_editable_input(node: &SemanticNode) -> bool {
-    node.role == SemanticRole::TextInput
+    (node.role == SemanticRole::TextInput
+        || node.capabilities.contains(&SemanticCapability::EditText))
         && node.text_input_kind == Some(TextInputKind::Plain)
         && (node.capabilities.contains(&SemanticCapability::EditText)
             || node.states.contains(&SemanticState::Editable))

@@ -148,6 +148,31 @@ impl SceneCompiler<'_> {
 
     fn compile_region(&mut self, region: &SemanticRegion) {
         match region.kind {
+            SemanticRegionKind::ApplicationShell
+            | SemanticRegionKind::Document
+            | SemanticRegionKind::Toolbar
+            | SemanticRegionKind::TabBar
+            | SemanticRegionKind::Main
+            | SemanticRegionKind::Search
+            | SemanticRegionKind::Section
+            | SemanticRegionKind::Article
+            | SemanticRegionKind::Sidebar
+            | SemanticRegionKind::Footer
+            | SemanticRegionKind::Landmark
+            | SemanticRegionKind::Dialog
+            | SemanticRegionKind::Overlay => {
+                self.push(
+                    SceneElementKind::Group {
+                        label: region_group_label(region),
+                    },
+                    region.source_nodes.clone(),
+                    None,
+                    PresentationStrategy::ReflowGroup,
+                );
+                for child in &region.children {
+                    self.compile_region(child);
+                }
+            }
             SemanticRegionKind::Control => self.compile_control(region),
             SemanticRegionKind::Field => self.compile_field(region),
             SemanticRegionKind::Form => {
@@ -221,15 +246,27 @@ impl SceneCompiler<'_> {
             }
             SemanticRegionKind::Content => {
                 if let Some(text) = &region.label {
-                    self.push(
-                        SceneElementKind::Text { text: text.clone() },
-                        region.source_nodes.clone(),
-                        None,
-                        PresentationStrategy::StructuredSummary,
-                    );
+                    if !is_accessibility_diagnostic(text) {
+                        self.push(
+                            SceneElementKind::Text { text: text.clone() },
+                            region.source_nodes.clone(),
+                            None,
+                            PresentationStrategy::StructuredSummary,
+                        );
+                    }
+                }
+                for child in &region.children {
+                    self.compile_region(child);
                 }
             }
             SemanticRegionKind::OpaqueContent => {
+                let Some(label) = region
+                    .label
+                    .clone()
+                    .filter(|label| !is_accessibility_diagnostic(label))
+                else {
+                    return;
+                };
                 let dimensions = region
                     .source_nodes
                     .first()
@@ -239,10 +276,7 @@ impl SceneCompiler<'_> {
                 debug_assert_eq!(region.modality, ModalityPolicy::FidelityPreferred);
                 self.push(
                     SceneElementKind::OpaqueContent {
-                        label: region
-                            .label
-                            .clone()
-                            .unwrap_or_else(|| "Graphical content".to_owned()),
+                        label: region.label.clone().unwrap_or(label),
                         dimensions,
                     },
                     region.source_nodes.clone(),
@@ -251,9 +285,7 @@ impl SceneCompiler<'_> {
                 );
             }
             SemanticRegionKind::Navigation | SemanticRegionKind::Group => {
-                if region.kind == SemanticRegionKind::Group
-                    && let Some(label) = &region.label
-                {
+                if let Some(label) = &region.label {
                     self.push(
                         SceneElementKind::Group {
                             label: label.clone(),
@@ -268,19 +300,21 @@ impl SceneCompiler<'_> {
                 }
             }
             SemanticRegionKind::Unknown => {
-                let label = region.label.clone().unwrap_or_else(|| {
-                    region
-                        .source_nodes
-                        .first()
-                        .and_then(|id| self.nodes.get(id))
-                        .map_or_else(|| "Unknown".to_owned(), |node| node.role.to_string())
-                });
-                self.push(
-                    SceneElementKind::Unsupported { label },
-                    region.source_nodes.clone(),
-                    None,
-                    PresentationStrategy::Unsupported,
-                );
+                // Unknown/empty accessibility objects are diagnostics, not
+                // default user content. Their descendants are still visited
+                // so an interactive child cannot disappear with the wrapper.
+                if let Some(label) = region
+                    .label
+                    .clone()
+                    .filter(|label| !is_accessibility_diagnostic(label))
+                {
+                    self.push(
+                        SceneElementKind::Unsupported { label },
+                        region.source_nodes.clone(),
+                        None,
+                        PresentationStrategy::Unsupported,
+                    );
+                }
                 for child in &region.children {
                     self.compile_region(child);
                 }
@@ -370,7 +404,9 @@ impl SceneCompiler<'_> {
         else {
             return;
         };
-        if node.role == SemanticRole::TextInput {
+        if node.role == SemanticRole::TextInput
+            || node.capabilities.contains(&SemanticCapability::EditText)
+        {
             let input_kind = node.text_input_kind.unwrap_or(TextInputKind::Plain);
             self.push(
                 SceneElementKind::Field {
@@ -417,7 +453,7 @@ impl SceneCompiler<'_> {
             }
         } else {
             match node.role {
-                SemanticRole::Button => SceneElementKind::Button { label },
+                SemanticRole::Button | SemanticRole::Link => SceneElementKind::Button { label },
                 SemanticRole::ToggleButton => SceneElementKind::Toggle {
                     label,
                     pressed: node.states.contains(&SemanticState::Pressed)
@@ -478,6 +514,35 @@ impl SceneCompiler<'_> {
             default_intent,
         })
     }
+}
+
+fn region_group_label(region: &SemanticRegion) -> String {
+    region.label.clone().unwrap_or_else(|| match region.kind {
+        SemanticRegionKind::ApplicationShell => "Application".to_owned(),
+        SemanticRegionKind::Document => "Document".to_owned(),
+        SemanticRegionKind::Toolbar => "Toolbar".to_owned(),
+        SemanticRegionKind::TabBar => "Tabs".to_owned(),
+        SemanticRegionKind::Main => "Main".to_owned(),
+        SemanticRegionKind::Search => "Search".to_owned(),
+        SemanticRegionKind::Section => "Section".to_owned(),
+        SemanticRegionKind::Article => "Article".to_owned(),
+        SemanticRegionKind::Sidebar => "Sidebar".to_owned(),
+        SemanticRegionKind::Footer => "Footer".to_owned(),
+        SemanticRegionKind::Landmark => "Landmark".to_owned(),
+        SemanticRegionKind::Dialog => "Dialog".to_owned(),
+        SemanticRegionKind::Overlay => "Overlay".to_owned(),
+        SemanticRegionKind::Navigation => "Navigation".to_owned(),
+        SemanticRegionKind::Group => "Group".to_owned(),
+        _ => "Region".to_owned(),
+    })
+}
+
+fn is_accessibility_diagnostic(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(normalized.as_str(), "empty" | "unknown" | "unsupported")
+        || normalized.contains("text unavailable through")
+        || normalized.contains("unavailable through the accessibility")
 }
 
 fn index_by_runtime(root: &SemanticNode) -> HashMap<RuntimeNodeId, &SemanticNode> {
@@ -717,5 +782,35 @@ mod tests {
             scene.elements[0].strategy,
             PresentationStrategy::PreserveModality
         );
+    }
+
+    #[test]
+    fn accessibility_diagnostics_do_not_enter_the_normal_surface() {
+        let mut root = node(
+            0,
+            SemanticRole::Unknown("unsupported".to_owned()),
+            "text unavailable through the application's accessibility interface",
+        );
+        root.children
+            .push(node(1, SemanticRole::Button, "Still available"));
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        assert!(!scene.elements.iter().any(|element| {
+            matches!(
+                &element.kind,
+                SceneElementKind::Unsupported { label }
+                    if label.contains("unavailable through")
+            )
+        }));
+        assert!(scene.elements.iter().any(|element| {
+            matches!(
+                &element.kind,
+                SceneElementKind::Button { label } if label == "Still available"
+            )
+        }));
+
+        let anonymous_graphics = node(2, SemanticRole::Unknown("drawing area".to_owned()), "");
+        let graphics_scene =
+            compile_scene(&anonymous_graphics, &analyze_regions(&anonymous_graphics));
+        assert!(graphics_scene.elements.is_empty());
     }
 }

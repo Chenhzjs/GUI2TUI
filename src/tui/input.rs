@@ -35,6 +35,9 @@ pub fn key_to_intent(event: KeyEvent) -> Option<UiIntent> {
             Some(UiIntent::FocusPrevious)
         }
         (KeyCode::Tab, _) => Some(UiIntent::FocusNext),
+        (KeyCode::Enter, modifiers) if modifiers.contains(KeyModifiers::ALT) => {
+            Some(UiIntent::SendKeyEnter)
+        }
         (KeyCode::Enter, _) => Some(UiIntent::Activate),
         (KeyCode::Char(':'), _) => Some(UiIntent::OpenCommandPalette),
         (KeyCode::Char(' '), _) => Some(UiIntent::Toggle),
@@ -96,6 +99,10 @@ mod tests {
         assert_eq!(
             key_to_intent(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
             Some(UiIntent::Activate)
+        );
+        assert_eq!(
+            key_to_intent(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT)),
+            Some(UiIntent::SendKeyEnter)
         );
     }
 }

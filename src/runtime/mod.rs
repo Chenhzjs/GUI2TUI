@@ -99,6 +99,7 @@ pub enum OperationKind {
     ArtifactTransfer,
     ReferenceHandoff,
     TextInteraction,
+    NativeInput,
     TransitionObservation,
 }
 
@@ -200,6 +201,17 @@ impl RuntimeSession {
     }
     pub fn validates_application(&self, locator: &BackendLocator) -> bool {
         self.application.as_ref() == Some(locator)
+    }
+    /// Final authority check for a delivery that is about to cross the
+    /// process boundary. A ticket is valid only while the exact operation is
+    /// still registered, belongs to this session and generation, and has not
+    /// been cancelled.
+    pub fn validates_ticket(&self, ticket: &OperationTicket) -> bool {
+        ticket.session == self.id
+            && Some(ticket.generation) == self.generation
+            && self.operations.get(&ticket.id).is_some_and(|operation| {
+                operation.ticket == *ticket && !operation.cancel.is_cancelled()
+            })
     }
     pub fn invalidate_application(&mut self) {
         for (_, operation) in self.operations.drain() {
@@ -380,6 +392,18 @@ mod tests {
                 .begin(OperationKind::TransitionObservation, Default::default())
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn ticket_validation_is_required_before_native_delivery() {
+        let mut session = RuntimeSession::default();
+        session.open_application(app());
+        let ticket = session
+            .begin(OperationKind::NativeInput, Default::default())
+            .unwrap();
+        assert!(session.validates_ticket(&ticket));
+        session.complete(&ticket).unwrap();
+        assert!(!session.validates_ticket(&ticket));
     }
     #[test]
     fn detach_keeps_generation_and_no_endpoint_is_legal() {

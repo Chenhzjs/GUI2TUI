@@ -315,12 +315,16 @@ fn semantic_role_and_input_kind(
         record.role,
         record.interfaces.contains(atspi::Interface::EditableText),
     );
-    let input_kind =
-        (role == SemanticRole::TextInput).then_some(if record.role == atspi::Role::PasswordText {
-            TextInputKind::Password
-        } else {
-            TextInputKind::Plain
-        });
+    // Browsers commonly expose an editable location/search bar as ComboBox.
+    // Preserve that structural role while normalizing its editable capability
+    // to the common plain-text input model.
+    let editable_text_control = matches!(role, SemanticRole::TextInput | SemanticRole::ComboBox)
+        && record.interfaces.contains(atspi::Interface::EditableText);
+    let input_kind = editable_text_control.then_some(if record.role == atspi::Role::PasswordText {
+        TextInputKind::Password
+    } else {
+        TextInputKind::Plain
+    });
     (role, input_kind)
 }
 
@@ -330,6 +334,16 @@ fn semantic_capabilities(
     input_kind: Option<TextInputKind>,
 ) -> Vec<SemanticCapability> {
     let mut capabilities = Vec::new();
+    if record.states.contains(atspi::State::Focusable)
+        && record.actions.iter().any(|action| {
+            matches!(
+                action.name.to_ascii_lowercase().as_str(),
+                "activate" | "click" | "press"
+            )
+        })
+    {
+        capabilities.push(SemanticCapability::Activate);
+    }
     if record.interfaces.contains(atspi::Interface::Selection) {
         capabilities.push(SemanticCapability::SelectChildren);
         if *role == SemanticRole::List && !record.states.contains(atspi::State::Multiselectable) {
@@ -342,10 +356,8 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::SelectCurrentTableRow);
     }
-    if *role == SemanticRole::TextInput
-        && input_kind == Some(TextInputKind::Plain)
+    if input_kind == Some(TextInputKind::Plain)
         && record.interfaces.contains(atspi::Interface::EditableText)
-        && record.interfaces.contains(atspi::Interface::Text)
         && record.states.contains(atspi::State::Editable)
         && !record.states.contains(atspi::State::MultiLine)
     {
@@ -430,6 +442,17 @@ mod tests {
         assert!(
             semantic_capabilities(&text, &SemanticRole::TextInput, Some(TextInputKind::Plain))
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn editable_combobox_gets_plain_text_input_kind() {
+        let mut combo = record("/address", Some("/root"), Some(0));
+        combo.role = Role::ComboBox;
+        combo.interfaces.insert(Interface::EditableText);
+        assert_eq!(
+            semantic_role_and_input_kind(&combo),
+            (SemanticRole::ComboBox, Some(TextInputKind::Plain))
         );
     }
 
