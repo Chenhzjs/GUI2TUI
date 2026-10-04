@@ -6024,8 +6024,20 @@ fn build_contextual_view(
         // browser location/search bar), not a choice-only selector. Keep its
         // Field binding so generic EditText remains available even when the
         // provider also exposes Selection/has-popup metadata.
-        if owner.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
-            && owner.capabilities.contains(&SemanticCapability::EditText)
+        if (owner.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
+            && owner.capabilities.contains(&SemanticCapability::EditText))
+            || scene.elements[index]
+                .binding
+                .as_ref()
+                .is_some_and(|binding| {
+                    binding.capability == InteractionCapability::EditText
+                        && element_sources_include_descendant(
+                            cache,
+                            &scene.elements[index].sources,
+                            owner.runtime_id,
+                            binding.runtime_id,
+                        )
+                })
         {
             continue;
         }
@@ -6114,6 +6126,25 @@ fn build_contextual_view(
     }
     compress_content_scene(&mut scene, cache, content);
     Ok((scene, scopes, commands, choices))
+}
+
+fn element_sources_include_descendant(
+    cache: &SemanticCache,
+    sources: &[RuntimeNodeId],
+    ancestor: RuntimeNodeId,
+    descendant: RuntimeNodeId,
+) -> bool {
+    if !sources.contains(&ancestor) || !sources.contains(&descendant) {
+        return false;
+    }
+    let mut current = Some(descendant);
+    while let Some(runtime_id) = current {
+        if runtime_id == ancestor {
+            return true;
+        }
+        current = cache.node(runtime_id).and_then(|node| node.parent);
+    }
+    false
 }
 
 fn choice_scene_label(choice: &crate::transcompile::SemanticChoice, owner_label: &str) -> String {
@@ -6255,6 +6286,63 @@ mod tests {
                 .and_then(|element| element.binding.as_ref())
                 .map(|binding| binding.capability),
             Some(InteractionCapability::EditText)
+        );
+    }
+
+    #[test]
+    fn editable_combobox_child_remains_a_text_field_when_choice_discovery_runs() {
+        let mut root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/window"),
+            index_in_parent: None,
+            role: SemanticRole::Window,
+            name: Some("Window".to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![SemanticState::Other("showing".to_owned())],
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        };
+        let mut combo = root.clone();
+        combo.runtime_id = RuntimeNodeId::new(2);
+        combo.backend_locator = BackendLocator::new(":1.2", "/location");
+        combo.index_in_parent = Some(0);
+        combo.role = SemanticRole::ComboBox;
+        combo.name = None;
+        combo.states = vec![SemanticState::Other("focusable".to_owned())];
+        let mut input = combo.clone();
+        input.runtime_id = RuntimeNodeId::new(3);
+        input.backend_locator = BackendLocator::new(":1.2", "/location/input");
+        input.role = SemanticRole::TextInput;
+        input.name = Some("Search or enter address".to_owned());
+        input.value = Some("https://example.invalid/".to_owned());
+        input.text_input_kind = Some(crate::semantic::TextInputKind::Plain);
+        input.capabilities = vec![SemanticCapability::EditText];
+        input.children.clear();
+        combo.children = vec![input];
+        root.children.push(combo);
+
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let content = crate::content::ContentCatalog::analyze(&cache);
+        let (scene, _, _, _) =
+            build_contextual_view(&cache, PresentationMode::Transcompiled, &content).unwrap();
+        let field = scene.elements.iter().find(|element| {
+            matches!(
+                element.kind,
+                SceneElementKind::Field { ref label, .. }
+                    if label == "Search or enter address"
+            )
+        });
+
+        assert_eq!(
+            field
+                .and_then(|element| element.binding.as_ref())
+                .map(|binding| (binding.backend_locator.object_path(), binding.capability)),
+            Some(("/location/input", InteractionCapability::EditText))
         );
     }
 

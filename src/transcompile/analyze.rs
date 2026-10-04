@@ -257,6 +257,28 @@ impl Analyzer {
             return group;
         }
         if node.role == SemanticRole::ComboBox {
+            // Some providers expose a composite editable widget as a
+            // ComboBox container whose descendant, rather than the container
+            // itself, owns EditableText/Text and focus. Preserve that exact
+            // descendant as the field binding instead of treating the
+            // container as an opaque choice control.
+            if let Some(edit_target) = unique_editable_descendant_text_input(node) {
+                self.metrics.direct_controls += 1;
+                let mut field = SemanticRegion::terminal_native(
+                    self.id(),
+                    SemanticRegionKind::Field,
+                    vec![node.runtime_id, edit_target.runtime_id],
+                );
+                field.label = edit_target.name.clone().or_else(|| node.name.clone());
+                field.confidence = RegionConfidence::Exact;
+                field.children.push(self.control_region(
+                    edit_target,
+                    &node.capabilities,
+                    &node.states,
+                    command_path,
+                ));
+                return field;
+            }
             self.metrics.direct_controls += 1;
             let control =
                 self.control_region(node, parent_capabilities, parent_states, command_path);
@@ -823,6 +845,14 @@ fn unique_descendant_text_input(node: &SemanticNode) -> Option<&SemanticNode> {
     } else {
         None
     }
+}
+
+fn unique_editable_descendant_text_input(node: &SemanticNode) -> Option<&SemanticNode> {
+    let input = unique_descendant_text_input(node)?;
+    input
+        .capabilities
+        .contains(&SemanticCapability::EditText)
+        .then_some(input)
 }
 
 fn is_direct_control(node: &SemanticNode) -> bool {
@@ -1482,5 +1512,32 @@ mod tests {
         let anonymous = node(3, SemanticRole::ComboBox, "Browser choice");
         let analysis = analyze_regions(&anonymous);
         assert!(analysis.root.interactions.is_empty());
+    }
+
+    #[test]
+    fn editable_combobox_descendant_remains_an_exact_text_field() {
+        let mut combo = node(1, SemanticRole::ComboBox, "Location container");
+        let mut input = node(2, SemanticRole::TextInput, "Location");
+        input.text_input_kind = Some(TextInputKind::Plain);
+        input.value = Some("https://example.invalid/".to_owned());
+        input.capabilities.push(SemanticCapability::EditText);
+        combo.children.push(input);
+
+        let analysis = analyze_regions(&combo);
+
+        assert_eq!(analysis.root.kind, SemanticRegionKind::Field);
+        assert_eq!(analysis.root.label.as_deref(), Some("Location"));
+        assert_eq!(
+            analysis.root.source_nodes,
+            vec![RuntimeNodeId::new(1), RuntimeNodeId::new(2)]
+        );
+        assert_eq!(analysis.root.children.len(), 1);
+        assert_eq!(
+            analysis.root.children[0].interactions,
+            vec![RegionInteraction {
+                source: RuntimeNodeId::new(2),
+                intent: UiIntent::BeginEdit,
+            }]
+        );
     }
 }
