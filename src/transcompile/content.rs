@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     content::ContentCatalog,
     semantic::SemanticCache,
@@ -25,6 +27,12 @@ pub struct ContentReachabilityAudit {
     pub reachable: usize,
     pub unreachable: Vec<String>,
 }
+
+// The normal Surface keeps a bounded structural/content preview. Interactive
+// descendants remain individually bound so Reader -> task focus can still
+// return to the exact GUI control; the complete body remains in ContentCatalog
+// and is exposed only by the explicit Reader projection.
+const SURFACE_UNBOUND_CONTENT_BUDGET: usize = 96;
 
 pub fn audit_content_reachability(
     scene: &TuiScene,
@@ -156,12 +164,34 @@ pub fn compress_content_scene(
         });
         next_id = next_id.saturating_add(1);
     }
+    let model_roots: Vec<_> = content.visible_models().map(|model| model.root).collect();
+    let mut preview_counts = HashMap::new();
     let mut elements = Vec::with_capacity(scene.elements.len() + summaries.len());
     // Reader is an explicit projection now. Keep the normalized Surface
-    // elements, including structural groups and unbound content rows, and add
-    // one bounded Reader entry point per model. Removing every content-only
-    // element here used to turn a Document into a linear Reader by default.
-    elements.extend(scene.elements.iter().cloned());
+    // elements and interactive descendants, but cap unbound body/structure
+    // rows per document. Removing every content-only element used to turn a
+    // Document into a linear Reader by default; retaining every row instead
+    // made a large document expand the ordinary Surface without a bound.
+    for element in scene.elements.iter().cloned() {
+        let content_root = element.sources.iter().find_map(|source| {
+            model_roots
+                .iter()
+                .copied()
+                .find(|root| is_same_or_descendant(cache, *source, *root))
+        });
+        let keep = content_root.is_none() || element.binding.is_some() || {
+            let count = preview_counts.entry(content_root.unwrap()).or_insert(0);
+            if *count < SURFACE_UNBOUND_CONTENT_BUDGET {
+                *count += 1;
+                true
+            } else {
+                false
+            }
+        };
+        if keep {
+            elements.push(element);
+        }
+    }
     // Append the Reader entry point so initial focus remains on the ordinary
     // Surface controls rather than silently entering the reading projection.
     elements.extend(summaries);
@@ -182,6 +212,21 @@ pub fn compress_content_scene(
     }
 }
 
+fn is_same_or_descendant(
+    cache: &SemanticCache,
+    candidate: crate::semantic::RuntimeNodeId,
+    ancestor: crate::semantic::RuntimeNodeId,
+) -> bool {
+    let mut current = Some(candidate);
+    while let Some(id) = current {
+        if id == ancestor {
+            return true;
+        }
+        current = cache.node(id).and_then(|node| node.parent);
+    }
+    false
+}
+
 fn summaries_len(content: &ContentCatalog) -> usize {
     content.visible_models().count()
 }
@@ -191,8 +236,8 @@ mod tests {
     use crate::{
         content::ContentCatalog,
         semantic::{
-            BackendLocator, DebugInfo, SemanticAction, SemanticCache, SemanticCapability,
-            SemanticNode, SemanticRole, SemanticState, TextInputKind,
+            BackendLocator, DebugInfo, RuntimeNodeId, SemanticAction, SemanticCache,
+            SemanticCapability, SemanticNode, SemanticRole, SemanticState, TextInputKind,
         },
         transcompile::{SceneElementKind, analyze_regions, compile_scene},
     };
@@ -263,6 +308,52 @@ mod tests {
         assert_eq!(audit.form_controls, 1);
         assert_eq!(audit.reachable, 1);
         assert!(audit.unreachable.is_empty());
+    }
+
+    #[test]
+    fn large_document_surface_keeps_a_bounded_unbound_preview() {
+        let mut document = node(1, SemanticRole::Document, "Article");
+        for id in 2..=130 {
+            document
+                .children
+                .push(node(id, SemanticRole::Paragraph, &format!("Body {id}")));
+        }
+        let mut button = node(131, SemanticRole::Button, "Keep this control");
+        button.actions.push(SemanticAction {
+            index: 0,
+            name: "activate".to_owned(),
+            description: None,
+            keybinding: None,
+        });
+        document.children.push(button);
+
+        let cache = SemanticCache::from_snapshot(document).unwrap();
+        let tree = cache.materialize_tree().unwrap();
+        let analysis = analyze_regions(&tree);
+        let mut scene = compile_scene(&tree, &analysis);
+        let before = scene.elements.len();
+        let catalog = ContentCatalog::analyze(&cache);
+        compress_content_scene(&mut scene, &cache, &catalog);
+
+        let unbound_content = scene
+            .elements
+            .iter()
+            .filter(|element| {
+                element.binding.is_none()
+                    && element
+                        .sources
+                        .iter()
+                        .any(|source| is_same_or_descendant(&cache, *source, RuntimeNodeId::new(1)))
+            })
+            .count();
+        assert!(unbound_content <= SURFACE_UNBOUND_CONTENT_BUDGET);
+        assert!(scene.elements.len() < before);
+        assert!(scene.elements.iter().any(|element| {
+            matches!(
+                element.kind,
+                SceneElementKind::Button { ref label } if label == "Keep this control"
+            ) && element.binding.is_some()
+        }));
     }
 
     #[test]
