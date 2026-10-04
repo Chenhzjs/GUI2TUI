@@ -54,6 +54,12 @@ supervisor_alive() {
     read -r pid <"$root/supervisor.pid"
     [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
     kill -0 "$pid" 2>/dev/null || return 1
+    # Minimal containers may not run an init/reaper as PID 1. A supervisor
+    # that has completed cleanup can therefore remain visible as a zombie;
+    # kill -0 alone must not classify that terminated process as running.
+    local state
+    state=$(sed -n 's/^State:[[:space:]]*\([^[:space:]]\).*/\1/p' "/proc/$pid/status" 2>/dev/null) || return 1
+    [[ -n $state && $state != Z ]] || return 1
     [[ -r /proc/$pid/cmdline ]] || return 1
     tr '\0' ' ' <"/proc/$pid/cmdline" | grep -Fq -- "_serve $root"
 }
@@ -64,10 +70,10 @@ stop_session() {
         read -r pid <"$root/supervisor.pid"
         kill -TERM "$pid"
         for _ in {1..100}; do
-            kill -0 "$pid" 2>/dev/null || break
+            supervisor_alive "$root" || break
             sleep 0.05
         done
-        kill -0 "$pid" 2>/dev/null && { echo 'error: managed session did not stop' >&2; return 1; }
+        supervisor_alive "$root" && { echo 'error: managed session did not stop' >&2; return 1; }
         echo 'Stopped persistent GUI2TUI environment.'
     else
         echo 'Persistent GUI2TUI environment is not running.'
