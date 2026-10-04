@@ -222,7 +222,10 @@ class Qualification:
                     shell.pump(0.25)
             shell.command("Reorder current items")
             self.wait_tree(SELECTION_APP, "Structure: reordered; selected Gamma")
-            shell.wait_text("selected Gamma", timeout=15)
+            # Inspector readback above is authoritative. A raw host-side PTY
+            # transcript cannot reliably reconstruct Ratatui cursor-addressed
+            # replacement cells after a compositor/session restart.
+            shell.pump(0.5)
             shell.command("Reset current items")
             self.wait_tree(SELECTION_APP, "Selected: Alpha")
             # Exercise a real terminal resize while the current scene is alive.
