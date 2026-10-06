@@ -12,6 +12,10 @@ use crate::{
         ApplicationRef, AtspiBackend, BackendError, BootstrapStrategy, EventDelivery,
         EventSubscription, InspectOptions,
     },
+    capability::{
+        CapabilityGraph, CapabilityOperation, Effect as CapabilityEffect, HumanCapability,
+        KeyboardPrimitive,
+    },
     content::{
         ContentCacheBudget, ContentCompleteness, ContentRuntime, MaterializationBudget,
         SearchBudget, SearchState,
@@ -46,10 +50,11 @@ use super::{
     hit_test::{HitInteraction, HitMap},
     input::{MouseIntent, key_to_intent},
     observation::{
-        ActuationObserver, ObservationPolicy, SurfaceSnapshot, SurfaceSnapshotRefresher,
+        ActuationObserver, ObservationPolicy, ObservationResult, ObservationStatus,
+        SurfaceSnapshot, SurfaceSnapshotRefresher,
     },
     operation::{
-        BackendOperation, NativeKeyOperation, SemanticOperation, resolve_backend_operation,
+        BackendOperation, SemanticOperation, resolve_backend_operation,
         resolve_cached_node_operation, resolve_choice_backend_operation,
     },
     palette::{CommandPalette, PaletteOutcome},
@@ -83,6 +88,7 @@ pub struct TuiApplication {
     inspect_options: InspectOptions,
     settle_delay: Duration,
     cache: SemanticCache,
+    capability_graph: CapabilityGraph,
     event_subscription: EventSubscription,
     event_stream_available: bool,
     presentation_mode: PresentationMode,
@@ -397,6 +403,19 @@ impl TuiApplication {
                 let mut runtime = std::mem::take(&mut self.runtime);
                 runtime.open_application(fresh.application_locator.clone());
                 fresh.runtime = runtime;
+                if let Some(generation) = fresh.runtime.generation() {
+                    fresh.capability_graph = CapabilityGraph::new(
+                        fresh.runtime.id.clone(),
+                        generation,
+                        &fresh.cache,
+                        &fresh.scopes,
+                    );
+                    apply_human_capability_projection(
+                        &mut fresh.scene,
+                        &mut fresh.commands,
+                        &mut fresh.capability_graph,
+                    );
+                }
                 *self = fresh;
                 tracing::debug!(
                     target: "gui2tui::product",
@@ -826,7 +845,7 @@ impl TuiApplication {
             }
         }
         let content_elapsed = started.elapsed();
-        let (scene, scopes, commands, choices) =
+        let (mut scene, scopes, mut commands, choices) =
             build_contextual_view(&cache, presentation_mode, content.catalog())?;
         tracing::debug!(
             bootstrap_ms = bootstrap_elapsed.as_secs_f64() * 1000.0,
@@ -844,10 +863,13 @@ impl TuiApplication {
                 "semantic bootstrap used correctness fallback"
             );
         }
+        let mut runtime = crate::runtime::RuntimeSession::default();
+        let generation = runtime.open_application(application_locator.clone());
+        let mut capability_graph =
+            CapabilityGraph::new(runtime.id.clone(), generation, &cache, &scopes);
+        apply_human_capability_projection(&mut scene, &mut commands, &mut capability_graph);
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
-        let mut runtime = crate::runtime::RuntimeSession::default();
-        runtime.open_application(application_locator.clone());
         let spatial = if spatial_layout {
             build_spatial_layout(&backend, &cache, &content, runtime.generation()).await
         } else {
@@ -885,6 +907,7 @@ impl TuiApplication {
             inspect_options,
             settle_delay,
             cache,
+            capability_graph,
             event_subscription,
             event_stream_available: true,
             presentation_mode,
@@ -3501,6 +3524,11 @@ impl TuiApplication {
             }
             Err(_) => SurfaceSnapshot::from_cache(&self.cache),
         };
+        self.capability_graph.record_observation(
+            target,
+            CapabilityOperation::SetText,
+            CapabilityEffect::TextChanged,
+        );
 
         if !submit_after_edit {
             self.edit_session = None;
@@ -3628,14 +3656,31 @@ impl TuiApplication {
                 return Err(error);
             }
         };
+        let learning_context = self.capability_graph.context_signature(target);
+        let learning_scope = self
+            .capability_graph
+            .objects()
+            .object(target)
+            .map(|object| object.interaction_scope);
+        let learning_operation = CapabilityOperation::AccessibilityInvoke(action.name.clone());
         let observer = ActuationObserver::new(ObservationPolicy::default());
         let context = before_surface.context(target, locator.clone(), "SemanticSubmit");
         let observation = observer.observe(&before_surface, &context, self).await;
-        trace.observation = Some(observation);
-
         self.runtime
             .complete(&ticket)
             .map_err(|error| format!("operation ticket retired: {error}"))?;
+        if let (Some(signature), Some(scope)) = (learning_context, learning_scope) {
+            self.capability_graph.record_observation_with_context(
+                locator.clone(),
+                scope,
+                target,
+                signature,
+                learning_operation,
+                capability_effect(&observation),
+            );
+        }
+        trace.observation = Some(observation);
+
         Ok(trace)
     }
 
@@ -3689,7 +3734,7 @@ impl TuiApplication {
         if !matches!(
             operation,
             BackendOperation::NativeKey {
-                key: NativeKeyOperation::Enter,
+                primitive: crate::capability::KeyboardPrimitive::ENTER,
                 ..
             }
         ) {
@@ -3720,6 +3765,12 @@ impl TuiApplication {
                 return;
             }
         };
+        let learning_context = self.capability_graph.context_signature(target);
+        let learning_scope = self
+            .capability_graph
+            .objects()
+            .object(target)
+            .map(|object| object.interaction_scope);
         let before = SurfaceSnapshot::from_cache(&self.cache);
         let delivery = {
             let authority_check = || {
@@ -3744,18 +3795,28 @@ impl TuiApplication {
                 return;
             }
         };
-        let context = before.context(target, locator, "RawEnter");
+        let context = before.context(target, locator.clone(), "RawEnter");
         let observation = ActuationObserver::new(ObservationPolicy::default())
             .observe(&before, &context, self)
             .await;
-        trace.observation = Some(observation);
         if let Err(error) = self.runtime.complete(&ticket) {
-            tracing::debug!(
-                ?error,
-                "retired Raw Enter result discarded before publication"
-            );
+            tracing::debug!(?error, "retired Raw Enter result discarded before learning");
             return;
         }
+        if let (Some(signature), Some(scope)) = (learning_context, learning_scope) {
+            let _ = self
+                .capability_graph
+                .record_observation_with_context(
+                    locator,
+                    scope,
+                    target,
+                    signature,
+                    CapabilityOperation::Keyboard(KeyboardPrimitive::ENTER),
+                    capability_effect(&observation),
+                )
+                .is_some();
+        }
+        trace.observation = Some(observation);
         self.status = format_actuation_status("Raw Enter", &trace);
     }
 
@@ -3817,7 +3878,7 @@ impl TuiApplication {
                 self.content.rebuild_semantics(&self.cache);
                 qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content)
                     .await;
-                let Ok((scene, scopes, commands, choices)) = build_contextual_view(
+                let Ok((mut scene, scopes, mut commands, choices)) = build_contextual_view(
                     &self.cache,
                     self.presentation_mode,
                     self.content.catalog(),
@@ -3825,6 +3886,7 @@ impl TuiApplication {
                     self.status = "Contextual scene rebuild failed".to_owned();
                     return;
                 };
+                self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
                 self.scene = scene;
                 self.scopes = scopes;
                 self.commands = commands;
@@ -5105,7 +5167,7 @@ impl TuiApplication {
         }
         self.content.rebuild_semantics(&self.cache);
         qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content).await;
-        let (scene, scopes, commands, choices) = match build_contextual_view(
+        let (mut scene, scopes, mut commands, choices) = match build_contextual_view(
             &self.cache,
             self.presentation_mode,
             self.content.catalog(),
@@ -5116,6 +5178,7 @@ impl TuiApplication {
                 return;
             }
         };
+        self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
         self.scene = scene;
         self.scopes = scopes;
         self.commands = commands;
@@ -5217,6 +5280,20 @@ impl TuiApplication {
         );
     }
 
+    fn refresh_capability_projection(
+        &mut self,
+        scene: &mut TuiScene,
+        commands: &mut CommandHierarchy,
+        scopes: &InteractionScopes,
+    ) {
+        let Some(generation) = self.runtime.generation() else {
+            return;
+        };
+        self.capability_graph
+            .refresh(generation, &self.cache, scopes);
+        apply_human_capability_projection(scene, commands, &mut self.capability_graph);
+    }
+
     fn record_recent_command(&mut self, runtime_id: RuntimeNodeId) {
         let uses = self.recent_commands.entry(runtime_id).or_default();
         *uses = uses.saturating_add(1);
@@ -5259,11 +5336,12 @@ impl TuiApplication {
             return;
         }
         self.content.rebuild_semantics(&self.cache);
-        let Ok((scene, scopes, commands, choices)) =
+        let Ok((mut scene, scopes, mut commands, choices)) =
             build_contextual_view(&self.cache, self.presentation_mode, self.content.catalog())
         else {
             return;
         };
+        self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
         self.scene = scene;
         self.scopes = scopes;
         self.commands = commands;
@@ -5280,6 +5358,29 @@ impl TuiApplication {
                 "No compatible semantic action for \"{}\"",
                 element_label(element)
             );
+        }
+    }
+}
+
+fn capability_effect(observation: &ObservationResult) -> CapabilityEffect {
+    if observation.target_became_stale {
+        CapabilityEffect::TargetBecameStale
+    } else if observation.document_changed {
+        CapabilityEffect::DocumentChanged
+    } else if observation.window_changed {
+        CapabilityEffect::WindowChanged
+    } else if observation.value_changed {
+        CapabilityEffect::ValueChanged
+    } else if observation.state_changed {
+        CapabilityEffect::StateChanged
+    } else if observation.structure_changed {
+        CapabilityEffect::StructureChanged
+    } else {
+        match observation.status {
+            ObservationStatus::NoDetectableChange => CapabilityEffect::NoRelevantEffect,
+            ObservationStatus::Timeout => CapabilityEffect::Timeout,
+            ObservationStatus::RefreshFailed => CapabilityEffect::UnknownEffect,
+            ObservationStatus::Changed => CapabilityEffect::UnknownEffect,
         }
     }
 }
@@ -5591,7 +5692,9 @@ fn describe_operation(intent: UiIntent, operation: &BackendOperation) -> String 
             "Value.decrease"
         }
         .to_owned(),
-        BackendOperation::NativeKey { key, .. } => format!("NativeKey::{key:?}"),
+        BackendOperation::NativeKey { primitive, .. } => {
+            format!("NativeKey::{primitive}")
+        }
     }
 }
 
@@ -5705,7 +5808,9 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
     }
 }
 
-async fn qualify_complex_text_capabilities(
+/// Qualify bounded plain multiline readback before advertising whole-text edit.
+/// Shared by the Human runtime and the research qualification harness.
+pub async fn qualify_complex_text_capabilities(
     backend: &AtspiBackend,
     cache: &mut SemanticCache,
     content: &ContentRuntime,
@@ -6126,6 +6231,51 @@ fn build_contextual_view(
     }
     compress_content_scene(&mut scene, cache, content);
     Ok((scene, scopes, commands, choices))
+}
+
+fn apply_human_capability_projection(
+    scene: &mut TuiScene,
+    commands: &mut CommandHierarchy,
+    graph: &mut CapabilityGraph,
+) {
+    for element in &mut scene.elements {
+        let Some(binding) = element.binding.as_mut() else {
+            continue;
+        };
+        let capability = match binding.capability {
+            InteractionCapability::None => continue,
+            InteractionCapability::Activate => HumanCapability::Activate,
+            InteractionCapability::Toggle => HumanCapability::Toggle,
+            InteractionCapability::Select => HumanCapability::Select,
+            InteractionCapability::Expand => HumanCapability::Expand,
+            InteractionCapability::Collapse => HumanCapability::Collapse,
+            InteractionCapability::SwitchPage => HumanCapability::SwitchPage,
+            InteractionCapability::Choose => HumanCapability::Choose,
+            InteractionCapability::OpenMenu => HumanCapability::OpenMenu,
+            InteractionCapability::EditText => HumanCapability::EditText,
+            InteractionCapability::AdjustValue => HumanCapability::AdjustValue,
+            InteractionCapability::BrowseContent => HumanCapability::BrowseContent,
+        };
+        if !graph.register_human_capability(binding.runtime_id, capability)
+            || !graph.has_human_capability(binding.runtime_id, capability)
+        {
+            element.binding = None;
+        }
+    }
+    commands.retain_commands(|command| {
+        let capability = match command.intent {
+            UiIntent::Activate => HumanCapability::Activate,
+            UiIntent::Toggle => HumanCapability::Toggle,
+            UiIntent::Select => HumanCapability::Select,
+            UiIntent::Expand => HumanCapability::Expand,
+            UiIntent::Collapse => HumanCapability::Collapse,
+            UiIntent::SwitchPage => HumanCapability::SwitchPage,
+            UiIntent::OpenMenu => HumanCapability::OpenMenu,
+            _ => return false,
+        };
+        graph.register_human_capability(command.source, capability)
+            && graph.has_human_capability(command.source, capability)
+    });
 }
 
 fn element_sources_include_descendant(

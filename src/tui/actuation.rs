@@ -17,6 +17,7 @@ use x11rb::{
 
 use crate::{
     backend::{AtspiBackend, BackendError},
+    capability::{KeyIdentity, KeyboardPrimitive},
     semantic::{
         BackendLocator, CachedSemanticNode, RuntimeNodeId, SemanticAction, SemanticCache,
         SemanticCapability, SemanticRole, SemanticState, TextInputKind,
@@ -35,6 +36,7 @@ pub enum SemanticActionKind {
     Activate,
     Submit,
     RawEnter,
+    Keyboard,
     Toggle,
     Select,
     Expand,
@@ -118,6 +120,7 @@ impl fmt::Display for SemanticActionKind {
             Self::Activate => "Activate",
             Self::Submit => "Submit",
             Self::RawEnter => "RawEnter",
+            Self::Keyboard => "Keyboard",
             Self::Toggle => "Toggle",
             Self::Select => "Select",
             Self::Expand => "Expand",
@@ -129,35 +132,12 @@ impl fmt::Display for SemanticActionKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NativeKey {
-    Return,
-}
-
-impl NativeKey {
-    fn keysym(self) -> u32 {
-        // X11 keysyms from the public X11 protocol. Keeping these values here
-        // avoids a second toolkit-specific key vocabulary in the TUI layer.
-        match self {
-            Self::Return => 0xff0d,
-        }
-    }
-}
-
-impl fmt::Display for NativeKey {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Return => "Return",
-        })
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum KeyboardBackendError {
     #[error("X11 keyboard backend is unavailable: {0}")]
     Unavailable(String),
     #[error("X11 keyboard backend could not resolve key {key}")]
-    KeyUnavailable { key: NativeKey },
+    KeyUnavailable { key: KeyboardPrimitive },
     #[error("X11 keyboard backend failed: {0}")]
     Protocol(String),
     #[error("X11 text input currently supports printable ASCII only")]
@@ -165,7 +145,7 @@ pub enum KeyboardBackendError {
 }
 
 pub trait KeyboardBackend: Send + Sync {
-    fn send_key(&self, key: NativeKey) -> Result<(), KeyboardBackendError>;
+    fn send_key(&self, primitive: KeyboardPrimitive) -> Result<(), KeyboardBackendError>;
 }
 
 /// Platform text entry is separate from semantic action selection. It is only
@@ -546,8 +526,16 @@ impl FocusManager for AtspiFocusManager {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct X11KeyboardBackend;
 
+fn keysym_for(key: KeyIdentity) -> u32 {
+    match key {
+        KeyIdentity::Enter => 0xff0d,
+        KeyIdentity::Space => 0x20,
+        KeyIdentity::Character(character) => u32::from(character),
+    }
+}
+
 impl KeyboardBackend for X11KeyboardBackend {
-    fn send_key(&self, key: NativeKey) -> Result<(), KeyboardBackendError> {
+    fn send_key(&self, primitive: KeyboardPrimitive) -> Result<(), KeyboardBackendError> {
         let (connection, screen) = x11rb::connect(None)
             .map_err(|error| KeyboardBackendError::Unavailable(error.to_string()))?;
         let setup = connection.setup();
@@ -558,28 +546,62 @@ impl KeyboardBackend for X11KeyboardBackend {
             .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?
             .reply()
             .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
-        let keycode = mapping
-            .keysyms
-            .chunks(usize::from(mapping.keysyms_per_keycode))
-            .enumerate()
-            .find_map(|(offset, symbols)| {
-                symbols
-                    .contains(&key.keysym())
-                    .then_some(min.saturating_add(offset as u8))
-            })
-            .ok_or(KeyboardBackendError::KeyUnavailable { key })?;
+        let symbols_per_key = usize::from(mapping.keysyms_per_keycode);
+        let find = |keysym: u32| {
+            mapping
+                .keysyms
+                .chunks(symbols_per_key)
+                .enumerate()
+                .find_map(|(offset, symbols)| {
+                    symbols
+                        .iter()
+                        .position(|symbol| *symbol == keysym)
+                        .map(|column| (min.saturating_add(offset as u8), column % 2 == 1))
+                })
+        };
+        let (keycode, implicit_shift) = find(keysym_for(primitive.key))
+            .ok_or(KeyboardBackendError::KeyUnavailable { key: primitive })?;
         let root = setup
             .roots
             .get(screen)
             .map(|screen| screen.root)
             .ok_or_else(|| KeyboardBackendError::Unavailable("X11 screen is unavailable".into()))?;
 
-        connection
-            .xtest_fake_input(KEY_PRESS_EVENT, keycode, 0, root, 0, 0, 0)
-            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
-        connection
-            .xtest_fake_input(KEY_RELEASE_EVENT, keycode, 0, root, 0, 0, 0)
-            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
+        let mut modifier_keycodes = Vec::new();
+        for (enabled, keysym, fallback) in [
+            (primitive.modifiers.control, 0xffe3, Some(0xffe4)),
+            (primitive.modifiers.alt, 0xffe9, Some(0xffea)),
+            (primitive.modifiers.meta, 0xffeb, Some(0xffec)),
+            (
+                primitive.modifiers.shift || implicit_shift,
+                0xffe1,
+                Some(0xffe2),
+            ),
+        ] {
+            if !enabled {
+                continue;
+            }
+            let modifier = find(keysym)
+                .or_else(|| fallback.and_then(find))
+                .map(|(keycode, _)| keycode)
+                .ok_or(KeyboardBackendError::KeyUnavailable { key: primitive })?;
+            if !modifier_keycodes.contains(&modifier) {
+                modifier_keycodes.push(modifier);
+            }
+        }
+        let emit = |event_type, code| {
+            connection
+                .xtest_fake_input(event_type, code, 0, root, 0, 0, 0)
+                .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))
+        };
+        for modifier in &modifier_keycodes {
+            emit(KEY_PRESS_EVENT, *modifier)?;
+        }
+        emit(KEY_PRESS_EVENT, keycode)?;
+        emit(KEY_RELEASE_EVENT, keycode)?;
+        for modifier in modifier_keycodes.iter().rev() {
+            emit(KEY_RELEASE_EVENT, *modifier)?;
+        }
         connection
             .flush()
             .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
@@ -721,7 +743,7 @@ pub enum ActuationError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActuationStrategy {
     AccessibilityAction(SemanticAction),
-    NativeKeyboard(NativeKey),
+    NativeKeyboard(KeyboardPrimitive),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -957,7 +979,29 @@ impl NativeInputDelivery {
             cache,
             binding,
             SemanticActionKind::RawEnter,
-            NativeKey::Return,
+            KeyboardPrimitive::ENTER,
+            authority,
+        )
+        .await
+    }
+
+    /// Deliver one explicit research keyboard primitive through the same
+    /// verified target/window/focus authority path as Raw Enter. Callers must
+    /// still perform operation-scoped observation before learning an effect.
+    pub async fn deliver_keyboard_primitive(
+        &self,
+        backend: &AtspiBackend,
+        cache: &SemanticCache,
+        binding: &SceneBinding,
+        primitive: KeyboardPrimitive,
+        authority: &dyn Fn() -> Result<(), ActuationError>,
+    ) -> Result<ActuationTrace, ActuationError> {
+        self.native_key(
+            backend,
+            cache,
+            binding,
+            SemanticActionKind::Keyboard,
+            primitive,
             authority,
         )
         .await
@@ -1087,7 +1131,7 @@ impl NativeInputDelivery {
         cache: &SemanticCache,
         binding: &SceneBinding,
         action: SemanticActionKind,
-        key: NativeKey,
+        key: KeyboardPrimitive,
         authority: &dyn Fn() -> Result<(), ActuationError>,
     ) -> Result<ActuationTrace, ActuationError> {
         let target = binding.runtime_id;
@@ -1186,7 +1230,7 @@ impl NativeInputDelivery {
 
     fn send_key_if_authorized(
         &self,
-        key: NativeKey,
+        key: KeyboardPrimitive,
         authority: &dyn Fn() -> Result<(), ActuationError>,
     ) -> Result<(), ActuationError> {
         authority()?;
@@ -1620,11 +1664,11 @@ mod tests {
 
     #[derive(Default)]
     struct RecordingKeyboard {
-        keys: Mutex<Vec<NativeKey>>,
+        keys: Mutex<Vec<KeyboardPrimitive>>,
     }
 
     impl KeyboardBackend for RecordingKeyboard {
-        fn send_key(&self, key: NativeKey) -> Result<(), KeyboardBackendError> {
+        fn send_key(&self, key: KeyboardPrimitive) -> Result<(), KeyboardBackendError> {
             self.keys.lock().unwrap().push(key);
             Ok(())
         }
@@ -1715,7 +1759,9 @@ mod tests {
 
     #[test]
     fn raw_enter_uses_return_without_exposing_backend_details() {
-        assert_eq!(NativeKey::Return.keysym(), 0xff0d);
+        assert_eq!(keysym_for(KeyIdentity::Enter), 0xff0d);
+        assert_eq!(keysym_for(KeyIdentity::Space), 0x20);
+        assert_eq!(keysym_for(KeyIdentity::Character('k')), u32::from('k'));
         assert_eq!(SemanticActionKind::RawEnter.to_string(), "RawEnter");
     }
 
@@ -1723,10 +1769,11 @@ mod tests {
     fn recording_keyboard_is_a_testable_backend_boundary() {
         let keyboard = Arc::new(RecordingKeyboard::default());
         let _engine = NativeInputDelivery::new(keyboard.clone());
-        keyboard.send_key(NativeKey::Return).unwrap();
+        keyboard.send_key(KeyboardPrimitive::ENTER).unwrap();
+        keyboard.send_key(KeyboardPrimitive::control('k')).unwrap();
         assert_eq!(
             keyboard.keys.lock().unwrap().as_slice(),
-            &[NativeKey::Return]
+            &[KeyboardPrimitive::ENTER, KeyboardPrimitive::control('k')]
         );
     }
 
@@ -1734,7 +1781,7 @@ mod tests {
     fn failed_authority_gate_blocks_native_key_delivery() {
         let keyboard = Arc::new(RecordingKeyboard::default());
         let engine = NativeInputDelivery::new(keyboard.clone());
-        let result = engine.send_key_if_authorized(NativeKey::Return, &|| {
+        let result = engine.send_key_if_authorized(KeyboardPrimitive::ENTER, &|| {
             Err(ActuationError::AuthorityRejected(
                 "application generation changed".to_owned(),
             ))
@@ -1747,7 +1794,7 @@ mod tests {
     fn scope_authority_rejection_blocks_native_key_delivery() {
         let keyboard = Arc::new(RecordingKeyboard::default());
         let engine = NativeInputDelivery::new(keyboard.clone());
-        let result = engine.send_key_if_authorized(NativeKey::Return, &|| {
+        let result = engine.send_key_if_authorized(KeyboardPrimitive::ENTER, &|| {
             Err(ActuationError::AuthorityRejected(
                 "target is outside the active interaction scope".to_owned(),
             ))
@@ -1763,7 +1810,7 @@ mod tests {
         let mut runtime = crate::runtime::RuntimeSession::default();
         let expected = runtime.open_application(BackendLocator::new(":1.2", "/app-a"));
         runtime.open_application(BackendLocator::new(":1.3", "/app-b"));
-        let result = engine.send_key_if_authorized(NativeKey::Return, &|| {
+        let result = engine.send_key_if_authorized(KeyboardPrimitive::ENTER, &|| {
             (runtime.generation() == Some(expected))
                 .then_some(())
                 .ok_or_else(|| {

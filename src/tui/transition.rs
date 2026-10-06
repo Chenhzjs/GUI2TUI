@@ -13,7 +13,7 @@ use super::action::UiIntent;
 /// RuntimeNodeId may provide presentation continuity, but the locator checks
 /// here prevent that continuity from authorizing a replacement object.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct OperationAuthority {
+pub struct OperationAuthority {
     session: RuntimeSessionId,
     generation: ApplicationGenerationId,
     application_locator: BackendLocator,
@@ -59,7 +59,7 @@ pub(crate) enum TransitionEvaluation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TransitionOutcome {
+pub enum TransitionOutcome {
     Confirmed,
     Timeout,
     Stale,

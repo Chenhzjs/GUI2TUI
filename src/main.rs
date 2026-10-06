@@ -156,6 +156,10 @@ struct Cli {
     #[arg(long, requires = "app")]
     dump_scopes: bool,
 
+    /// Print RuntimeObjectModel and explainable CapabilityGraph evidence.
+    #[arg(long, requires = "app")]
+    dump_capabilities: bool,
+
     /// Print scope-filtered hierarchical commands and ranking explanations.
     #[arg(long, requires = "app")]
     dump_commands: bool,
@@ -478,6 +482,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
         || cli.dump_relations
         || cli.relations.is_some()
         || cli.dump_scopes
+        || cli.dump_capabilities
         || cli.dump_commands
         || cli.audit_scene_reachability
         || cli.audit_content_reachability
@@ -780,6 +785,7 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             && !cli.dump_relations
             && cli.relations.is_none()
             && !cli.dump_scopes
+            && !cli.dump_capabilities
             && !cli.dump_commands
             && !cli.audit_scene_reachability
             && !cli.audit_content_reachability;
@@ -866,6 +872,26 @@ async fn run(cli: Cli) -> Result<(), BackendError> {
             .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
         let graph = gui2tui::semantic::RelationalSemanticGraph::new(&cache);
         let scopes = gui2tui::transcompile::InteractionScopes::analyze(&cache, &graph);
+        if cli.dump_capabilities {
+            let mut capability_graph = gui2tui::capability::CapabilityGraph::new(
+                gui2tui::runtime::RuntimeSessionId::default(),
+                gui2tui::runtime::ApplicationGenerationId(1),
+                &cache,
+                &scopes,
+            );
+            capability_graph.acquire_self_descriptions();
+            print!(
+                "{}",
+                gui2tui::capability::format_capability_graph(&capability_graph)
+            );
+            print!(
+                "{}",
+                gui2tui::capability::grounding::format_description_bindings(
+                    &capability_graph,
+                    &scopes
+                )
+            );
+        }
         let analysis_started = Instant::now();
         let analysis = gui2tui::transcompile::analyze_regions_with_graph(&tree, &graph);
         let analysis_elapsed = analysis_started.elapsed();

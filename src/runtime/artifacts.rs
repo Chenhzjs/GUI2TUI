@@ -372,7 +372,11 @@ fn recover_one(directory: &Path) -> io::Result<bool> {
     {
         return Err(io::Error::other("invalid artifact ownership"));
     }
-    if ownership.recover_after_expiry && now() < ownership.expires_unix {
+    // A pending manifest means persistence was interrupted before the
+    // namespace reached a durable handoff. It is never a live artifact, so
+    // recover it immediately once the producer lease is gone.
+    let pending_manifest = directory.join("ownership.pending").exists();
+    if !pending_manifest && ownership.recover_after_expiry && now() < ownership.expires_unix {
         return Ok(false);
     }
     // Validate ALL entries before deleting ANY entry. Foreign additions,

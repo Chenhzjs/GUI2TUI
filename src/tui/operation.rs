@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::{
+    capability::KeyboardPrimitive,
     semantic::{
         BackendLocator, RuntimeNodeId, SemanticAction, SemanticCache, SemanticCapability,
         SemanticRole, SemanticState,
@@ -22,6 +23,10 @@ pub enum SemanticOperation {
     ClosePopup(RuntimeNodeId),
     SubmitNode(RuntimeNodeId),
     SendKeyEnter(RuntimeNodeId),
+    SendKeyboard {
+        target: RuntimeNodeId,
+        primitive: KeyboardPrimitive,
+    },
     ReplaceText {
         target: RuntimeNodeId,
         text: String,
@@ -74,6 +79,7 @@ impl SemanticOperation {
             | Self::ClosePopup(id)
             | Self::SubmitNode(id)
             | Self::SendKeyEnter(id) => *id,
+            Self::SendKeyboard { target, .. } => *target,
             Self::ReplaceText { target, .. }
             | Self::ReplaceComplexText { target, .. }
             | Self::AdjustValue { target, .. } => *target,
@@ -92,6 +98,7 @@ impl SemanticOperation {
             Self::ClosePopup(_) => UiIntent::ClosePopup,
             Self::SubmitNode(_) => UiIntent::Submit,
             Self::SendKeyEnter(_) => UiIntent::SendKeyEnter,
+            Self::SendKeyboard { .. } => UiIntent::SendKeyEnter,
             Self::ReplaceText { .. } => UiIntent::CommitEdit,
             Self::ReplaceComplexText { .. } => UiIntent::BeginExternalEdit,
             Self::AdjustValue { increase, .. } => {
@@ -120,7 +127,10 @@ pub fn resolve_cached_node_operation(
     if matches!(operation, SemanticOperation::SwitchPage(_)) {
         return resolve_cached_page_switch(cache, runtime_id);
     }
-    if matches!(operation, SemanticOperation::SendKeyEnter(_)) {
+    if matches!(
+        operation,
+        SemanticOperation::SendKeyEnter(_) | SemanticOperation::SendKeyboard { .. }
+    ) {
         let focusable = node.states.iter().any(
             |state| matches!(state, SemanticState::Other(value) if value.eq_ignore_ascii_case("focusable")),
         );
@@ -129,9 +139,14 @@ pub fn resolve_cached_node_operation(
                 "explicit raw Enter requires a currently focusable target".to_owned(),
             ));
         }
+        let primitive = match operation {
+            SemanticOperation::SendKeyEnter(_) => KeyboardPrimitive::ENTER,
+            SemanticOperation::SendKeyboard { primitive, .. } => primitive,
+            _ => unreachable!("matched keyboard operation"),
+        };
         return Ok(BackendOperation::NativeKey {
             locator: node.backend_locator.clone(),
-            key: NativeKeyOperation::Enter,
+            primitive,
         });
     }
     if matches!(
@@ -189,15 +204,8 @@ pub enum BackendOperation {
     },
     NativeKey {
         locator: BackendLocator,
-        key: NativeKeyOperation,
+        primitive: KeyboardPrimitive,
     },
-}
-
-/// A deliberately tiny experimental delivery vocabulary. This records what
-/// the user explicitly requested; it does not claim a semantic operation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NativeKeyOperation {
-    Enter,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -372,7 +380,10 @@ pub fn resolve_backend_operation(
         });
     }
 
-    if matches!(operation, SemanticOperation::SendKeyEnter(_)) {
+    if matches!(
+        operation,
+        SemanticOperation::SendKeyEnter(_) | SemanticOperation::SendKeyboard { .. }
+    ) {
         let metadata = scene
             .node_metadata(runtime_id)
             .ok_or(OperationResolutionError::NodeNotFound(runtime_id))?;
@@ -384,9 +395,14 @@ pub fn resolve_backend_operation(
                 "explicit raw Enter requires a currently focusable target".to_owned(),
             ));
         }
+        let primitive = match operation {
+            SemanticOperation::SendKeyEnter(_) => KeyboardPrimitive::ENTER,
+            SemanticOperation::SendKeyboard { primitive, .. } => primitive,
+            _ => unreachable!("matched keyboard operation"),
+        };
         return Ok(BackendOperation::NativeKey {
             locator: binding.backend_locator.clone(),
-            key: NativeKeyOperation::Enter,
+            primitive,
         });
     }
 
@@ -890,7 +906,20 @@ mod tests {
             resolve_cached_node_operation(&cache, SemanticOperation::SendKeyEnter(target)),
             Ok(BackendOperation::NativeKey {
                 locator: BackendLocator::new(":1.2", "/node/1"),
-                key: NativeKeyOperation::Enter,
+                primitive: KeyboardPrimitive::ENTER,
+            })
+        );
+        assert_eq!(
+            resolve_cached_node_operation(
+                &cache,
+                SemanticOperation::SendKeyboard {
+                    target,
+                    primitive: KeyboardPrimitive::control('k'),
+                },
+            ),
+            Ok(BackendOperation::NativeKey {
+                locator: BackendLocator::new(":1.2", "/node/1"),
+                primitive: KeyboardPrimitive::control('k'),
             })
         );
     }

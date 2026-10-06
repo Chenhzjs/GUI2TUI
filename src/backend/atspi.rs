@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
     sync::{
@@ -299,6 +299,8 @@ pub enum BackendError {
 pub struct AtspiBackend {
     connection: AccessibilityConnection,
     operation_timeout: Duration,
+    application_peers: Arc<std::sync::Mutex<HashMap<String, zbus::Connection>>>,
+    application_peer_addresses: Arc<std::sync::Mutex<HashMap<String, String>>>,
 }
 
 pub const DEFAULT_EVENT_BUFFER_CAPACITY: usize = 2048;
@@ -534,7 +536,87 @@ impl AtspiBackend {
         Ok(Self {
             connection,
             operation_timeout,
+            application_peers: Arc::default(),
+            application_peer_addresses: Arc::default(),
         })
+    }
+
+    // Registry and owner checks stay on the bus. Application objects may use
+    // their public peer endpoint so modal callbacks cannot block bus dispatch.
+    async fn negotiate_peer(&self, application: &BackendLocator) {
+        let owner = application.bus_name().to_string();
+        if self
+            .application_peers
+            .lock()
+            .expect("peer cache")
+            .contains_key(&owner)
+        {
+            return;
+        }
+        let result = tokio::time::timeout(self.operation_timeout, async {
+            let proxy =
+                atspi::proxy::application::ApplicationProxy::builder(self.connection.connection())
+                    .destination(application.bus_name())?
+                    .path(application.object_path())?
+                    .cache_properties(zbus::proxy::CacheProperties::No)
+                    .build()
+                    .await?;
+            let address = proxy.get_application_bus_address().await?;
+            if address.is_empty() {
+                return Ok::<_, zbus::Error>(None);
+            }
+            // Only the public provider's local Unix endpoint is accepted.
+            if !address.starts_with("unix:") || address.contains(';') {
+                return Err(zbus::Error::Failure(
+                    "nonlocal application peer refused".into(),
+                ));
+            }
+            let peer = zbus::connection::Builder::address(address.as_str())?
+                .p2p()
+                .build()
+                .await?;
+            // Bind the connection to the exact root advertised by this owner.
+            let root = atspi::proxy::accessible::AccessibleProxy::builder(&peer)
+                .destination(application.bus_name())?
+                .path(application.object_path())?
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()
+                .await?;
+            root.get_role().await?;
+            Ok(Some((peer, address)))
+        })
+        .await;
+        match result {
+            Ok(Ok(Some((peer, address)))) => {
+                self.application_peer_addresses
+                    .lock()
+                    .expect("peer address cache")
+                    .insert(owner.clone(), address);
+                self.application_peers
+                    .lock()
+                    .expect("peer cache")
+                    .insert(owner, peer);
+            }
+            Ok(Ok(None)) => {}
+            _ => warn!("public application peer unavailable; retaining bus transport"),
+        }
+    }
+
+    async fn accessible_proxy<'a>(
+        &self,
+        object: &'a ObjectRefOwned,
+    ) -> Result<atspi::proxy::accessible::AccessibleProxy<'a>, atspi::AtspiError> {
+        let connection = object
+            .name_as_str()
+            .and_then(|name| {
+                self.application_peers
+                    .lock()
+                    .expect("peer cache")
+                    .get(name)
+                    .cloned()
+            })
+            .unwrap_or_else(|| self.connection.connection().clone());
+        object.as_accessible_proxy(&connection).await
     }
 
     pub async fn applications(&self) -> Result<Vec<ApplicationRef>, BackendError> {
@@ -561,10 +643,8 @@ impl AtspiBackend {
             let Some(id) = node_id_from_ref(&object) else {
                 continue;
             };
-            match object
-                .as_accessible_proxy(self.connection.connection())
-                .await
-            {
+            self.negotiate_peer(&id).await;
+            match self.accessible_proxy(&object).await {
                 Ok(proxy) => {
                     let name = dbus_operation(
                         self.operation_timeout,
@@ -646,8 +726,8 @@ impl AtspiBackend {
     ) -> Result<Option<Geometry>, BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         Ok(read_geometry(self.operation_timeout, &encoded_id, &proxy).await)
@@ -1106,8 +1186,8 @@ impl AtspiBackend {
     pub async fn focus_node(&self, locator: &BackendLocator) -> Result<(), BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -1238,8 +1318,8 @@ impl AtspiBackend {
         locator: &BackendLocator,
     ) -> Result<String, BackendError> {
         let (encoded_id, object) = self.validate_plain_text_readback(locator).await?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -1280,8 +1360,8 @@ impl AtspiBackend {
     ) -> Result<String, BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let role = dbus_operation(
@@ -1406,8 +1486,8 @@ impl AtspiBackend {
             return Err(BackendError::ComplexTextConflict(encoded_id));
         }
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -1550,8 +1630,8 @@ impl AtspiBackend {
                 "AcquisitionUnavailable: requires an Image with Component bounds".into(),
             ));
         }
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
         let states = dbus_operation(
@@ -1689,8 +1769,8 @@ impl AtspiBackend {
         locator: &BackendLocator,
     ) -> Result<ModalityMetadataProbe, BackendError> {
         let (encoded_id, object, interfaces, _role) = self.validate_content_object(locator).await?;
-        let accessible = object
-            .as_accessible_proxy(self.connection.connection())
+        let accessible = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let accessible_attributes = dbus_operation(
@@ -1880,8 +1960,8 @@ impl AtspiBackend {
     ) -> Result<(String, ObjectRefOwned, atspi::InterfaceSet, Role), BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let role = dbus_operation(
@@ -1914,8 +1994,8 @@ impl AtspiBackend {
         new_text: &str,
     ) -> Result<(), BackendError> {
         let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -1968,8 +2048,8 @@ impl AtspiBackend {
         new_text: &str,
     ) -> Result<(), BackendError> {
         let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -2061,8 +2141,8 @@ impl AtspiBackend {
         locator: &BackendLocator,
     ) -> Result<(String, ObjectRefOwned), BackendError> {
         let (encoded_id, object) = self.validate_plain_editable_target(locator).await?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let interfaces = dbus_operation(
@@ -2085,8 +2165,8 @@ impl AtspiBackend {
     ) -> Result<(String, ObjectRefOwned), BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let role = dbus_operation(
@@ -2134,8 +2214,8 @@ impl AtspiBackend {
     ) -> Result<(String, ObjectRefOwned), BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let role = dbus_operation(
@@ -2345,8 +2425,8 @@ impl AtspiBackend {
     pub async fn actions(&self, encoded_id: &str) -> Result<Vec<SemanticAction>, BackendError> {
         let id = BackendLocator::decode(encoded_id)?;
         let object = object_ref_from_id(&id)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(id.encode(), error))?;
         let interfaces = dbus_operation(
@@ -2418,8 +2498,32 @@ impl AtspiBackend {
 
         let id = BackendLocator::decode(encoded_id)?;
         let object = object_ref_from_id(&id)?;
+        // A modal action can retain its dispatch frame. Keep observation on
+        // a different public connection, even when the action already replied.
+        let address = self
+            .application_peer_addresses
+            .lock()
+            .expect("peer address cache")
+            .get(id.bus_name())
+            .cloned();
+        let connection = if let Some(address) = address {
+            dbus_operation(
+                self.operation_timeout,
+                "connect action peer",
+                encoded_id,
+                async {
+                    zbus::connection::Builder::address(address.as_str())?
+                        .p2p()
+                        .build()
+                        .await
+                },
+            )
+            .await?
+        } else {
+            self.connection.connection().clone()
+        };
         let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+            .as_accessible_proxy(&connection)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(id.encode(), error))?;
         let proxies = atspi_operation(
@@ -2461,8 +2565,8 @@ impl AtspiBackend {
     ) -> Result<ValueMutation, BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let role = dbus_operation(
@@ -2598,8 +2702,8 @@ impl AtspiBackend {
                 index: child_index,
             })?;
         let object = object_ref_from_id(parent)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
         let interfaces = dbus_operation(
@@ -2677,8 +2781,8 @@ impl AtspiBackend {
                 }
             })?;
             let object = object_ref_from_id(collection)?;
-            let proxy = object
-                .as_accessible_proxy(self.connection.connection())
+            let proxy = self
+                .accessible_proxy(&object)
                 .await
                 .map_err(|error| BackendError::ObjectUnavailable(collection_id.clone(), error))?;
             let proxies = atspi_operation(
@@ -2739,8 +2843,8 @@ impl AtspiBackend {
 
         let collection_id = collection.encode();
         let object = object_ref_from_id(collection)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(collection_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -2967,8 +3071,8 @@ impl AtspiBackend {
 
         let table_id = table.encode();
         let object = object_ref_from_id(table)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -3331,8 +3435,8 @@ impl AtspiBackend {
     async fn selected_table_rows(&self, table: &BackendLocator) -> Result<Vec<i32>, BackendError> {
         let table_id = table.encode();
         let object = object_ref_from_id(table)?;
-        let proxy = object
-            .as_accessible_proxy(self.connection.connection())
+        let proxy = self
+            .accessible_proxy(&object)
             .await
             .map_err(|error| BackendError::ObjectUnavailable(table_id.clone(), error))?;
         let proxies = atspi_operation(
@@ -3378,8 +3482,8 @@ impl AtspiBackend {
             let encoded_id = id.encode();
             context.visited.insert(encoded_id.clone());
 
-            let proxy = object
-                .as_accessible_proxy(self.connection.connection())
+            let proxy = self
+                .accessible_proxy(&object)
                 .await
                 .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
             let role = dbus_operation(

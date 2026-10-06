@@ -52,6 +52,7 @@ impl SurfaceSnapshot {
             let states = node
                 .states
                 .iter()
+                .filter(|state| **state != crate::semantic::SemanticState::Focused)
                 .map(|state| format!("{state:?}"))
                 .collect();
             let parent = node
@@ -80,13 +81,23 @@ impl SurfaceSnapshot {
         let mut windows = HashMap::new();
         let mut documents = HashMap::new();
         for node in cache.nodes() {
-            let fingerprint = subtree_fingerprint(cache, node.runtime_id, false);
             match node.role {
                 crate::semantic::SemanticRole::Window | crate::semantic::SemanticRole::Dialog => {
-                    windows.insert(node.backend_locator.clone(), fingerprint);
+                    // Window verification is intentionally local to the
+                    // window object. Hashing its entire subtree lets an
+                    // unrelated clock/status sibling falsely confirm an
+                    // operation. Relevant document subtrees are tracked
+                    // separately below.
+                    windows.insert(
+                        node.backend_locator.clone(),
+                        node_fingerprint(cache, node.runtime_id, false),
+                    );
                 }
                 crate::semantic::SemanticRole::Document => {
-                    documents.insert(node.backend_locator.clone(), fingerprint);
+                    documents.insert(
+                        node.backend_locator.clone(),
+                        subtree_fingerprint(cache, node.runtime_id, false),
+                    );
                 }
                 _ => {}
             }
@@ -239,6 +250,29 @@ impl SurfaceSnapshot {
             error: None,
         }
     }
+}
+
+fn node_fingerprint(cache: &SemanticCache, id: RuntimeNodeId, include_value: bool) -> u64 {
+    let Some(node) = cache.node(id) else {
+        return 0;
+    };
+    let mut hash = 0xcbf29ce484222325_u64;
+    let mut add = |value: &str| {
+        for byte in value.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(0x100000001b3);
+    };
+    add(&node.role.to_string());
+    add(node.name.as_deref().unwrap_or(""));
+    if include_value {
+        add(node.value.as_deref().unwrap_or(""));
+    }
+    // Window activation and target focus are delivery preparation, not the
+    // effect of the requested keyboard/action operation.
+    hash
 }
 
 fn subtree_fingerprint(cache: &SemanticCache, id: RuntimeNodeId, include_values: bool) -> u64 {
@@ -682,5 +716,27 @@ mod tests {
         assert_eq!(result.status, ObservationStatus::RefreshFailed);
         assert!(!result.changed);
         assert_eq!(result.error.as_deref(), Some("backend refresh failed"));
+    }
+
+    #[test]
+    fn sibling_name_churn_and_preparation_focus_are_not_keyboard_effects() {
+        let make = |clock: &str, focused: bool| {
+            let mut root = node("/app", SemanticRole::Application);
+            let mut window = node("/window", SemanticRole::Window);
+            let mut input = node("/input", SemanticRole::TextInput);
+            if focused {
+                input.states.push(SemanticState::Focused);
+            }
+            let mut status = node("/clock", SemanticRole::Label);
+            status.name = Some(clock.to_owned());
+            window.children.extend([input, status]);
+            root.children.push(window);
+            SurfaceSnapshot::from_cache(&SemanticCache::from_snapshot(root).unwrap())
+        };
+        let before = make("10:00", false);
+        let after = make("10:01", true);
+        let result = before.compare(&after, &context(&before));
+        assert!(!result.changed);
+        assert!(!result.window_changed);
     }
 }

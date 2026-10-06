@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "purpose": "development GUI task execution benchmark",
+  "observation": "human/evaluator owned; runtime records delivery only",
+  "scenarios": [
+    {"id": "firefox_address_navigate", "application": "firefox", "steps": ["write public address combo box", "invoke activate"]},
+    {"id": "firefox_new_tab", "application": "firefox", "steps": ["invoke Open a new tab press"]},
+    {"id": "firefox_reload", "application": "firefox", "steps": ["invoke Reload press"]},
+    {"id": "firefox_list_tabs", "application": "firefox", "steps": ["invoke List all tabs press"]},
+    {"id": "firefox_view", "application": "firefox", "steps": ["invoke Firefox View press"]},
+    {"id": "mousepad_new_file_edit", "application": "mousepad", "steps": ["invoke New menu item", "write public editable document"]},
+    {"id": "mousepad_find", "application": "mousepad", "steps": ["invoke Find click"]},
+    {"id": "mousepad_fullscreen", "application": "mousepad", "steps": ["invoke Fullscreen click"]},
+    {"id": "mousepad_line_numbers", "application": "mousepad", "steps": ["invoke Line Numbers click"]},
+    {"id": "mousepad_word_wrap", "application": "mousepad", "steps": ["invoke Word Wrap click"]},
+    {"id": "featherpad_select_text", "application": "featherpad", "steps": ["invoke Select Text Toggle"]},
+    {"id": "featherpad_new", "application": "featherpad", "steps": ["invoke New Press"]},
+    {"id": "featherpad_reload", "application": "featherpad", "steps": ["invoke Reload Press"]},
+    {"id": "featherpad_find", "application": "featherpad", "steps": ["invoke Find Press"]},
+    {"id": "featherpad_side_pane", "application": "featherpad", "steps": ["invoke Side-Pane Press"]},
+    {"id": "okular_sidebar", "application": "okular", "steps": ["invoke Show Sidebar Toggle"]},
+    {"id": "okular_browse", "application": "okular", "steps": ["invoke Browse Toggle"]},
+    {"id": "okular_highlighter", "application": "okular", "steps": ["invoke Highlighter Toggle"]},
+    {"id": "okular_underline", "application": "okular", "steps": ["invoke Underline Toggle"]},
+    {"id": "okular_zoom_in", "application": "okular", "steps": ["invoke Zoom In Press"]}
+  ]
+}

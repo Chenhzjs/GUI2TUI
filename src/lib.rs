@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod capability;
 pub mod content;
 pub mod events;
 pub mod inspect;

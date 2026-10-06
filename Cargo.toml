@@ -28,7 +28,7 @@ thiserror = "2.0"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net", "io-util", "process"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-zbus = "5.19"
+zbus = { version = "5.19", features = ["p2p"] }
 url = "2.5.8"
 x11rb = { version = "0.13", features = ["xtest"] }
 

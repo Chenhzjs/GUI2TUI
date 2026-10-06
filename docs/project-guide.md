@@ -120,6 +120,9 @@ detailed identities, conditions, and event evidence remain diagnostic-only.
 - `src/backend/`: public AT-SPI transport, bootstrap/cache acquisition,
   protocol compatibility, and explicitly requested static visual capture. Do
   not add app/toolkit adapters here.
+- `src/capability.rs`: v2 research RuntimeObjectModel, CapabilityGraph,
+  evidence/effect/risk models, ContextSignature learning and sparse candidate
+  synthesis. Learned knowledge is never operation authority.
 - `src/semantic/`: `SemanticCache`, nodes, roles, relations, capabilities,
   locators, and semantic graph construction. Do not infer capabilities from
   pixels or names of known applications.

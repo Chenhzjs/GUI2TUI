@@ -17,6 +17,10 @@ opens an `ApplicationGenerationId`.
             ▼
     SemanticCache arena ────── RuntimeNodeId
             │
+            ├── RuntimeObjectModel → CapabilityGraph
+            │        ├── conservative Human Projection
+            │        └── research capability inspection / learning
+            │
             ├── task/control view
             │        ↓
             │   Region Analyzer → SemanticRegion → Presentation Planner
@@ -65,6 +69,16 @@ never falls back to Enter. `SendKeyEnter` is a separate, explicitly named
 low-level capability and reports `Enter delivered` plus an observed
 consequence such as `DocumentChanged`, `TextChanged`, or
 `NoDetectableChange`; it never reports `Submit succeeded`.
+
+On the v2 research branch, Raw Enter delegates to the parameterized
+`KeyboardPrimitive` vocabulary and verified Edit/Submit/keyboard observations
+also feed the session-scoped CapabilityGraph. Learned affordances remain
+non-authoritative and are not exposed by the ordinary Human Projection.
+Candidate synthesis uses declared evidence, advertised key bindings or prior
+verified structurally similar contexts; it does not enumerate keys by role.
+The research inspector/bootstrap can additionally mine bounded public UI
+self-descriptions into graph-owned claims. Described shortcuts with unresolved
+execution targets remain unverified and outside ordinary Human commands.
 
 Before native input, the normal `RuntimeSession` / generation / scope /
 operation-ticket authority chain resolves the current locator, owning native

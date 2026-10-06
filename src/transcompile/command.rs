@@ -102,6 +102,12 @@ impl CommandHierarchy {
         })
     }
 
+    /// Apply a final capability-source filter without changing command
+    /// grouping or ranking. Empty presentation-only groups are removed.
+    pub fn retain_commands(&mut self, mut retain: impl FnMut(&SemanticCommand) -> bool) {
+        retain_command_entries(&mut self.root.children, &mut retain);
+    }
+
     /// Command recency is presentation history, not authority. Keep only
     /// sources represented by the freshly compiled current hierarchy so
     /// vanished surfaces cannot make a long-lived generation grow forever.
@@ -191,6 +197,19 @@ impl CommandHierarchy {
         audit.reachable = audit.safe_leaves.saturating_sub(audit.unreachable);
         audit
     }
+}
+
+fn retain_command_entries(
+    entries: &mut Vec<CommandEntry>,
+    retain: &mut impl FnMut(&SemanticCommand) -> bool,
+) {
+    entries.retain_mut(|entry| match entry {
+        CommandEntry::Command(command) => retain(command),
+        CommandEntry::Group(group) => {
+            retain_command_entries(&mut group.children, retain);
+            !group.children.is_empty()
+        }
+    });
 }
 
 fn has_safe_command_descendant(cache: &SemanticCache, id: RuntimeNodeId) -> bool {
