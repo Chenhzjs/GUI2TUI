@@ -1,27 +1,187 @@
 {
-  "version": 1,
-  "purpose": "development GUI task execution benchmark",
-  "observation": "human/evaluator owned; runtime records delivery only",
+  "version": 2,
+  "purpose": "development GUI2TUI PTY task tests; direct AT-SPI delivery is prohibited",
+  "observation": "read-only Accessibility assertions in tests; dispatch alone is not task completion",
   "scenarios": [
-    {"id": "firefox_address_navigate", "application": "firefox", "steps": ["write public address combo box", "invoke activate"]},
-    {"id": "firefox_new_tab", "application": "firefox", "steps": ["invoke Open a new tab press"]},
-    {"id": "firefox_reload", "application": "firefox", "steps": ["invoke Reload press"]},
-    {"id": "firefox_list_tabs", "application": "firefox", "steps": ["invoke List all tabs press"]},
-    {"id": "firefox_view", "application": "firefox", "steps": ["invoke Firefox View press"]},
-    {"id": "mousepad_new_file_edit", "application": "mousepad", "steps": ["invoke New menu item", "write public editable document"]},
-    {"id": "mousepad_find", "application": "mousepad", "steps": ["invoke Find click"]},
-    {"id": "mousepad_fullscreen", "application": "mousepad", "steps": ["invoke Fullscreen click"]},
-    {"id": "mousepad_line_numbers", "application": "mousepad", "steps": ["invoke Line Numbers click"]},
-    {"id": "mousepad_word_wrap", "application": "mousepad", "steps": ["invoke Word Wrap click"]},
-    {"id": "featherpad_select_text", "application": "featherpad", "steps": ["invoke Select Text Toggle"]},
-    {"id": "featherpad_new", "application": "featherpad", "steps": ["invoke New Press"]},
-    {"id": "featherpad_reload", "application": "featherpad", "steps": ["invoke Reload Press"]},
-    {"id": "featherpad_find", "application": "featherpad", "steps": ["invoke Find Press"]},
-    {"id": "featherpad_side_pane", "application": "featherpad", "steps": ["invoke Side-Pane Press"]},
-    {"id": "okular_sidebar", "application": "okular", "steps": ["invoke Show Sidebar Toggle"]},
-    {"id": "okular_browse", "application": "okular", "steps": ["invoke Browse Toggle"]},
-    {"id": "okular_highlighter", "application": "okular", "steps": ["invoke Highlighter Toggle"]},
-    {"id": "okular_underline", "application": "okular", "steps": ["invoke Underline Toggle"]},
-    {"id": "okular_zoom_in", "application": "okular", "steps": ["invoke Zoom In Press"]}
+    {
+      "id": "firefox_address_navigate",
+      "application": "firefox",
+      "steps": [
+        "GUI2TUI address field edit and explicit Raw Enter to local data URL"
+      ],
+      "scenario": "address_navigate",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "firefox_new_tab",
+      "application": "firefox",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "new_tab",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "firefox_reload",
+      "application": "firefox",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "reload",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "firefox_list_tabs",
+      "application": "firefox",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "list_tabs",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "firefox_view",
+      "application": "firefox",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "firefox_view",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "mousepad_new_file_edit",
+      "application": "mousepad",
+      "steps": [
+        "GUI2TUI New command, then configured external text editor"
+      ],
+      "scenario": "new",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "mousepad_find",
+      "application": "mousepad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "find",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "mousepad_fullscreen",
+      "application": "mousepad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "fullscreen",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "mousepad_line_numbers",
+      "application": "mousepad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "line_numbers",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "mousepad_word_wrap",
+      "application": "mousepad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "word_wrap",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "featherpad_select_text",
+      "application": "featherpad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "select_text",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "featherpad_new",
+      "application": "featherpad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "new",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "featherpad_reload",
+      "application": "featherpad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "reload",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "featherpad_find",
+      "application": "featherpad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "find",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "featherpad_side_pane",
+      "application": "featherpad",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "side_pane",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "okular_sidebar",
+      "application": "okular",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "sidebar",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "okular_browse",
+      "application": "okular",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "browse",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "okular_highlighter",
+      "application": "okular",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "highlighter",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "okular_underline",
+      "application": "okular",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "underline",
+      "execution": "GUI2TUI terminal input"
+    },
+    {
+      "id": "okular_zoom_in",
+      "application": "okular",
+      "steps": [
+        "select exact command in GUI2TUI command palette"
+      ],
+      "scenario": "zoom_in",
+      "execution": "GUI2TUI terminal input"
+    }
   ]
 }

@@ -6239,6 +6239,11 @@ fn apply_human_capability_projection(
     graph: &mut CapabilityGraph,
 ) {
     for element in &mut scene.elements {
+        // Content summaries are bound by the public content model. Browsing
+        // them is local reader navigation, not a backend table capability.
+        if matches!(element.kind, SceneElementKind::DocumentSummary { .. }) {
+            continue;
+        }
         let Some(binding) = element.binding.as_mut() else {
             continue;
         };
@@ -6371,6 +6376,43 @@ mod tests {
             }),
             strategy: PresentationStrategy::DirectWidget,
         }
+    }
+
+    #[test]
+    fn capability_projection_preserves_document_reader_binding() {
+        let root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/document"),
+            index_in_parent: None,
+            role: SemanticRole::Document,
+            name: Some("Article".to_owned()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: Vec::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        };
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let content = crate::content::ContentCatalog::analyze(&cache);
+        let (mut scene, scopes, mut commands, _) =
+            build_contextual_view(&cache, PresentationMode::Transcompiled, &content).unwrap();
+        let mut runtime = crate::runtime::RuntimeSession::default();
+        let generation = runtime.open_application(BackendLocator::new(":1.2", "/document"));
+        let mut graph = CapabilityGraph::new(runtime.id.clone(), generation, &cache, &scopes);
+        apply_human_capability_projection(&mut scene, &mut commands, &mut graph);
+        let summary = scene
+            .elements
+            .iter()
+            .find(|element| matches!(element.kind, SceneElementKind::DocumentSummary { .. }))
+            .expect("public content summary");
+        assert_eq!(
+            summary.binding.as_ref().unwrap().capability,
+            InteractionCapability::BrowseContent
+        );
     }
 
     #[test]
