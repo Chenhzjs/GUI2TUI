@@ -228,7 +228,7 @@ pub fn interaction_capability(
         | SemanticRole::StatusBar => return InteractionCapability::None,
         _ => {
             // A role outside the concrete widget set is still actionable when
-            // it exposes an explicit safe activation action. This is the
+            // it exposes an explicit compatible activation action. This is the
             // generic fallback for extended/search/custom accessibility roles;
             // arbitrary action names are never accepted.
             if is_current_action_target(states)
@@ -412,15 +412,19 @@ mod tests {
 
     #[test]
     fn resolver_is_role_aware_and_never_falls_back_to_action_zero() {
-        let dangerous = actions(&["delete", "open", "properties"]);
+        let distinct_operations = actions(&["delete", "open", "properties"]);
         assert!(matches!(
-            resolve_action(&SemanticRole::Button, &dangerous, UiIntent::Activate),
+            resolve_action(
+                &SemanticRole::Button,
+                &distinct_operations,
+                UiIntent::Activate
+            ),
             Err(ActionResolutionError::NoCompatibleAction { .. })
         ));
         assert!(matches!(
             resolve_action(
                 &SemanticRole::Unknown("custom".to_owned()),
-                &dangerous,
+                &distinct_operations,
                 UiIntent::Activate
             ),
             Err(ActionResolutionError::NoCompatibleAction { .. })
@@ -531,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_role_uses_advertised_capability_and_safe_activation_name() {
+    fn extended_role_uses_advertised_capability_and_compatible_activation_name() {
         let mut editable_states = vec![SemanticState::Other("focusable".to_owned())];
         assert_eq!(
             interaction_capability(

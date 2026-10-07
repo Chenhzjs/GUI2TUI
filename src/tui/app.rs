@@ -6267,11 +6267,9 @@ fn apply_human_capability_projection(
             InteractionCapability::AdjustValue => HumanCapability::AdjustValue,
             InteractionCapability::BrowseContent => HumanCapability::BrowseContent,
         };
-        if !graph.register_human_capability(binding.runtime_id, capability)
-            || !graph.has_human_capability(binding.runtime_id, capability)
-        {
-            element.binding = None;
-        }
+        // The graph records the semantic projection; it must not veto a
+        // binding already resolved by the authoritative scene pipeline.
+        graph.register_human_capability(binding.runtime_id, capability);
     }
     commands.retain_commands(|command| {
         let capability = match command.intent {
@@ -6282,10 +6280,10 @@ fn apply_human_capability_projection(
             UiIntent::Collapse => HumanCapability::Collapse,
             UiIntent::SwitchPage => HumanCapability::SwitchPage,
             UiIntent::OpenMenu => HumanCapability::OpenMenu,
-            _ => return false,
+            _ => return true,
         };
-        graph.register_human_capability(command.source, capability)
-            && graph.has_human_capability(command.source, capability)
+        graph.register_human_capability(command.source, capability);
+        true
     });
 }
 
@@ -6409,7 +6407,20 @@ mod tests {
         let mut runtime = crate::runtime::RuntimeSession::default();
         let generation = runtime.open_application(BackendLocator::new(":1.2", "/document"));
         let mut graph = CapabilityGraph::new(runtime.id.clone(), generation, &cache, &scopes);
+        // The graph is an observer, not a second authority over scene bindings.
+        let mut already_resolved = element(
+            SemanticRole::TextInput,
+            SceneElementKind::Field {
+                label: "Resolved input".into(),
+                display: String::new(),
+                input_kind: crate::semantic::TextInputKind::Plain,
+            },
+            InteractionCapability::EditText,
+        );
+        already_resolved.id = SceneElementId::new(999);
+        scene.elements.push(already_resolved);
         apply_human_capability_projection(&mut scene, &mut commands, &mut graph);
+        assert!(scene.elements.last().unwrap().binding.is_some());
         let summary = scene
             .elements
             .iter()

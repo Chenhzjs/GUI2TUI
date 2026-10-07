@@ -1,0 +1,100 @@
+{
+  "image": "sha256:4c0f92e8a71fe771d06cf20a43426ddd9f0354afc152c32a0425be8ab8a2cc95",
+  "script_sha256": "3d1a5c7b4c952103fd4bf91c62b3a154ecff8b1925bc142068ced5c515d5b9b0",
+  "tasks": [
+    {
+      "application": "firefox",
+      "scenario": "new_tab",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "f2f5a5690b53408fdeb45f5129009ee965eed849d5612a0e0b7fb0a946f12574",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS81NQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "firefox",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "f2f5a5690b53408fdeb45f5129009ee965eed849d5612a0e0b7fb0a946f12574",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "local HTTP fixture received a fresh reload request",
+      "request_counts": [
+        2,
+        3
+      ],
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84MQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "f2f5a5690b53408fdeb45f5129009ee965eed849d5612a0e0b7fb0a946f12574",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new tab and exact document text",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "f2f5a5690b53408fdeb45f5129009ee965eed849d5612a0e0b7fb0a946f12574",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjU5",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "f2f5a5690b53408fdeb45f5129009ee965eed849d5612a0e0b7fb0a946f12574",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "reload restores disk fixture after GUI2TUI unsaved edit",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzODQ4",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    }
+  ]
+}

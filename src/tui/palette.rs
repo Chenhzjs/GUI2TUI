@@ -10,8 +10,6 @@ use crate::{
     tui::action::UiIntent,
 };
 
-const DEFAULT_CONTEXT_LIMIT: usize = 15;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaletteEntry {
     pub label: String,
@@ -151,7 +149,7 @@ impl CommandPalette {
     fn rebuild(&mut self) {
         self.entries = if self.query.is_empty() {
             current_group(&self.hierarchy.root, &self.group_path)
-                .map(|group| browse_entries(group, self.active_scope))
+                .map(|group| browse_entries(group, self.active_scope, self.search_all_scopes))
                 .unwrap_or_default()
         } else {
             self.hierarchy
@@ -162,7 +160,6 @@ impl CommandPalette {
                     &self.recent,
                 )
                 .into_iter()
-                .take(DEFAULT_CONTEXT_LIMIT)
                 .map(|ranked| PaletteEntry {
                     label: format!("{} › {}", ranked.path.join(" › "), ranked.command.label),
                     group: false,
@@ -190,13 +187,17 @@ fn current_group<'a>(root: &'a CommandGroup, path: &[usize]) -> Option<&'a Comma
     Some(group)
 }
 
-fn browse_entries(group: &CommandGroup, scope: InteractionScopeId) -> Vec<PaletteEntry> {
+fn browse_entries(
+    group: &CommandGroup,
+    scope: InteractionScopeId,
+    all_scopes: bool,
+) -> Vec<PaletteEntry> {
     group
         .children
         .iter()
         .enumerate()
         .filter_map(|(index, entry)| match entry {
-            CommandEntry::Group(group) if group_contains_scope(group, scope) => {
+            CommandEntry::Group(group) if all_scopes || group_contains_scope(group, scope) => {
                 Some(PaletteEntry {
                     label: format!("{} ›", group.label),
                     group: true,
@@ -204,12 +205,13 @@ fn browse_entries(group: &CommandGroup, scope: InteractionScopeId) -> Vec<Palett
                     group_index: Some(index),
                 })
             }
-            CommandEntry::Command(command) if command.scope == scope && command.visible => {
+            CommandEntry::Command(command)
+                if (all_scopes || command.scope == scope) && command.visible =>
+            {
                 Some(command_entry(command))
             }
             _ => None,
         })
-        .take(DEFAULT_CONTEXT_LIMIT)
         .collect()
 }
 
@@ -252,6 +254,28 @@ mod tests {
     }
 
     #[test]
+    fn all_commands_remain_reachable_beyond_the_old_display_limit() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let hierarchy = CommandHierarchy {
+            root: CommandGroup {
+                source: RuntimeNodeId::new(1),
+                label: "App".into(),
+                scope,
+                children: (2..42).map(|id| command(id, scope, "Same label")).collect(),
+            },
+        };
+        let mut palette = CommandPalette::new(hierarchy, scope, HashMap::new());
+        assert_eq!(palette.entries().len(), 40);
+        for _ in 0..39 {
+            palette.handle_key(KeyEvent::from(KeyCode::Down));
+        }
+        assert!(matches!(palette.handle_key(KeyEvent::from(KeyCode::Enter)),
+            PaletteOutcome::Execute(id, _, _) if id == RuntimeNodeId::new(41)));
+        palette.handle_key(KeyEvent::from(KeyCode::Char('S')));
+        assert_eq!(palette.entries().len(), 40);
+    }
+
+    #[test]
     fn browses_true_groups_then_searches_flattened_projection() {
         let scope = InteractionScopeId(RuntimeNodeId::new(1));
         let hierarchy = CommandHierarchy {
@@ -291,6 +315,10 @@ mod tests {
             },
         };
         let mut palette = CommandPalette::new(hierarchy, current, HashMap::new());
+        palette.handle_key(KeyEvent::from(KeyCode::F(2)));
+        assert_eq!(palette.entries().len(), 2);
+        palette.handle_key(KeyEvent::from(KeyCode::F(2)));
+        assert_eq!(palette.entries().len(), 1);
         palette.handle_key(KeyEvent::from(KeyCode::Char('c')));
         assert_eq!(palette.entries().len(), 1);
         assert!(palette.entries()[0].label.contains("Close dialog"));

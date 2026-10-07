@@ -1467,18 +1467,32 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
         "> {}  [search: {search_scope}; F2 toggle]",
         palette.query
     )];
-    lines.extend(palette.entries.iter().enumerate().map(|(index, entry)| {
-        format!(
-            "{} {}",
-            if index == palette.selected { ">" } else { " " },
-            entry.label
-        )
-    }));
+    lines.extend(
+        palette
+            .entries
+            .iter()
+            .enumerate()
+            .skip(palette.selected)
+            .map(|(index, entry)| {
+                format!(
+                    "{} {}",
+                    if index == palette.selected { ">" } else { " " },
+                    entry.label
+                )
+            }),
+    );
     frame.render_widget(
         Paragraph::new(lines.join("\n"))
             .block(
                 Block::default()
-                    .title(" Command palette ")
+                    .title(format!(
+                        " Command palette {}/{} ",
+                        palette
+                            .selected
+                            .saturating_add(1)
+                            .min(palette.entries.len()),
+                        palette.entries.len()
+                    ))
                     .borders(Borders::ALL),
             )
             .wrap(Wrap { trim: true }),
