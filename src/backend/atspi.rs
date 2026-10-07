@@ -2457,7 +2457,7 @@ impl AtspiBackend {
             self.operation_timeout,
             "read actions",
             &id.encode(),
-            action_proxy.get_actions(),
+            read_public_actions(&action_proxy),
         )
         .await?;
         Ok(map_actions(actions))
@@ -3567,7 +3567,7 @@ impl AtspiBackend {
                             self.operation_timeout,
                             "read actions",
                             &encoded_id,
-                            action_proxy.get_actions(),
+                            read_public_actions(&action_proxy),
                         )
                         .await
                         .map(map_actions)
@@ -3809,7 +3809,8 @@ async fn enrich_record(
             .destination(record.locator.bus_name())
             .and_then(|builder| builder.path(record.locator.object_path()))
             && let Ok(Ok(proxy)) = tokio::time::timeout(timeout, proxy.build()).await
-            && let Ok(Ok(actions)) = tokio::time::timeout(timeout, proxy.get_actions()).await
+            && let Ok(Ok(actions)) =
+                tokio::time::timeout(timeout, read_public_actions(&proxy)).await
         {
             record.actions = map_actions(actions);
         }
@@ -3893,7 +3894,11 @@ fn role_needs_name(role: Role) -> bool {
 fn role_needs_actions(role: Role) -> bool {
     matches!(
         SemanticRole::from(role),
-        SemanticRole::Button
+        SemanticRole::Menu
+            | SemanticRole::Tab
+            | SemanticRole::Link
+            | SemanticRole::RadioButton
+            | SemanticRole::Button
             | SemanticRole::ToggleButton
             | SemanticRole::CheckBox
             | SemanticRole::ListItem
@@ -4084,6 +4089,26 @@ fn map_dbus_error(node_id: String, error: zbus::Error) -> BackendError {
     } else {
         BackendError::DbusCall { node_id, source }
     }
+}
+
+// GetActions returns localized presentation metadata on some providers.
+// Resolve execution names through the indexed public API, never array defaults.
+async fn read_public_actions(proxy: &ActionProxy<'_>) -> zbus::Result<Vec<atspi::Action>> {
+    let count = proxy.n_actions().await?;
+    if !(0..=256).contains(&count) {
+        return Err(zbus::Error::Failure(
+            "invalid public action count".to_owned(),
+        ));
+    }
+    let mut actions = Vec::with_capacity(count as usize);
+    for index in 0..count {
+        actions.push(atspi::Action {
+            name: proxy.get_name(index).await?,
+            description: proxy.get_description(index).await.unwrap_or_default(),
+            keybinding: proxy.get_key_binding(index).await.unwrap_or_default(),
+        });
+    }
+    Ok(actions)
 }
 
 fn map_actions(actions: Vec<atspi::Action>) -> Vec<SemanticAction> {

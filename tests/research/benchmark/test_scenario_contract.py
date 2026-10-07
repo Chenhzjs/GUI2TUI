@@ -11,7 +11,7 @@ HERE = Path(__file__).parent
 class TaskContract(unittest.TestCase):
     def test_no_direct_gui_delivery(self):
         tree = ast.parse((HERE / 'scenario_session.py').read_text())
-        forbidden = {'queryAction', 'queryEditableText', 'doAction', 'setTextContents',
+        forbidden = {'queryEditableText', 'doAction', 'setTextContents',
                      'insertText', 'deleteText', 'grabFocus', 'generateKeyboardEvent',
                      'generateMouseEvent'}
         for node in ast.walk(tree):

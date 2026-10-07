@@ -25,7 +25,9 @@
       "id": "firefox_reload",
       "application": "firefox",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "load local HTTP fixture at application startup",
+        "invoke Reload through GUI2TUI",
+        "assert fresh HTTP request"
       ],
       "scenario": "reload",
       "execution": "GUI2TUI terminal input"
@@ -70,7 +72,9 @@
       "id": "mousepad_fullscreen",
       "application": "mousepad",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "open parent menu through GUI2TUI",
+        "invoke exact task command through GUI2TUI",
+        "assert public checked state or fullscreen bounds"
       ],
       "scenario": "fullscreen",
       "execution": "GUI2TUI terminal input"
@@ -79,7 +83,9 @@
       "id": "mousepad_line_numbers",
       "application": "mousepad",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "open parent menu through GUI2TUI",
+        "invoke exact task command through GUI2TUI",
+        "assert public checked state or fullscreen bounds"
       ],
       "scenario": "line_numbers",
       "execution": "GUI2TUI terminal input"
@@ -88,7 +94,9 @@
       "id": "mousepad_word_wrap",
       "application": "mousepad",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "open parent menu through GUI2TUI",
+        "invoke exact task command through GUI2TUI",
+        "assert public checked state or fullscreen bounds"
       ],
       "scenario": "word_wrap",
       "execution": "GUI2TUI terminal input"
@@ -115,7 +123,9 @@
       "id": "featherpad_reload",
       "application": "featherpad",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "edit unsaved document through GUI2TUI external editor",
+        "invoke Reload through GUI2TUI",
+        "assert original fixture text restored"
       ],
       "scenario": "reload",
       "execution": "GUI2TUI terminal input"
@@ -178,7 +188,9 @@
       "id": "okular_zoom_in",
       "application": "okular",
       "steps": [
-        "select exact command in GUI2TUI command palette"
+        "set numeric zoom through GUI2TUI text editing",
+        "invoke Zoom In through GUI2TUI",
+        "assert public zoom percentage increased"
       ],
       "scenario": "zoom_in",
       "execution": "GUI2TUI terminal input"

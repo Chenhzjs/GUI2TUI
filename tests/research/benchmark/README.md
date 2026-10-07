@@ -20,7 +20,8 @@ Each task starts a fresh container with networking disabled. The default
 layout is flat; use `--layout spatial` to test spatial presentation separately.
 The runner records image identity, binary hash, a fixed copy of the scenario
 script, terminal transcripts, public before/after observations, and results.
-Firefox navigates to a local data URL. Mousepad editing uses GUI2TUI's
+Firefox navigates to a local data URL; reload uses a container-local HTTP
+fixture and asserts a fresh request. Mousepad editing uses GUI2TUI's
 configured external editor on its exported temporary representation, then
 GUI2TUI commits the edit; the test never changes an application backing file.
 
@@ -30,6 +31,11 @@ or completion. Failed control lookup can reflect the driver, presentation, or
 missing provider capability and is not automatically a backend failure.
 Timeout and startup failures are recorded separately. Some tasks still lack
 sufficient completion assertions; they remain unqualified.
+
+Read-only Action name queries and Component bounds are permitted in the
+oracle. Bounds assert fullscreen state and never drive pointer input. The
+runner accepts `--tasks` to rerun selected scenario names. Latest fixed-version
+results are in [the repair report](../../../docs/validation/gui2tui-pty-task-fixes/REPORT.md).
 
 The manifest contains five tasks for each of four applications. It is a
 development task suite, not a frozen or held-out benchmark.

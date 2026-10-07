@@ -1698,7 +1698,9 @@ impl TuiApplication {
                     if !self.commands.validates_current_target(
                         runtime_id,
                         &locator,
-                        self.scopes.active(),
+                        self.scopes
+                            .scope_for_node(runtime_id)
+                            .unwrap_or(self.scopes.active()),
                         intent,
                     ) || !self.scopes.allows_node(runtime_id)
                     {
@@ -2771,7 +2773,9 @@ impl TuiApplication {
         if !self.commands.validates_current_target(
             runtime_id,
             expected_locator,
-            self.scopes.active(),
+            self.scopes
+                .scope_for_node(runtime_id)
+                .unwrap_or(self.scopes.active()),
             intent,
         ) || !self.scopes.allows_node(runtime_id)
         {
@@ -4387,8 +4391,13 @@ impl TuiApplication {
             }
         }
 
-        let condition =
-            TransitionCondition::for_action(intent, runtime_id, &self.cache, &self.scopes);
+        // Generic activation has no promised effect. In particular an effect
+        // observation deadline must not cancel a still-pending public delivery.
+        let condition = if matches!(intent, UiIntent::Activate | UiIntent::OpenMenu) {
+            None
+        } else {
+            TransitionCondition::for_action(intent, runtime_id, &self.cache, &self.scopes)
+        };
         let cancellation = crate::modality::CancellationToken::default();
         let ticket = match self.runtime.begin(
             crate::runtime::OperationKind::TransitionObservation,
@@ -6222,7 +6231,9 @@ fn build_contextual_view(
                 ) && !commands.validates_current_target(
                     binding.runtime_id,
                     &binding.backend_locator,
-                    scopes.active(),
+                    scopes
+                        .scope_for_node(binding.runtime_id)
+                        .unwrap_or(scopes.active()),
                     binding.default_intent,
                 )))
         {

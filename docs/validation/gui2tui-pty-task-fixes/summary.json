@@ -1,0 +1,229 @@
+{
+  "image": "sha256:4c0f92e8a71fe771d06cf20a43426ddd9f0354afc152c32a0425be8ab8a2cc95",
+  "script_sha256": "69830ab896f571e1db5b41a9440d9e9ee7ce58968ef65baf0bfba11e8227e001",
+  "tasks": [
+    {
+      "application": "firefox",
+      "scenario": "address_navigate",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "destination document title exposed by public Accessibility"
+    },
+    {
+      "application": "firefox",
+      "scenario": "new_tab",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab"
+    },
+    {
+      "application": "firefox",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "local HTTP fixture received a fresh reload request",
+      "request_counts": [
+        2,
+        3
+      ]
+    },
+    {
+      "application": "firefox",
+      "scenario": "list_tabs",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public tab list panel is showing"
+    },
+    {
+      "application": "firefox",
+      "scenario": "firefox_view",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "Firefox View document exposed"
+    },
+    {
+      "application": "mousepad",
+      "scenario": "find",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "search focuses a public editable single-line control"
+    },
+    {
+      "application": "mousepad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new tab and exact document text"
+    },
+    {
+      "application": "mousepad",
+      "scenario": "fullscreen",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public window bounds changed to Xvfb screen bounds"
+    },
+    {
+      "application": "mousepad",
+      "scenario": "line_numbers",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": false,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "assertion_failed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "mousepad",
+      "scenario": "word_wrap",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": false,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "assertion_failed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "featherpad",
+      "scenario": "select_text",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "featherpad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab"
+    },
+    {
+      "application": "featherpad",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": false,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "status": "failed",
+      "error": "reload precondition: GUI2TUI text edit not confirmed"
+    },
+    {
+      "application": "featherpad",
+      "scenario": "find",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "search focuses a public editable single-line control"
+    },
+    {
+      "application": "featherpad",
+      "scenario": "side_pane",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "document side pane exposes sample.txt list item"
+    },
+    {
+      "application": "okular",
+      "scenario": "sidebar",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "okular",
+      "scenario": "browse",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "okular",
+      "scenario": "highlighter",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "okular",
+      "scenario": "underline",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed"
+    },
+    {
+      "application": "okular",
+      "scenario": "zoom_in",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "764c429f4fa3eef8ca3c9495c3c690930dfc3aed529bcd7962e8f605306e1981",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public zoom percentage increased"
+    }
+  ]
+}

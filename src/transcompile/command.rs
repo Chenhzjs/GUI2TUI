@@ -402,7 +402,8 @@ fn all_commands(group: &CommandGroup) -> impl Iterator<Item = &SemanticCommand> 
 fn is_command_role(role: &SemanticRole) -> bool {
     matches!(
         role,
-        SemanticRole::MenuItem
+        SemanticRole::Menu
+            | SemanticRole::MenuItem
             | SemanticRole::Button
             | SemanticRole::ToggleButton
             | SemanticRole::CheckBox

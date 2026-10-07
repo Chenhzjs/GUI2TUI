@@ -165,7 +165,7 @@ pub fn interaction_capability(
             }
             return InteractionCapability::None;
         }
-        SemanticRole::MenuItem => {
+        SemanticRole::Menu | SemanticRole::MenuItem => {
             if !is_current_action_target(states) {
                 return InteractionCapability::None;
             }
@@ -218,7 +218,6 @@ pub fn interaction_capability(
         | SemanticRole::Audio
         | SemanticRole::Video
         | SemanticRole::MenuBar
-        | SemanticRole::Menu
         | SemanticRole::List
         | SemanticRole::TabList
         | SemanticRole::Tree
@@ -286,7 +285,12 @@ fn compatible_action_names(role: &SemanticRole, intent: UiIntent) -> &'static [&
         // Qt 6 QListWidgetItem exposes Toggle, but the user operation is Select.
         (SemanticRole::ListItem, UiIntent::Select) => &["select", "toggle", "activate", "click"],
         (SemanticRole::MenuItem, UiIntent::OpenMenu) => &["showmenu", "show-menu"],
-        (SemanticRole::MenuItem, UiIntent::Activate) => &["activate", "click", "press"],
+        (SemanticRole::Menu, UiIntent::OpenMenu) => {
+            &["showmenu", "show-menu", "click", "press", "activate"]
+        }
+        (SemanticRole::Menu | SemanticRole::MenuItem, UiIntent::Activate) => {
+            &["activate", "click", "press"]
+        }
         (SemanticRole::Link, UiIntent::Activate) => &["activate", "click", "press"],
         // Table content view may expose this exact public action for the
         // current TableCell. It does not imply a file/directory kind.
@@ -363,6 +367,25 @@ mod tests {
                 keybinding: None,
             })
             .collect()
+    }
+
+    #[test]
+    fn menu_entry_requires_an_explicit_public_opening_action() {
+        assert_eq!(
+            interaction_capability(
+                &SemanticRole::Menu,
+                &[],
+                &actions(&["click"]),
+                &[],
+                &[],
+                &[]
+            ),
+            InteractionCapability::OpenMenu
+        );
+        assert_eq!(
+            interaction_capability(&SemanticRole::Menu, &[], &[], &[], &[], &[]),
+            InteractionCapability::None
+        );
     }
 
     #[test]

@@ -17,6 +17,7 @@ def main():
     p.add_argument('--binary', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--apps', nargs='+', choices=list(SCENARIOS), default=list(SCENARIOS))
+    p.add_argument('--tasks', nargs='+', help='Optional scenario names to run')
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     script = args.output.resolve() / 'scenario_session.py'
@@ -50,7 +51,7 @@ def main():
         row = {k:v for k,v in row.items() if k not in ('steps', 'before', 'after')}
         print(json.dumps(row), flush=True)
         return row
-    tasks = [(a,s) for a in args.apps for s in SCENARIOS[a]]
+    tasks = [(a,s) for a in args.apps for s in SCENARIOS[a] if not args.tasks or s in args.tasks]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(run, tasks))
     (args.output / 'summary.json').write_text(json.dumps(dict(image=image, script_sha256=script_hash, tasks=results), indent=2))

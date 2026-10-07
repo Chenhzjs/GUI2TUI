@@ -1437,8 +1437,20 @@ fn element_lines_for_width(
 }
 
 fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
-    let width = area.width.min(72);
-    let height = (palette.entries.len() as u16 + 4).min(area.height).max(5);
+    let width = area.width.min(160);
+    let text_width = usize::from(width.saturating_sub(2)).max(1);
+    let entry_lines: usize = palette
+        .entries
+        .iter()
+        .map(|entry| {
+            // Leave room for wrapping at word boundaries, as well as the marker.
+            (entry.label.chars().count() + 2)
+                .div_ceil(text_width)
+                .max(1)
+                + 1
+        })
+        .sum();
+    let height = (entry_lines.saturating_add(5).min(usize::from(area.height))) as u16;
     let popup = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
         area.y + area.height.saturating_sub(height) / 2,
