@@ -48,7 +48,7 @@ class Terminal:
         self.stream = pyte.Stream(self.screen)
         self.evidence = evidence
         self.transcript = ""
-        self.child = pexpect.spawn(binary, ["--session", "desktop", "--layout", os.environ.get("GUI2TUI_TEST_LAYOUT", "spatial"), "--app", app],
+        self.child = pexpect.spawn(binary, ["--log-level", "debug", "--session", "desktop", "--layout", os.environ.get("GUI2TUI_TEST_LAYOUT", "spatial"), "--app", app],
                                   encoding="utf-8", dimensions=(50, 320), timeout=1)
         self.wait("? Help", 40)
 
@@ -119,6 +119,8 @@ class Terminal:
         (output / "terminal.ansi").write_text(self.transcript)
         (output / "terminal.txt").write_text("\n".join(self.screen.display))
         self.child.close(force=True)
+        for log in Path("/tmp/runtime").rglob("product.log"):
+            (output / "product.log").write_bytes(log.read_bytes())
 
 
 def observe(app):
@@ -151,6 +153,9 @@ def observe(app):
             try:
                 t = n.queryText()
                 row["text"] = t.getText(0, min(t.characterCount, 4096))
+                if any("MULTI_LINE" in st for st in row["states"]) and t.characterCount:
+                    row["default_attributes"] = t.getDefaultAttributes()
+                    row["first_attributes"] = t.getAttributes(0)
             except NotImplementedError:
                 pass
         rows.append(row)
@@ -394,6 +399,12 @@ def main():
         if terminal and hasattr(terminal, "child"):
             terminal.close(args.output)
         args.output.mkdir(parents=True, exist_ok=True)
+        log = args.output / "product.log"
+        if log.exists():
+            result["backend_action_deliveries"] = [
+                {"locator": match[0], "action_index": int(match[1]), "accepted": match[2] == "true"}
+                for match in re.findall(r"public action delivery returned locator=(\S+) action_index=(\d+) accepted=(true|false)", log.read_text())
+            ]
         (args.output / "result.json").write_text(json.dumps(result, indent=2))
     print(json.dumps({k:v for k,v in result.items() if k not in ("before", "after", "steps")}))
 

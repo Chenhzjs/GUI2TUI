@@ -1388,13 +1388,6 @@ impl AtspiBackend {
             proxy.get_state(),
         )
         .await?;
-        let child_count = dbus_operation(
-            self.operation_timeout,
-            "validate multiline leaf target",
-            &encoded_id,
-            proxy.child_count(),
-        )
-        .await?;
         if role != Role::Text
             || interfaces.contains(Interface::Document)
             || !interfaces.contains(Interface::Text)
@@ -1403,9 +1396,45 @@ impl AtspiBackend {
             || !states.contains(State::MultiLine)
             || states.contains(State::ReadOnly)
             || states.contains(State::ManagesDescendants)
-            || child_count != 0
         {
             return Err(BackendError::ComplexTextUnsupported(encoded_id));
+        }
+        // Scroll-area chrome does not make the parent's public text rich content.
+        // Reject content-bearing or unknown descendants, with a bounded fresh walk.
+        let mut pending = dbus_operation(
+            self.operation_timeout,
+            "read multiline auxiliary children",
+            &encoded_id,
+            proxy.get_children(),
+        )
+        .await?;
+        let mut inspected = 0;
+        while let Some(child) = pending.pop() {
+            inspected += 1;
+            if inspected > 32 {
+                return Err(BackendError::ComplexTextUnsupported(encoded_id));
+            }
+            let child_proxy = self
+                .accessible_proxy(&child)
+                .await
+                .map_err(|e| BackendError::ObjectUnavailable(encoded_id.clone(), e))?;
+            let (child_role, child_interfaces, grandchildren) = dbus_operation(
+                self.operation_timeout,
+                "validate multiline auxiliary child",
+                &encoded_id,
+                async {
+                    Ok((
+                        child_proxy.get_role().await?,
+                        child_proxy.get_interfaces().await?,
+                        child_proxy.get_children().await?,
+                    ))
+                },
+            )
+            .await?;
+            if !plain_text_auxiliary_child(child_role, child_interfaces) {
+                return Err(BackendError::ComplexTextUnsupported(encoded_id));
+            }
+            pending.extend(grandchildren);
         }
         let proxies = atspi_operation(
             self.operation_timeout,
@@ -2547,6 +2576,7 @@ impl AtspiBackend {
             action_proxy.do_action(index),
         )
         .await?;
+        tracing::debug!(target: "gui2tui::product", locator = %encoded_id, action_index = selected.index, accepted, "public action delivery returned");
         if !accepted {
             return Err(BackendError::ActionRejected {
                 node_id: id.encode(),
@@ -4091,6 +4121,14 @@ fn map_dbus_error(node_id: String, error: zbus::Error) -> BackendError {
     }
 }
 
+fn plain_text_auxiliary_child(role: Role, interfaces: atspi::InterfaceSet) -> bool {
+    matches!(role, Role::Filler | Role::Panel | Role::ScrollBar)
+        && !interfaces.contains(Interface::Text)
+        && !interfaces.contains(Interface::EditableText)
+        && !interfaces.contains(Interface::Document)
+        && !interfaces.contains(Interface::Hypertext)
+}
+
 // GetActions returns localized presentation metadata on some providers.
 // Resolve execution names through the indexed public API, never array defaults.
 async fn read_public_actions(proxy: &ActionProxy<'_>) -> zbus::Result<Vec<atspi::Action>> {
@@ -4430,6 +4468,22 @@ mod tests {
             "XDG_SESSION_TYPE=x11, DBUS_SESSION_BUS_ADDRESS=<set>, DISPLAY=<set>, WAYLAND_DISPLAY=<unset>"
         );
         assert!(!summary.contains("secret") && !summary.contains(":99"));
+    }
+
+    #[test]
+    fn multiline_auxiliary_children_exclude_nested_content() {
+        let component = atspi::InterfaceSet::new(Interface::Component);
+        assert!(plain_text_auxiliary_child(Role::Filler, component));
+        assert!(plain_text_auxiliary_child(Role::ScrollBar, component));
+        assert!(!plain_text_auxiliary_child(Role::Text, component));
+        assert!(!plain_text_auxiliary_child(
+            Role::Panel,
+            atspi::InterfaceSet::new(Interface::Text)
+        ));
+        assert!(!plain_text_auxiliary_child(
+            Role::Panel,
+            atspi::InterfaceSet::new(Interface::Document)
+        ));
     }
 
     fn test_event(path: &str) -> crate::events::NormalizedEvent {

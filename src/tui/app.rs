@@ -5840,7 +5840,6 @@ pub async fn qualify_complex_text_capabilities(
                     })
                     && node.debug.interfaces.iter().any(|item| item == "Text")
                     && node.debug.interfaces.iter().any(|item| item == "EditableText")
-                    && node.children.is_empty()
             })
         })
         .collect::<Vec<_>>();
@@ -5853,11 +5852,8 @@ pub async fn qualify_complex_text_capabilities(
         else {
             continue;
         };
-        if backend
-            .read_complete_plain_multiline_text(&locator)
-            .await
-            .is_err()
-        {
+        if let Err(error) = backend.read_complete_plain_multiline_text(&locator).await {
+            tracing::debug!(target: "gui2tui::product", %error, "multiline qualification rejected");
             continue;
         }
         let Ok(mut node) = backend.refresh_node(&locator, false).await else {
