@@ -339,6 +339,11 @@ def main():
                 terminal.send("e")
                 terminal.pump(2)
         terminal.pump(8)
+        if args.application == "featherpad" and scenario == "reload":
+            pending = observe(app)
+            if any(r["name"] == "Discard changes" and r["role"] == "push button" for r in pending):
+                terminal.command("Discard changes")
+                terminal.pump(4)
         after = observe(app)
         result.update(before=before, after=after, operation_dispatched=True)
         # A changed tree alone does not prove task completion.

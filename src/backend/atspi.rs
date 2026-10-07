@@ -235,12 +235,10 @@ pub enum BackendError {
         "application accepted text update for AT-SPI object {0}, but authoritative readback did not match"
     )]
     TextUpdateNotVerified(String),
-    #[error("AT-SPI object {0} is not a complete writable multiline plain-text target")]
+    #[error("AT-SPI object {0} is not a complete writable multiline text target")]
     ComplexTextUnsupported(String),
     #[error("AT-SPI text target {0} is incomplete or exceeds the external-edit bound")]
     ComplexTextIncomplete(String),
-    #[error("AT-SPI text target {0} exposes non-default formatting and is not plain text")]
-    ComplexTextRich(String),
     #[error("AT-SPI text target {0} changed while external editing was active")]
     ComplexTextConflict(String),
     #[error("AT-SPI object {0} is not a supported writable Value control")]
@@ -1352,9 +1350,10 @@ impl AtspiBackend {
         .await
     }
 
-    /// Read one complete, bounded, leaf multiline target that exposes no
-    /// non-default Text attributes. Passwords are rejected before Text access.
-    pub async fn read_complete_plain_multiline_text(
+    /// Read complete bounded text for an explicit whole-content replacement.
+    /// Formatting and children do not veto the user-requested replacement.
+    /// Passwords are rejected before Text access.
+    pub async fn read_complete_multiline_text(
         &self,
         locator: &BackendLocator,
     ) -> Result<String, BackendError> {
@@ -1389,52 +1388,13 @@ impl AtspiBackend {
         )
         .await?;
         if role != Role::Text
-            || interfaces.contains(Interface::Document)
             || !interfaces.contains(Interface::Text)
             || !interfaces.contains(Interface::EditableText)
             || !states.contains(State::Editable)
             || !states.contains(State::MultiLine)
             || states.contains(State::ReadOnly)
-            || states.contains(State::ManagesDescendants)
         {
             return Err(BackendError::ComplexTextUnsupported(encoded_id));
-        }
-        // Scroll-area chrome does not make the parent's public text rich content.
-        // Reject content-bearing or unknown descendants, with a bounded fresh walk.
-        let mut pending = dbus_operation(
-            self.operation_timeout,
-            "read multiline auxiliary children",
-            &encoded_id,
-            proxy.get_children(),
-        )
-        .await?;
-        let mut inspected = 0;
-        while let Some(child) = pending.pop() {
-            inspected += 1;
-            if inspected > 32 {
-                return Err(BackendError::ComplexTextUnsupported(encoded_id));
-            }
-            let child_proxy = self
-                .accessible_proxy(&child)
-                .await
-                .map_err(|e| BackendError::ObjectUnavailable(encoded_id.clone(), e))?;
-            let (child_role, child_interfaces, grandchildren) = dbus_operation(
-                self.operation_timeout,
-                "validate multiline auxiliary child",
-                &encoded_id,
-                async {
-                    Ok((
-                        child_proxy.get_role().await?,
-                        child_proxy.get_interfaces().await?,
-                        child_proxy.get_children().await?,
-                    ))
-                },
-            )
-            .await?;
-            if !plain_text_auxiliary_child(child_role, child_interfaces) {
-                return Err(BackendError::ComplexTextUnsupported(encoded_id));
-            }
-            pending.extend(grandchildren);
         }
         let proxies = atspi_operation(
             self.operation_timeout,
@@ -1470,35 +1430,12 @@ impl AtspiBackend {
         if value.len() > MAX_EXTERNAL_TEXT_BYTES || value.chars().count() != count as usize {
             return Err(BackendError::ComplexTextIncomplete(encoded_id));
         }
-        let mut offset = 0;
-        let mut runs = 0_usize;
-        while offset < count {
-            let (attributes, start, end) = dbus_operation(
-                self.operation_timeout,
-                "read multiline attribute run",
-                &encoded_id,
-                text.get_attributes(offset),
-            )
-            .await?;
-            if start > offset || end <= offset || runs >= 512 {
-                return Err(BackendError::NonAdvancingTextRange {
-                    node_id: encoded_id.clone(),
-                    start,
-                    end,
-                });
-            }
-            if !attributes.is_empty() {
-                return Err(BackendError::ComplexTextRich(encoded_id));
-            }
-            offset = end.min(count);
-            runs += 1;
-        }
         Ok(value)
     }
 
     /// Compare immediately before write, mutate through public EditableText,
     /// then independently read the complete authoritative result.
-    pub async fn replace_complete_plain_multiline_text(
+    pub async fn replace_complete_multiline_text(
         &self,
         locator: &BackendLocator,
         expected: &str,
@@ -1510,7 +1447,7 @@ impl AtspiBackend {
         {
             return Err(BackendError::ComplexTextIncomplete(encoded_id));
         }
-        let current = self.read_complete_plain_multiline_text(locator).await?;
+        let current = self.read_complete_multiline_text(locator).await?;
         if current != expected {
             return Err(BackendError::ComplexTextConflict(encoded_id));
         }
@@ -1543,7 +1480,7 @@ impl AtspiBackend {
         if !accepted {
             return Err(BackendError::TextUpdateRejected(encoded_id));
         }
-        let resulting = self.read_complete_plain_multiline_text(locator).await?;
+        let resulting = self.read_complete_multiline_text(locator).await?;
         Ok(ComplexTextMutation {
             requested: candidate.to_owned(),
             resulting,
@@ -4121,14 +4058,6 @@ fn map_dbus_error(node_id: String, error: zbus::Error) -> BackendError {
     }
 }
 
-fn plain_text_auxiliary_child(role: Role, interfaces: atspi::InterfaceSet) -> bool {
-    matches!(role, Role::Filler | Role::Panel | Role::ScrollBar)
-        && !interfaces.contains(Interface::Text)
-        && !interfaces.contains(Interface::EditableText)
-        && !interfaces.contains(Interface::Document)
-        && !interfaces.contains(Interface::Hypertext)
-}
-
 // GetActions returns localized presentation metadata on some providers.
 // Resolve execution names through the indexed public API, never array defaults.
 async fn read_public_actions(proxy: &ActionProxy<'_>) -> zbus::Result<Vec<atspi::Action>> {
@@ -4468,22 +4397,6 @@ mod tests {
             "XDG_SESSION_TYPE=x11, DBUS_SESSION_BUS_ADDRESS=<set>, DISPLAY=<set>, WAYLAND_DISPLAY=<unset>"
         );
         assert!(!summary.contains("secret") && !summary.contains(":99"));
-    }
-
-    #[test]
-    fn multiline_auxiliary_children_exclude_nested_content() {
-        let component = atspi::InterfaceSet::new(Interface::Component);
-        assert!(plain_text_auxiliary_child(Role::Filler, component));
-        assert!(plain_text_auxiliary_child(Role::ScrollBar, component));
-        assert!(!plain_text_auxiliary_child(Role::Text, component));
-        assert!(!plain_text_auxiliary_child(
-            Role::Panel,
-            atspi::InterfaceSet::new(Interface::Text)
-        ));
-        assert!(!plain_text_auxiliary_child(
-            Role::Panel,
-            atspi::InterfaceSet::new(Interface::Document)
-        ));
     }
 
     fn test_event(path: &str) -> crate::events::NormalizedEvent {

@@ -3166,7 +3166,7 @@ impl TuiApplication {
             .ok_or_else(|| "Application generation is unavailable".to_owned())?;
         let original = self
             .backend
-            .read_complete_plain_multiline_text(&locator)
+            .read_complete_multiline_text(&locator)
             .await
             .map_err(|error| format!("Cannot acquire complete plain text: {error}"))?;
         let ticket = self
@@ -3239,7 +3239,7 @@ impl TuiApplication {
 
                 let current = match self
                     .backend
-                    .read_complete_plain_multiline_text(&session.locator)
+                    .read_complete_multiline_text(&session.locator)
                     .await
                 {
                     Ok(current) => current,
@@ -3297,7 +3297,7 @@ impl TuiApplication {
                 };
                 let result = self
                     .backend
-                    .replace_complete_plain_multiline_text(&locator, &expected, &text)
+                    .replace_complete_multiline_text(&locator, &expected, &text)
                     .await;
                 if !self.complete_external_text_ticket(&mut session, true, "write-finished") {
                     return;
@@ -5817,7 +5817,7 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
     }
 }
 
-/// Qualify bounded plain multiline readback before advertising whole-text edit.
+/// Qualify bounded complete multiline readback before advertising whole-text edit.
 /// Shared by the Human runtime and the research qualification harness.
 pub async fn qualify_complex_text_capabilities(
     backend: &AtspiBackend,
@@ -5844,7 +5844,6 @@ pub async fn qualify_complex_text_capabilities(
         })
         .collect::<Vec<_>>();
     candidates.sort();
-    candidates.truncate(8);
     for runtime_id in candidates {
         let Some(locator) = cache
             .node(runtime_id)
@@ -5852,7 +5851,7 @@ pub async fn qualify_complex_text_capabilities(
         else {
             continue;
         };
-        if let Err(error) = backend.read_complete_plain_multiline_text(&locator).await {
+        if let Err(error) = backend.read_complete_multiline_text(&locator).await {
             tracing::debug!(target: "gui2tui::product", %error, "multiline qualification rejected");
             continue;
         }

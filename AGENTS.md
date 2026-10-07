@@ -14,6 +14,13 @@ terminal-native interaction model. It transforms interaction, not screenshots.
 - The original GUI remains authoritative.
 - Correct degradation is a feature. Never imitate the GUI merely for visual
   similarity or claim capability that Accessibility does not expose.
+- Expose public operation capabilities without speculative effect or safety
+  vetoes. Explicit whole-text replacement may replace formatting or embedded
+  content according to the application's EditableText semantics; children or
+  formatting alone must not disable it. Keep identity, interface, scope,
+  password, backend acceptance, and authoritative readback checks. Distinguish
+  accepted delivery from task-effect confirmation; unknown effect is not a
+  reason to hide an otherwise supported user operation.
 
 ## Architecture at a Glance
 
