@@ -258,6 +258,10 @@ supports it; ordinary Enter is not changed into an implicit raw key.
 
 ## Optional complex-text handler
 
+For F3 exact named actions, multiselection, interface-based Value support,
+and configurable discovery/edit budgets on the current development branch,
+see [Public operations](public-operations.md).
+
 Ordinary startup and native single-line/Value interaction require no external
 editor. To enable external interaction for targets GUI2TUI independently
 qualifies as complete, bounded, non-secret multiline plain text, configure one

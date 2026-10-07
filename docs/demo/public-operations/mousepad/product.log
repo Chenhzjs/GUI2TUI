@@ -1,0 +1,15 @@
+2026-10-07T13:46:03.849091Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T13:46:07.401140Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=22 recent_commands=0
+2026-10-07T13:46:07.401561Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T13:46:08.018749Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=22 recent_commands=0
+2026-10-07T13:46:08.018807Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3
+2026-10-07T13:46:15.714014Z DEBUG gui2tui::product: public action delivery returned locator=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzQ action_index=0 accepted=true
+2026-10-07T13:46:16.371765Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=23 recent_commands=0
+2026-10-07T13:46:16.371859Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=4
+2026-10-07T13:46:16.371968Z DEBUG gui2tui::product: semantic transition observation completed outcome=Unverifiable condition="unavailable" authoritative_checks=1 event_wakeups=0 invocation_wakeups=1
+2026-10-07T13:46:17.021028Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=23 recent_commands=1
+2026-10-07T13:46:17.021085Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=5
+2026-10-07T13:46:18.087970Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=23 recent_commands=1
+2026-10-07T13:46:18.088034Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=6
+2026-10-07T13:46:18.764037Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=23 recent_commands=1
+2026-10-07T13:46:18.764099Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=7

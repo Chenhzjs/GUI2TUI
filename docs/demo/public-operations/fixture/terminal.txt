@@ -1,0 +1,42 @@
+┌ GUI2TUI — Public operations fixture ───────────────────────────────────────────────────────────────────────┐
+│  fixture.py:                                                                                               │
+│  Public operations fixture:                                                                                │
+│  Invoked through public action:                                                                            │
+│> [Named operation]                                                                                         │
+│  Invoked through public action                                                                             │
+│  [Selection: Beta ▾]                                                                                       │
+│  Public amount: 25  [↑ increase / ↓ decrease]                                                              │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+? Help · F6 Region · Tab Control · Enter Use · : Commands · F3 Actions                                        

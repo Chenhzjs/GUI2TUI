@@ -61,6 +61,13 @@ state. The current v1.1 release candidate adds:
 - expose `Send Enter to current control` as an explicit, low-level raw-input
   capability. It is never silently used as Semantic Submit.
 
+The current development branch also exposes **F3 public operations**: choose
+an exact advertised action, add/remove selection members, and adjust values
+without restricting them to a small widget-role list. Whole-text editing has
+a configurable byte budget. See the [operation guide](docs/public-operations.md)
+and [new recorded demonstrations](docs/demo/public-operations/README.md).
+These additions are source-branch capabilities, not a new published release.
+
 ## What it is not
 
 GUI2TUI is not a remote desktop, framebuffer-to-ASCII converter, OCR system,
@@ -139,6 +146,9 @@ mockups:
 
 The original GTK fixture and the terminal show the same public semantic action
 and resulting state:
+
+For the current F3 interface and real Firefox/Mousepad tasks, watch the
+[public operations videos](docs/demo/public-operations/README.md).
 
 ![Real GUI and TUI action confirmation](docs/assets/readme/action-confirmed.png)
 

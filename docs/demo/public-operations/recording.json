@@ -1,0 +1,83 @@
+{
+  "source_commit": "3ef7ad7bb26078661da5830d3187843593761218",
+  "image": "sha256:a61554f907aadd8e4326f1d470dfc9b873d23146440eaad5b6cb85a1a3304960",
+  "videos": [
+    {
+      "application": "fixture",
+      "video": "fixture/operations.mp4",
+      "sha256": "044221b7ebe89d1a240afc23eef649d67e4c84be65244492758ff04f3af20050",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 1440,
+            "height": 1000
+          }
+        ],
+        "format": {
+          "duration": "34.600000",
+          "size": "800222"
+        }
+      },
+      "status": "passed",
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa"
+    },
+    {
+      "application": "firefox",
+      "video": "firefox/operations.mp4",
+      "sha256": "e61d0d83399af3d2df1ca846e912f5b6d869cf7c1c5b39e6900590bb46ad137f",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 1440,
+            "height": 1000
+          }
+        ],
+        "format": {
+          "duration": "21.400000",
+          "size": "673745"
+        }
+      },
+      "status": "passed",
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa"
+    },
+    {
+      "application": "mousepad",
+      "video": "mousepad/operations.mp4",
+      "sha256": "c34784f19a422b24405eaa6eddfc7632b25b57e6d4c83acc22d78f802b8067cb",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 1440,
+            "height": 1000
+          }
+        ],
+        "format": {
+          "duration": "22.467000",
+          "size": "670339"
+        }
+      },
+      "status": "passed",
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa"
+    }
+  ],
+  "terminal_dimensions": {
+    "fixture": [
+      42,
+      110
+    ],
+    "mousepad": [
+      42,
+      110
+    ],
+    "firefox": [
+      42,
+      100
+    ]
+  }
+}

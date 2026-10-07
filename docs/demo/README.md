@@ -1,5 +1,11 @@
 # GUI2TUI demo assets
 
+## Current development branch: public operations
+
+See [the current recordings](public-operations/README.md) for exact named
+actions, multiselection, Value adjustment, Firefox address navigation, and
+Mousepad new-document editing through the real GUI2TUI terminal runtime.
+
 ## v0.3 verified capability recovery
 
 The reproducible v0.3 demonstration shows native Value adjustment, configured

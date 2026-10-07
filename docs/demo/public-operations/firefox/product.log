@@ -1,0 +1,23 @@
+2026-10-07T13:50:24.281280Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T13:50:25.319682Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=18 recent_commands=0
+2026-10-07T13:50:25.320103Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T13:50:25.380594Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=18 recent_commands=0
+2026-10-07T13:50:25.648840Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=23 recent_commands=0
+2026-10-07T13:50:25.816762Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:25.882519Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:27.332619Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:27.332678Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3
+2026-10-07T13:50:27.636455Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:27.636507Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=4
+2026-10-07T13:50:36.820146Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:38.659976Z DEBUG gui2tui::product: verified text edit semantic_action=Edit source_target=58 edit_target=58 focus_target=58 readback_target=58 requested_characters=77 attempts=[TextEditAttempt { strategy: AtspiSetContents, delivery: Accepted, observed_characters: Some(0), verified: false, detail: None }, TextEditAttempt { strategy: AtspiDeleteAndInsert, delivery: Accepted, observed_characters: Some(0), verified: false, detail: None }, TextEditAttempt { strategy: NativeKeyboardReplace, delivery: Accepted, observed_characters: Some(77), verified: true, detail: None }] window_activation_verified=true focus_verified=true verified=true
+2026-10-07T13:50:38.672406Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T13:50:39.043717Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T13:50:39.043778Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=5
+2026-10-07T13:50:39.102540Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T13:50:39.115801Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T13:50:39.127907Z DEBUG gui2tui::product: semantic actuation target=58 semantic_action=RawEnter strategy=NativeKeyboard(KeyboardPrimitive { key: Enter, modifiers: ModifierSet { control: false, alt: false, shift: false, meta: false } }) native_window=0x600003 window_activation_requested=true window_activation_verified=true focus_requested=true focus_verified=true key_sent=true key=Enter result=success
+2026-10-07T13:50:39.573055Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T13:50:39.573129Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=6
+2026-10-07T13:50:39.900462Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T13:50:39.900529Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=7

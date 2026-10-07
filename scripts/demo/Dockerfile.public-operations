@@ -1,0 +1,3 @@
+# Build gui2tui-capability-tests:local from tests/research/benchmark/Dockerfile.tasks first.
+FROM gui2tui-capability-tests:local
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg xterm wmctrl fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
