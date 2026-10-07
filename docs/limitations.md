@@ -30,9 +30,12 @@ capability or use private application APIs.
 
 - Qualified single-line editing uses bounded atomic replacement and
   authoritative readback.
-- Complete, bounded, non-secret multiline plain text may use an optional local
-  handler. Rich, partial, virtualized, IME, clipboard and remote-caret editing
-  remain limited or read-only.
+- Complete, bounded, non-secret multiline text may use an optional local
+  handler. Explicit whole-text replacement may replace formatting or embedded
+  content according to the provider; children and formatting do not veto it.
+  Partial, virtualized, IME, clipboard and remote-caret editing remain limited.
+  The default 256 KiB whole-text budget is configurable with --max-edit-bytes;
+  tree discovery budgets are --max-nodes and --max-depth.
 - Native text fallback is a bounded delivery strategy for verified EditText
   only. The current qualified native fallback accepts printable ASCII; a
   non-ASCII request is refused rather than silently transliterated or damaged.
@@ -43,6 +46,9 @@ capability or use private application APIs.
 - ProgressBar/LevelBar and other informational Values remain read-only; Value
   mutation is limited to enabled controls with finite public bounds and an
   advertised increment.
+- F3 exposes exact public named actions, selection membership add/remove, and
+  adjustable Values in the current scope. See the
+  [public operations validation](validation/public-operations/REPORT.md).
 
 ## Environment boundaries
 

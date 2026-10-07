@@ -1,0 +1,2 @@
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+{"application": "firefox", "scenario": "new_tab", "driver": "gui2tui_pty", "layout": "flat", "task_completed": true, "binary_sha256": "9422b3c92acd09d617c241cc83a8f156e7c561c82ab51fa4d2e730a32f73f078", "operation_dispatched": true, "status": "passed", "assertion": "new public page tab", "backend_action_deliveries": [{"locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS81NQ", "action_index": 0, "accepted": true}]}

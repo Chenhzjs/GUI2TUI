@@ -38,7 +38,9 @@ fn fresh_user_commands_require_no_config_or_desktop() {
     ] {
         assert!(help.contains(command));
     }
-    assert!(!help.contains("--max-nodes"));
+    assert!(help.contains("--max-nodes"));
+    assert!(help.contains("--max-depth"));
+    assert!(help.contains("--max-edit-bytes"));
 }
 
 #[test]

@@ -1,0 +1,18 @@
+2026-10-07T12:06:38.775117Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T12:06:40.174487Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=18 recent_commands=0
+2026-10-07T12:06:40.174910Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T12:06:40.239002Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=18 recent_commands=0
+2026-10-07T12:06:40.615631Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=23 recent_commands=0
+2026-10-07T12:06:40.805479Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T12:06:40.869099Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T12:06:44.556718Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T12:06:46.355438Z DEBUG gui2tui::product: verified text edit semantic_action=Edit source_target=58 edit_target=58 focus_target=58 readback_target=58 requested_characters=77 attempts=[TextEditAttempt { strategy: AtspiSetContents, delivery: Accepted, observed_characters: Some(0), verified: false, detail: None }, TextEditAttempt { strategy: AtspiDeleteAndInsert, delivery: Accepted, observed_characters: Some(0), verified: false, detail: None }, TextEditAttempt { strategy: NativeKeyboardReplace, delivery: Accepted, observed_characters: Some(77), verified: true, detail: None }] window_activation_verified=true focus_verified=true verified=true
+2026-10-07T12:06:46.374359Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=24 recent_commands=0
+2026-10-07T12:06:46.827930Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T12:06:46.827987Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3
+2026-10-07T12:06:46.844114Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T12:06:46.853885Z DEBUG gui2tui::product: semantic actuation target=58 semantic_action=RawEnter strategy=NativeKeyboard(KeyboardPrimitive { key: Enter, modifiers: ModifierSet { control: false, alt: false, shift: false, meta: false } }) native_window=0x600003 window_activation_requested=true window_activation_verified=true focus_requested=true focus_verified=true key_sent=true key=Enter result=success
+2026-10-07T12:06:47.289308Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T12:06:47.289385Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=4
+2026-10-07T12:06:47.601475Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=25 recent_commands=0
+2026-10-07T12:06:47.601528Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=5

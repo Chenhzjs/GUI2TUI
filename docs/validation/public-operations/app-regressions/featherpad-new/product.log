@@ -1,0 +1,7 @@
+2026-10-07T12:07:17.237326Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T12:07:22.181982Z DEBUG gui2tui::product: public action delivery returned locator=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjU5 action_index=0 accepted=true
+2026-10-07T12:07:22.987850Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=36 recent_commands=0
+2026-10-07T12:07:22.988263Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T12:07:22.988369Z DEBUG gui2tui::product: semantic transition observation completed outcome=Unverifiable condition="unavailable" authoritative_checks=1 event_wakeups=0 invocation_wakeups=1
+2026-10-07T12:07:23.745668Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=1 current_commands=36 recent_commands=1
+2026-10-07T12:07:23.745721Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3

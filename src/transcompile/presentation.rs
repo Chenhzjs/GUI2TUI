@@ -424,9 +424,7 @@ impl SceneCompiler<'_> {
             );
             return;
         }
-        if node.role == SemanticRole::Slider
-            && node.capabilities.contains(&SemanticCapability::Value)
-        {
+        if node.capabilities.contains(&SemanticCapability::Value) {
             self.push(
                 SceneElementKind::Value {
                     label: node.name.clone().unwrap_or_else(|| "Value".to_owned()),

@@ -1,0 +1,27 @@
+"""Development application: normal GTK widgets, no test mutation backdoor."""
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+window = Gtk.Window(title='Public operations fixture')
+window.set_default_size(600, 500)
+box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+window.add(box)
+status = Gtk.Label(label='Not invoked')
+button = Gtk.Button(label='Named operation')
+button.connect('clicked', lambda _: status.set_text('Invoked through public action'))
+box.pack_start(button, False, False, 0)
+box.pack_start(status, False, False, 0)
+items = Gtk.ListBox()
+items.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
+for name in ['Alpha', 'Beta', 'Gamma']:
+    row = Gtk.ListBoxRow()
+    row.get_accessible().set_name(name)
+    row.add(Gtk.Label(label=name))
+    items.add(row)
+box.pack_start(items, True, True, 0)
+scroll = Gtk.Scrollbar(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(value=20, lower=0, upper=100, step_increment=5, page_increment=10, page_size=0))
+scroll.get_accessible().set_name('Public amount')
+box.pack_start(scroll, False, False, 0)
+window.connect('destroy', Gtk.main_quit)
+window.show_all()
+Gtk.main()

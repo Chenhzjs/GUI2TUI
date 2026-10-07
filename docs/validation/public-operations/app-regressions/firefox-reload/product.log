@@ -1,0 +1,13 @@
+2026-10-07T12:06:59.212824Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T12:07:00.426264Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=19 recent_commands=0
+2026-10-07T12:07:00.426650Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T12:07:00.490499Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=19 recent_commands=0
+2026-10-07T12:07:00.789643Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=24 recent_commands=0
+2026-10-07T12:07:00.961677Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=25 recent_commands=0
+2026-10-07T12:07:01.023735Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=25 recent_commands=0
+2026-10-07T12:07:04.752537Z DEBUG gui2tui::product: public action delivery returned locator=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83OQ action_index=0 accepted=true
+2026-10-07T12:07:05.256861Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=25 recent_commands=0
+2026-10-07T12:07:05.256949Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3
+2026-10-07T12:07:05.257051Z DEBUG gui2tui::product: semantic transition observation completed outcome=Unverifiable condition="unavailable" authoritative_checks=1 event_wakeups=0 invocation_wakeups=1
+2026-10-07T12:07:05.670691Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=5 scope_focus_history=0 current_commands=25 recent_commands=1
+2026-10-07T12:07:05.670759Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=4

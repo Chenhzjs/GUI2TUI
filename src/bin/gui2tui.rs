@@ -74,12 +74,16 @@ struct Cli {
     session: Option<SessionChoice>,
 
     /// Maximum accessibility-tree depth per snapshot.
-    #[arg(long, default_value_t = 64, hide = true)]
+    #[arg(long, default_value_t = 64)]
     max_depth: usize,
 
     /// Maximum accessibility objects per snapshot.
-    #[arg(long, default_value_t = 10_000, hide = true)]
+    #[arg(long, default_value_t = 10_000)]
     max_nodes: usize,
+
+    /// Maximum bytes exported for whole-text editing; increase for larger documents.
+    #[arg(long, default_value_t = 256 * 1024, value_parser = parse_edit_limit)]
+    max_edit_bytes: usize,
 
     /// Per-operation D-Bus/AT-SPI timeout in milliseconds.
     #[arg(long, hide = true)]
@@ -232,6 +236,14 @@ enum LogLevel {
     Off,
     Info,
     Debug,
+}
+
+fn parse_edit_limit(value: &str) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .ok()
+        .filter(|n| (1..=i32::MAX as usize).contains(n))
+        .ok_or_else(|| "expected a byte limit between 1 and 2147483647".into())
 }
 
 fn main() -> ExitCode {
@@ -685,6 +697,7 @@ async fn run(
 
     terminal.draw(|frame| frame.render_widget(ratatui::widgets::Paragraph::new("Loading the application's accessible interface... Large applications may take a few seconds."), frame.area()))?;
     let initial_terminal = terminal.size()?;
+    gui2tui::backend::set_external_text_limit(cli.max_edit_bytes);
     let inspect_options = InspectOptions {
         verbose: false,
         max_depth: cli.max_depth,

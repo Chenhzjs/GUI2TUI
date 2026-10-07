@@ -1690,10 +1690,191 @@ impl TuiApplication {
             }
             return false;
         }
+        if key.code == crossterm::event::KeyCode::F(3)
+            && self.edit_session.is_none()
+            && self.command_palette.is_none()
+        {
+            use crate::tui::palette::PublicOperation;
+            let mut actions = Vec::new();
+            for node in self
+                .cache
+                .nodes()
+                .filter(|n| self.scopes.allows_node(n.runtime_id))
+            {
+                if !crate::tui::action::is_public_action_target(&node.states) {
+                    continue;
+                }
+                let label = format!(
+                    "{} [{}] #{}",
+                    node.name.as_deref().unwrap_or("Unnamed"),
+                    node.role,
+                    node.runtime_id
+                );
+                for action in &node.actions {
+                    if !action.name.is_empty() {
+                        actions.push((
+                            node.runtime_id,
+                            node.backend_locator.clone(),
+                            format!("{label} › Action: {}", action.name),
+                            PublicOperation::Action(action.name.clone()),
+                        ));
+                    }
+                }
+                if let Some(parent) = node.parent.and_then(|id| self.cache.node(id)) {
+                    if parent
+                        .capabilities
+                        .contains(&SemanticCapability::SelectChildren)
+                        && self.scopes.allows_node(parent.runtime_id)
+                    {
+                        for selected in [true, false] {
+                            actions.push((
+                                node.runtime_id,
+                                node.backend_locator.clone(),
+                                format!(
+                                    "{label} › {} selection",
+                                    if selected { "Add to" } else { "Remove from" }
+                                ),
+                                PublicOperation::Selection {
+                                    parent: parent.backend_locator.clone(),
+                                    selected,
+                                },
+                            ));
+                        }
+                    }
+                }
+                if node.capabilities.contains(&SemanticCapability::Value) {
+                    for increase in [true, false] {
+                        actions.push((
+                            node.runtime_id,
+                            node.backend_locator.clone(),
+                            format!(
+                                "{label} › Value {}",
+                                if increase { "increase" } else { "decrease" }
+                            ),
+                            PublicOperation::Value { increase },
+                        ));
+                    }
+                }
+            }
+            self.command_palette = Some(CommandPalette::public_actions(
+                self.commands.clone(),
+                self.scopes.active(),
+                actions,
+            ));
+            self.status = if self.cache.nodes().any(|n| !n.truncations.is_empty()) {
+                "Public actions — partial tree; raise --max-nodes / --max-depth and refresh".into()
+            } else {
+                "Public actions — choose the exact named operation".into()
+            };
+            return false;
+        }
         if let Some(mut palette) = self.command_palette.take() {
             match palette.handle_key(key) {
                 PaletteOutcome::Continue => self.command_palette = Some(palette),
                 PaletteOutcome::Close => self.status = "Command palette closed".to_owned(),
+                PaletteOutcome::InvokeAction(runtime_id, locator, operation) => {
+                    use crate::tui::palette::PublicOperation;
+                    let authority = OperationAuthority::capture(
+                        &self.runtime,
+                        &self.application_locator,
+                        runtime_id,
+                        &locator,
+                        &self.cache,
+                        &self.scopes,
+                    );
+                    if let Ok(authority) = authority {
+                        if authority
+                            .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+                            .is_err()
+                        {
+                            self.status = current_command_unavailable_status().into();
+                        } else if let PublicOperation::Action(name) = operation {
+                            match self.backend.refresh_node(&locator, false).await {
+                                Ok(fresh)
+                                    if crate::tui::action::is_public_action_target(
+                                        &fresh.states,
+                                    ) && fresh
+                                        .actions
+                                        .iter()
+                                        .filter(|a| a.name == name)
+                                        .count()
+                                        == 1 =>
+                                {
+                                    let action = fresh
+                                        .actions
+                                        .iter()
+                                        .find(|a| a.name == name)
+                                        .unwrap()
+                                        .clone();
+                                    self.invoke_action_with_transition(
+                                        runtime_id,
+                                        UiIntent::Activate,
+                                        locator,
+                                        action,
+                                        name,
+                                    )
+                                    .await;
+                                }
+                                _ => self.status = "Public action no longer available".into(),
+                            }
+                        } else if let Ok(ticket) = self.runtime.begin(
+                            crate::runtime::OperationKind::TransitionObservation,
+                            crate::modality::CancellationToken::default(),
+                        ) {
+                            if !self.runtime.validates_ticket(&ticket)
+                                || authority
+                                    .validate_before_invocation(
+                                        &self.runtime,
+                                        &self.cache,
+                                        &self.scopes,
+                                    )
+                                    .is_err()
+                            {
+                                self.runtime.complete(&ticket).ok();
+                                self.status = current_command_unavailable_status().into();
+                                return false;
+                            }
+                            let result = match operation {
+                                PublicOperation::Selection { parent, selected } => {
+                                    if self
+                                        .cache
+                                        .runtime_id(&parent)
+                                        .is_some_and(|id| self.scopes.allows_node(id))
+                                    {
+                                        self.backend
+                                            .set_child_selected(&parent, &locator, selected)
+                                            .await
+                                            .map(|()| "Selection membership confirmed".to_owned())
+                                    } else {
+                                        self.status = current_command_unavailable_status().into();
+                                        self.runtime.complete(&ticket).ok();
+                                        return false;
+                                    }
+                                }
+                                PublicOperation::Value { increase } => {
+                                    self.backend.adjust_value(&locator, increase).await.map(
+                                        |value| {
+                                            format!(
+                                                "Value: {} → {} (requested {})",
+                                                value.previous, value.resulting, value.requested
+                                            )
+                                        },
+                                    )
+                                }
+                                PublicOperation::Action(_) => unreachable!(),
+                            };
+                            if self.runtime.complete(&ticket).is_ok() {
+                                let status = match result {
+                                    Ok(status) => status,
+                                    Err(error) => error.to_string(),
+                                };
+                                self.full_reload(Some(status)).await;
+                            }
+                        }
+                    } else {
+                        self.status = current_command_unavailable_status().into();
+                    }
+                }
                 PaletteOutcome::Execute(runtime_id, locator, intent) => {
                     if !self.commands.validates_current_target(
                         runtime_id,
@@ -5832,8 +6013,7 @@ pub async fn qualify_complex_text_capabilities(
         .filter(|root| content.text_capability(*root).should_probe())
         .filter(|root| {
             cache.node(*root).is_some_and(|node| {
-                node.role == SemanticRole::TextInput
-                    && node.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
+                node.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
                     && node.states.contains(&SemanticState::Editable)
                     && node.states.iter().any(|state| {
                         matches!(state, SemanticState::Other(value) if value == "multi-line")

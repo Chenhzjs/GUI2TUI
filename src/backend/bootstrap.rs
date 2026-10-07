@@ -315,11 +315,7 @@ fn semantic_role_and_input_kind(
         record.role,
         record.interfaces.contains(atspi::Interface::EditableText),
     );
-    // Browsers commonly expose an editable location/search bar as ComboBox.
-    // Preserve that structural role while normalizing its editable capability
-    // to the common plain-text input model.
-    let editable_text_control = matches!(role, SemanticRole::TextInput | SemanticRole::ComboBox)
-        && record.interfaces.contains(atspi::Interface::EditableText);
+    let editable_text_control = record.interfaces.contains(atspi::Interface::EditableText);
     let input_kind = editable_text_control.then_some(if record.role == atspi::Role::PasswordText {
         TextInputKind::Password
     } else {
@@ -363,8 +359,7 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::EditText);
     }
-    if *role == SemanticRole::Slider
-        && matches!(record.role, Role::Slider | Role::SpinButton)
+    if !matches!(record.role, Role::ProgressBar | Role::LevelBar)
         && record.interfaces.contains(atspi::Interface::Value)
         && record.states.contains(atspi::State::Enabled)
         && !record.states.contains(atspi::State::ReadOnly)
@@ -453,6 +448,25 @@ mod tests {
         assert_eq!(
             semantic_role_and_input_kind(&combo),
             (SemanticRole::ComboBox, Some(TextInputKind::Plain))
+        );
+    }
+
+    #[test]
+    fn interfaces_are_not_restricted_to_legacy_widget_roles() {
+        let mut node = record("/control", Some("/root"), Some(0));
+        node.role = Role::Panel;
+        node.interfaces.insert(Interface::EditableText);
+        node.states.insert(atspi::State::Editable);
+        let (role, kind) = semantic_role_and_input_kind(&node);
+        assert_eq!(kind, Some(TextInputKind::Plain));
+        assert!(semantic_capabilities(&node, &role, kind).contains(&SemanticCapability::EditText));
+        node.role = Role::ScrollBar;
+        node.interfaces.insert(Interface::Value);
+        node.states.insert(atspi::State::Enabled);
+        node.adjustable_value = true;
+        assert!(
+            semantic_capabilities(&node, &SemanticRole::Slider, None)
+                .contains(&SemanticCapability::Value)
         );
     }
 

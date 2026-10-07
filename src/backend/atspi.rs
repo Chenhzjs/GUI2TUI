@@ -78,7 +78,17 @@ pub struct SelectionMutation {
 }
 
 pub const MAX_EXTERNAL_TEXT_BYTES: usize = 256 * 1024;
-pub const MAX_EXTERNAL_TEXT_CHARACTERS: i32 = 256 * 1024;
+static EXTERNAL_TEXT_LIMIT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(MAX_EXTERNAL_TEXT_BYTES);
+pub fn external_text_limit() -> usize {
+    EXTERNAL_TEXT_LIMIT.load(std::sync::atomic::Ordering::Relaxed)
+}
+pub fn set_external_text_limit(bytes: usize) {
+    EXTERNAL_TEXT_LIMIT.store(
+        bytes.clamp(1, i32::MAX as usize),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
 const TEXT_WRITE_VERIFICATION_TIMEOUT: Duration = Duration::from_millis(750);
 const TEXT_WRITE_VERIFICATION_POLL: Duration = Duration::from_millis(25);
 
@@ -237,7 +247,7 @@ pub enum BackendError {
     TextUpdateNotVerified(String),
     #[error("AT-SPI object {0} is not a complete writable multiline text target")]
     ComplexTextUnsupported(String),
-    #[error("AT-SPI text target {0} is incomplete or exceeds the external-edit bound")]
+    #[error("AT-SPI text target {0} is incomplete or exceeds --max-edit-bytes")]
     ComplexTextIncomplete(String),
     #[error("AT-SPI text target {0} changed while external editing was active")]
     ComplexTextConflict(String),
@@ -1387,8 +1397,7 @@ impl AtspiBackend {
             proxy.get_state(),
         )
         .await?;
-        if role != Role::Text
-            || !interfaces.contains(Interface::Text)
+        if !interfaces.contains(Interface::Text)
             || !interfaces.contains(Interface::EditableText)
             || !states.contains(State::Editable)
             || !states.contains(State::MultiLine)
@@ -1417,7 +1426,7 @@ impl AtspiBackend {
             text.character_count(),
         )
         .await?;
-        if !(0..=MAX_EXTERNAL_TEXT_CHARACTERS).contains(&count) {
+        if !(0..=external_text_limit() as i32).contains(&count) {
             return Err(BackendError::ComplexTextIncomplete(encoded_id));
         }
         let value = dbus_operation(
@@ -1427,7 +1436,7 @@ impl AtspiBackend {
             text.get_text(0, count),
         )
         .await?;
-        if value.len() > MAX_EXTERNAL_TEXT_BYTES || value.chars().count() != count as usize {
+        if value.len() > external_text_limit() || value.chars().count() != count as usize {
             return Err(BackendError::ComplexTextIncomplete(encoded_id));
         }
         Ok(value)
@@ -1442,8 +1451,8 @@ impl AtspiBackend {
         candidate: &str,
     ) -> Result<ComplexTextMutation, BackendError> {
         let encoded_id = locator.encode();
-        if candidate.len() > MAX_EXTERNAL_TEXT_BYTES
-            || candidate.chars().count() > MAX_EXTERNAL_TEXT_CHARACTERS as usize
+        if candidate.len() > external_text_limit()
+            || candidate.chars().count() > external_text_limit()
         {
             return Err(BackendError::ComplexTextIncomplete(encoded_id));
         }
@@ -2159,12 +2168,7 @@ impl AtspiBackend {
             proxy.get_state(),
         )
         .await?;
-        let semantic_role =
-            SemanticRole::from_atspi(role, interfaces.contains(Interface::EditableText));
-        if !matches!(
-            semantic_role,
-            SemanticRole::TextInput | SemanticRole::ComboBox
-        ) || !interfaces.contains(Interface::EditableText)
+        if !interfaces.contains(Interface::EditableText)
             || !states.contains(State::Editable)
             || states.contains(State::MultiLine)
         {
@@ -2543,7 +2547,7 @@ impl AtspiBackend {
             proxy.get_role(),
         )
         .await?;
-        if !matches!(role, Role::Slider | Role::SpinButton) {
+        if matches!(role, Role::ProgressBar | Role::LevelBar) {
             return Err(BackendError::ValueUnsupported(encoded_id));
         }
         let interfaces = dbus_operation(
@@ -2657,6 +2661,98 @@ impl AtspiBackend {
     }
 
     /// Select a direct accessible child through its parent's Selection interface.
+    /// Change membership using a fresh direct-child address, including multiselect lists.
+    pub async fn set_child_selected(
+        &self,
+        parent: &BackendLocator,
+        child: &BackendLocator,
+        selected: bool,
+    ) -> Result<(), BackendError> {
+        let object = object_ref_from_id(parent)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|e| BackendError::ObjectUnavailable(parent.encode(), e))?;
+        let children = dbus_operation(
+            self.operation_timeout,
+            "read selection children",
+            &parent.encode(),
+            proxy.get_children(),
+        )
+        .await?;
+        let positions: Vec<_> = children
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| node_id_from_ref(c).as_ref() == Some(child))
+            .map(|(i, _)| i)
+            .collect();
+        let [index] = positions.as_slice() else {
+            return Err(BackendError::SelectionTargetNotCurrent {
+                container_id: parent.encode(),
+                target_id: child.encode(),
+            });
+        };
+        let child_index =
+            i32::try_from(*index).map_err(|_| BackendError::SelectionIndexOutOfRange {
+                node_id: parent.encode(),
+                index: *index,
+            })?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "selection interfaces",
+            &parent.encode(),
+            proxy.proxies(),
+        )
+        .await?;
+        let selection = atspi_operation(
+            self.operation_timeout,
+            "Selection interface",
+            &parent.encode(),
+            proxies.selection(),
+        )
+        .await?;
+        let accepted = dbus_operation(
+            self.operation_timeout,
+            "change selection membership",
+            &parent.encode(),
+            async {
+                if selected {
+                    selection.select_child(child_index).await
+                } else {
+                    selection.deselect_child(child_index).await
+                }
+            },
+        )
+        .await?;
+        if !accepted {
+            return Err(BackendError::SelectionRejected {
+                node_id: parent.encode(),
+                index: *index,
+            });
+        }
+        let current_children = dbus_operation(
+            self.operation_timeout,
+            "refresh selection children",
+            &parent.encode(),
+            proxy.get_children(),
+        )
+        .await?;
+        if current_children != children {
+            return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+        }
+        let actual = dbus_operation(
+            self.operation_timeout,
+            "read selected child",
+            &parent.encode(),
+            selection.is_child_selected(child_index),
+        )
+        .await?;
+        if actual != selected {
+            return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+        }
+        Ok(())
+    }
+
     pub async fn select_child(
         &self,
         parent: &BackendLocator,
@@ -3562,8 +3658,7 @@ impl AtspiBackend {
                 proxies.as_ref(),
             )
             .await;
-            let adjustable_value = if matches!(role, Role::Slider | Role::SpinButton)
-                && interfaces.contains(Interface::Value)
+            let adjustable_value = if interfaces.contains(Interface::Value)
                 && states.contains(&SemanticState::Enabled)
                 && !states.contains(&SemanticState::ReadOnly)
             {
@@ -3770,7 +3865,7 @@ async fn enrich_record(
         }
     }
 
-    if record.interfaces.contains(Interface::Action) && role_needs_actions(record.role) {
+    if record.interfaces.contains(Interface::Action) {
         calls += 1;
         if let Ok(proxy) = ActionProxy::builder(&connection)
             .destination(record.locator.bus_name())
@@ -3803,8 +3898,7 @@ async fn enrich_record(
             }
         }
     }
-    if matches!(record.role, Role::Slider | Role::SpinButton)
-        && record.interfaces.contains(Interface::Value)
+    if record.interfaces.contains(Interface::Value)
         && record.states.contains(State::Enabled)
         && !record.states.contains(State::ReadOnly)
         && let Ok(proxy) = ValueProxy::builder(&connection)
@@ -3855,21 +3949,6 @@ fn role_needs_name(role: Role) -> bool {
             | SemanticRole::List
             | SemanticRole::ListItem
             | SemanticRole::StatusBar
-    )
-}
-
-fn role_needs_actions(role: Role) -> bool {
-    matches!(
-        SemanticRole::from(role),
-        SemanticRole::Menu
-            | SemanticRole::Tab
-            | SemanticRole::Link
-            | SemanticRole::RadioButton
-            | SemanticRole::Button
-            | SemanticRole::ToggleButton
-            | SemanticRole::CheckBox
-            | SemanticRole::ListItem
-            | SemanticRole::MenuItem
     )
 }
 
@@ -4199,12 +4278,7 @@ async fn read_value(
         }
         return nonempty(text);
     }
-    if interfaces.contains(Interface::Value)
-        && matches!(
-            role,
-            Role::Slider | Role::ProgressBar | Role::LevelBar | Role::SpinButton
-        )
-    {
+    if interfaces.contains(Interface::Value) {
         let value_proxy: ValueProxy<'_> =
             atspi_operation(timeout, "create Value proxy", node_id, proxies.value())
                 .await
@@ -4233,12 +4307,7 @@ fn text_update_is_verified(requested: &str, readback: &str) -> bool {
 }
 
 fn role_allows_text_value(role: Role, interfaces: atspi::InterfaceSet) -> bool {
-    role != Role::PasswordText
-        && interfaces.contains(Interface::EditableText)
-        && matches!(
-            role,
-            Role::Text | Role::Entry | Role::DateEditor | Role::Editbar | Role::ComboBox
-        )
+    role != Role::PasswordText && interfaces.contains(Interface::EditableText)
 }
 
 fn semantic_role_and_input_kind(
@@ -4250,10 +4319,7 @@ fn semantic_role_and_input_kind(
     // Providers may expose a location/search bar as an editable ComboBox.
     // Keep the concrete role for structure, but use the common text-input
     // model whenever the public EditableText capability is present.
-    let editable_text_control = matches!(
-        semantic_role,
-        SemanticRole::TextInput | SemanticRole::ComboBox
-    ) && interfaces.contains(Interface::EditableText);
+    let editable_text_control = interfaces.contains(Interface::EditableText);
     let input_kind = editable_text_control.then_some(if role == Role::PasswordText {
         TextInputKind::Password
     } else {
@@ -4293,8 +4359,7 @@ fn semantic_capabilities(
     {
         capabilities.push(SemanticCapability::EditText);
     }
-    if role == SemanticRole::Slider
-        && matches!(atspi_role, Role::Slider | Role::SpinButton)
+    if !matches!(atspi_role, Role::ProgressBar | Role::LevelBar)
         && interfaces.contains(Interface::Value)
         && states.contains(&SemanticState::Enabled)
         && !states.contains(&SemanticState::ReadOnly)
@@ -4741,7 +4806,7 @@ mod tests {
                 Role::ScrollBar,
                 true,
             )
-            .is_empty()
+            .contains(&SemanticCapability::Value)
         );
         assert!(
             semantic_capabilities(

@@ -352,9 +352,28 @@ pub(crate) fn is_current_action_target(states: &[SemanticState]) -> bool {
     enabled && (visible || !explicit_live_visibility) && !unavailable
 }
 
+/// ReadOnly describes editable content, not whether an explicitly advertised
+/// Action (for example copy) can be invoked.
+pub(crate) fn is_public_action_target(states: &[SemanticState]) -> bool {
+    let states: Vec<_> = states
+        .iter()
+        .filter(|s| **s != SemanticState::ReadOnly)
+        .cloned()
+        .collect();
+    is_current_action_target(&states)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_action_is_independent_of_content_readonly_state() {
+        assert!(is_public_action_target(&[SemanticState::ReadOnly]));
+        assert!(!is_public_action_target(&[SemanticState::Other(
+            "defunct".into()
+        )]));
+    }
 
     fn actions(names: &[&str]) -> Vec<SemanticAction> {
         names

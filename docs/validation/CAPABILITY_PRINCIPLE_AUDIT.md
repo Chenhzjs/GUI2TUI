@@ -47,3 +47,9 @@ capability graph 投影，palette，操作 authority 与后端调用。不是对
 真实 GUI2TUI PTY 定向复测：Firefox New tab/Reload、Mousepad New+编辑、
 FeatherPad New/Reload。证据目录为 capability-principle-audit；未重跑完整
 20 项，也不改变此前整轮结果。生产改动没有应用名称/品牌分支。
+
+## 后续缺口修复（2026-10-07）
+
+上面的“仍有实现缺口”是审查当时的状态。后续修复及实际验证见
+[公开操作入口验证](public-operations/REPORT.md)：F3 精确 action 选择、Selection
+增删成员、接口驱动的 Value/EditableText、公开资源预算和截断提示。

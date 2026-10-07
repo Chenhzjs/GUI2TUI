@@ -11,11 +11,24 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PublicOperation {
+    Action(String),
+    Selection {
+        parent: BackendLocator,
+        selected: bool,
+    },
+    Value {
+        increase: bool,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaletteEntry {
     pub label: String,
     pub group: bool,
     target: Option<(RuntimeNodeId, BackendLocator, UiIntent)>,
     group_index: Option<usize>,
+    action: Option<PublicOperation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,6 +41,7 @@ pub struct CommandPalette {
     entries: Vec<PaletteEntry>,
     recent: HashMap<RuntimeNodeId, u32>,
     search_all_scopes: bool,
+    public_actions: Option<Vec<PaletteEntry>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +49,7 @@ pub enum PaletteOutcome {
     Continue,
     Close,
     Execute(RuntimeNodeId, BackendLocator, UiIntent),
+    InvokeAction(RuntimeNodeId, BackendLocator, PublicOperation),
 }
 
 impl CommandPalette {
@@ -52,6 +67,7 @@ impl CommandPalette {
             entries: Vec::new(),
             recent,
             search_all_scopes: false,
+            public_actions: None,
         };
         palette.rebuild();
         palette
@@ -102,6 +118,11 @@ impl CommandPalette {
                     self.rebuild();
                     PaletteOutcome::Continue
                 } else {
+                    if let (Some(action), Some((id, locator, _))) =
+                        (entry.action.clone(), entry.target.clone())
+                    {
+                        return PaletteOutcome::InvokeAction(id, locator, action);
+                    }
                     entry
                         .target
                         .map_or(PaletteOutcome::Continue, |(id, locator, intent)| {
@@ -146,7 +167,43 @@ impl CommandPalette {
         }
     }
 
+    pub fn public_actions(
+        hierarchy: CommandHierarchy,
+        scope: InteractionScopeId,
+        actions: Vec<(RuntimeNodeId, BackendLocator, String, PublicOperation)>,
+    ) -> Self {
+        let mut palette = Self::new(hierarchy, scope, HashMap::new());
+        palette.public_actions = Some(
+            actions
+                .into_iter()
+                .map(|(id, locator, label, action)| PaletteEntry {
+                    label,
+                    group: false,
+                    target: Some((id, locator, UiIntent::Activate)),
+                    group_index: None,
+                    action: Some(action),
+                })
+                .collect(),
+        );
+        palette.rebuild();
+        palette
+    }
+
     fn rebuild(&mut self) {
+        if let Some(actions) = &self.public_actions {
+            self.entries = actions
+                .iter()
+                .filter(|entry| {
+                    entry
+                        .label
+                        .to_lowercase()
+                        .contains(&self.query.to_lowercase())
+                })
+                .cloned()
+                .collect();
+            self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+            return;
+        }
         self.entries = if self.query.is_empty() {
             current_group(&self.hierarchy.root, &self.group_path)
                 .map(|group| browse_entries(group, self.active_scope, self.search_all_scopes))
@@ -169,6 +226,7 @@ impl CommandPalette {
                         ranked.command.intent,
                     )),
                     group_index: None,
+                    action: None,
                 })
                 .collect()
         };
@@ -203,6 +261,7 @@ fn browse_entries(
                     group: true,
                     target: None,
                     group_index: Some(index),
+                    action: None,
                 })
             }
             CommandEntry::Command(command)
@@ -232,6 +291,7 @@ fn command_entry(command: &SemanticCommand) -> PaletteEntry {
             command.intent,
         )),
         group_index: None,
+        action: None,
     }
 }
 
@@ -251,6 +311,32 @@ mod tests {
             visible: true,
             shortcut: None,
         })
+    }
+
+    #[test]
+    fn named_action_is_returned_without_semantic_guessing() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let hierarchy = CommandHierarchy {
+            root: CommandGroup {
+                source: RuntimeNodeId::new(1),
+                label: "App".into(),
+                scope,
+                children: vec![],
+            },
+        };
+        let mut palette = CommandPalette::public_actions(
+            hierarchy,
+            scope,
+            vec![(
+                RuntimeNodeId::new(2),
+                BackendLocator::new(":1.2", "/target"),
+                "Target › Action: delete".into(),
+                PublicOperation::Action("delete".into()),
+            )],
+        );
+        assert!(
+            matches!(palette.handle_key(KeyEvent::from(KeyCode::Enter)), PaletteOutcome::InvokeAction(_, _, PublicOperation::Action(name)) if name == "delete")
+        );
     }
 
     #[test]

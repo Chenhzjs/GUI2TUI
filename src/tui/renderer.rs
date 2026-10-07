@@ -134,9 +134,9 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         .as_ref()
         .is_some_and(RegionNavigator::has_subregions)
     {
-        "? Help · F6 Region · Ctrl+Tab Pane · Tab Control · Enter Use · : Commands"
+        "? Help · F6 Region · Ctrl+Tab Pane · Tab Control · Enter Use · : Commands · F3 Actions"
     } else {
-        "? Help · F6 Region · Tab Control · Enter Use · : Commands"
+        "? Help · F6 Region · Tab Control · Enter Use · : Commands · F3 Actions"
     };
     let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(frame.area());
     let main_area = areas[0];

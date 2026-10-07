@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    backend::MAX_EXTERNAL_TEXT_BYTES,
+    backend::external_text_limit,
     product::config::TextInteractionHandlerConfig,
     runtime::{ApplicationGenerationId, OperationTicket},
     semantic::{BackendLocator, RuntimeNodeId},
@@ -60,8 +60,8 @@ impl ExternalTextSession {
         ticket: OperationTicket,
         label: String,
     ) -> Result<Self, String> {
-        if original.len() > MAX_EXTERNAL_TEXT_BYTES {
-            return Err("complete text exceeds the external interaction bound".into());
+        if original.len() > external_text_limit() {
+            return Err("complete text exceeds --max-edit-bytes".into());
         }
         let mut directory =
             OwnedArtifactDirectory::new_owned(1800, ticket.session_id(), ticket.operation_id())
@@ -154,11 +154,11 @@ impl ExternalTextSession {
             .map_err(|_| "cannot read the handler result".to_owned())?;
         let mut bytes = Vec::new();
         file.as_file_mut()
-            .take((MAX_EXTERNAL_TEXT_BYTES + 1) as u64)
+            .take((external_text_limit() + 1) as u64)
             .read_to_end(&mut bytes)
             .map_err(|_| "cannot read the handler result".to_owned())?;
-        if bytes.len() > MAX_EXTERNAL_TEXT_BYTES {
-            return Err("handler result exceeds the external interaction bound".into());
+        if bytes.len() > external_text_limit() {
+            return Err("handler result exceeds --max-edit-bytes".into());
         }
         String::from_utf8(bytes).map_err(|_| "handler result is not UTF-8 plain text".to_owned())
     }

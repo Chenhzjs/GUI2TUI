@@ -1,0 +1,2 @@
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+{"application": "firefox", "scenario": "reload", "driver": "gui2tui_pty", "layout": "flat", "task_completed": true, "binary_sha256": "9422b3c92acd09d617c241cc83a8f156e7c561c82ab51fa4d2e730a32f73f078", "operation_dispatched": true, "status": "passed", "assertion": "local HTTP fixture received a fresh reload request", "request_counts": [2, 3], "backend_action_deliveries": [{"locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83OQ", "action_index": 0, "accepted": true}]}

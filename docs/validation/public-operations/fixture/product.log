@@ -1,0 +1,31 @@
+2026-10-07T12:07:16.223177Z  INFO gui2tui::product: session starting version="1.1.0-rc.1"
+2026-10-07T12:07:20.758233Z DEBUG gui2tui::product: public action delivery returned locator=atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS81 action_index=0 accepted=true
+2026-10-07T12:07:20.799905Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:20.800277Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=2
+2026-10-07T12:07:20.800374Z DEBUG gui2tui::product: semantic transition observation completed outcome=Unverifiable condition="unavailable" authoritative_checks=1 event_wakeups=0 invocation_wakeups=1
+2026-10-07T12:07:20.872313Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:20.872373Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=3
+2026-10-07T12:07:24.169241Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:24.169322Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=4
+2026-10-07T12:07:24.239005Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:24.239079Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=5
+2026-10-07T12:07:24.310957Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:24.311034Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=6
+2026-10-07T12:07:24.379649Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:24.379724Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=7
+2026-10-07T12:07:27.633277Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:27.633355Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=8
+2026-10-07T12:07:27.712035Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:27.712108Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=9
+2026-10-07T12:07:27.780870Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:27.780938Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=10
+2026-10-07T12:07:31.453574Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:31.453662Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=11
+2026-10-07T12:07:31.528862Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:31.528924Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=12
+2026-10-07T12:07:31.600638Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:31.600696Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=13
+2026-10-07T12:07:34.920459Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:34.920547Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=14
+2026-10-07T12:07:35.001154Z DEBUG gui2tui::product: bounded non-authoritative runtime history interaction_scopes=2 scope_focus_history=1 current_commands=1 recent_commands=0
+2026-10-07T12:07:35.001243Z DEBUG gui2tui::product: full semantic refresh completed full_snapshots=15
