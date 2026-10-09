@@ -1,8 +1,8 @@
 # 组件提取与组件操作完善方案 / 新上下文交接
 
-日期：2026-10-07  
-工作目录：/Users/chenhz/Documents/GUI2TUI  
-分支：v2-capability-reconstruction  
+日期：2026-10-07
+工作目录：/Users/chenhz/Documents/GUI2TUI
+分支：v2-capability-reconstruction
 基线 HEAD：ebdb4053216981b9e9f813428cc031ed4857efe5
 
 本文是待实施方案，不是已完成声明。本轮只编写方案，不修改生产代码。
