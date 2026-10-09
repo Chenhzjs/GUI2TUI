@@ -1,0 +1,25 @@
+dbus-daemon[7]: [session uid=0 pid=7] Activating service name='org.a11y.Bus' requested by ':1.2' (uid=0 pid=119 comm="/work/target/autonomous-linux/debug/gui2tui-inspec")
+dbus-daemon[7]: [session uid=0 pid=7] Successfully activated service 'org.a11y.Bus'
+dbus-daemon[150]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=0 pid=119 comm="/work/target/autonomous-linux/debug/gui2tui-inspec")
+dbus-daemon[150]: Successfully activated service 'org.a11y.atspi.Registry'
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+dbus-run-session: ignoring unknown child process 1020
+TERMINAL_CONTROLLED_PANIC_RESTORED=PASS
+TERMINAL_NORMAL_EXIT_RESTORED=PASS
+TERMINAL_SIGINT_RESTORED=PASS
+TERMINAL_SIGTERM_RESTORED=PASS
+TERMINAL_SUSPEND_RESUME=PASS
+EXTERNAL_HANDLER_TERMINAL_REACQUIRE=PASS
+REPEATED_EXTERNAL_HANDOFF_CONTINUITY=PASS cycles=4 fds=21/21/21
+EXTERNAL_HANDLER_PROCESS_REAPED=PASS
+TERMINAL_READER_SINGLE_OWNER=PASS
+EXTERNAL_ARTIFACT_SUCCESS_CLEANUP=PASS
+POST_EXTERNAL_LIFECYCLE_FRESH_OPERATION=PASS
+EXTERNAL_TEXT_STALE_AUTHORITY_REFUSAL=PASS
+EXTERNAL_ARTIFACT_PRIVATE_PERMISSIONS=PASS
+EXTERNAL_TEXT_CONFLICT_PRESERVATION=PASS
+EXTERNAL_HANDLER_SHUTDOWN_SAFE=PASS policy=defer-once-force-on-repeat
+EXTERNAL_HANDLER_HANG_ESCAPE=PASS repeated_signal=true
+EXTERNAL_MODALITY_ORIGIN_LOSS_SAFE=PASS
+EXTERNAL_MODALITY_STORAGE_BOUNDED=PASS max=8 ttl_seconds=300
+EXTERNAL_ARTIFACT_STORAGE_BOUNDED=PASS namespaces=256 files_per_namespace=256 ttl_seconds=1800

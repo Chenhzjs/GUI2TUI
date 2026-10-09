@@ -1,0 +1,17 @@
+RESULT_DIR=/tmp/gui2tui-release-smoke-vCnjX5
+dbus-daemon[15]: [session uid=0 pid=15] Activating service name='org.a11y.Bus' requested by ':1.1' (uid=0 pid=25 comm="gdbus call --session --dest org.a11y.Bus --object-")
+dbus-daemon[15]: [session uid=0 pid=15] Successfully activated service 'org.a11y.Bus'
+dbus-daemon[15]: [session uid=0 pid=15] Activating service name='ca.desrt.dconf' requested by ':1.2' (uid=0 pid=30 comm="/usr/libexec/at-spi-bus-launcher")
+dbus-daemon[15]: [session uid=0 pid=15] Successfully activated service 'ca.desrt.dconf'
+dbus-daemon[79]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=0 pid=65 comm="/tmp/bundle/gui2tui-1.1.0-rc.1-linux-x86_64/bin/gu")
+dbus-daemon[79]: Successfully activated service 'org.a11y.atspi.Registry'
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+Session: Current desktop (explicit --session desktop)
+[2m2026-10-09T16:31:28.127187Z[0m [33m WARN[0m [2mgui2tui::backend::atspi[0m[2m:[0m public application peer unavailable; retaining bus transport
+PACKAGE_VALUE_END_TO_END=PASS restored=true progress_read_only=true
+PACKAGE_EXTERNAL_TEXT_END_TO_END=PASS authoritative_readback=true
+PACKAGE_EXTERNAL_TEXT_CONFLICT_REFUSAL=PASS candidate_preserved=true
+PACKAGE_EXTERNAL_TEXT_HANDLER_FAILURE=PASS gui_unchanged=true terminal_restored=true
+PACKAGE_BACKING_FILE_BYPASS=ABSENT
+PACKAGED_FRESH_HOME_SMOKE=PASS no_config=true action_confirmed=true password_absent=true broker_capabilities=true
+X connection to :145 broken (explicit kill or server shutdown).

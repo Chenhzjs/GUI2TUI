@@ -1,0 +1,373 @@
+{
+  "source": "docs/validation/component-extraction-20261008/audit-final-spatial/okular-document_workflow/result.json",
+  "source_sha256": "a2a066759fa5e31993fcdb0ea5a494513706a1e325924ce8f90c68669476f9fe",
+  "binary_sha256": "5e21c52e1c746816ce8e8a7566fe2d946452472fde00d517b0a813251a1ff5e9",
+  "public_read_errors": [],
+  "phases": {
+    "before": {
+      "nodes": 382,
+      "interfaces": {
+        "Accessible": 382,
+        "Action": 375,
+        "Component": 376,
+        "EditableText": 9,
+        "Text": 9,
+        "Table": 4
+      },
+      "text_nodes": [
+        {
+          "path": "/org/a11y/atspi/accessible/2147483687",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483688",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483710",
+          "role": "text",
+          "text": "Fit Width",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483999",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483680",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483681",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484014",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483667",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484018",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        }
+      ]
+    },
+    "final_public_tree": {
+      "nodes": 396,
+      "interfaces": {
+        "Accessible": 396,
+        "Action": 389,
+        "Component": 390,
+        "EditableText": 9,
+        "Text": 9,
+        "Table": 4,
+        "Value": 3
+      },
+      "text_nodes": [
+        {
+          "path": "/org/a11y/atspi/accessible/2147483687",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483688",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483710",
+          "role": "text",
+          "text": "200%",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483999",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483680",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483681",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484014",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483667",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484018",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        }
+      ]
+    },
+    "final_public_tree_repeat": {
+      "nodes": 396,
+      "interfaces": {
+        "Accessible": 396,
+        "Action": 389,
+        "Component": 390,
+        "EditableText": 9,
+        "Text": 9,
+        "Table": 4,
+        "Value": 3
+      },
+      "text_nodes": [
+        {
+          "path": "/org/a11y/atspi/accessible/2147483687",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483688",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483710",
+          "role": "text",
+          "text": "200%",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483999",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483680",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483681",
+          "role": "text",
+          "text": "2",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484014",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147483667",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        },
+        {
+          "path": "/org/a11y/atspi/accessible/2147484018",
+          "role": "text",
+          "text": "",
+          "interfaces": [
+            "Accessible",
+            "Action",
+            "Component",
+            "EditableText",
+            "Text"
+          ]
+        }
+      ]
+    }
+  }
+}

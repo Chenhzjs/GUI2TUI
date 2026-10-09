@@ -74,6 +74,10 @@ fn byte_index(text: &str, character_index: usize) -> usize {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EditSession {
+    /// Numeric parameter input uses the same terminal editor, but never the
+    /// EditableText delivery path.
+    pub value_parameter: bool,
+    pub range_parameter: bool,
     pub target: RuntimeNodeId,
     /// Locator of the semantic control selected in the TUI.
     pub backend_locator: BackendLocator,
@@ -110,6 +114,8 @@ impl EditSession {
         source_generation: u64,
     ) -> Self {
         Self {
+            value_parameter: false,
+            range_parameter: false,
             target,
             backend_locator,
             readback_locator,

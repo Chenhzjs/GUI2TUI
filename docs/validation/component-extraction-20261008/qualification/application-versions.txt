@@ -1,0 +1,6 @@
+featherpad	1.3.5-1
+firefox-esr	153.4.0esr-1~deb12u1
+libgtk-3-0:amd64	3.24.38-2~deb12u3
+libqt5core5a:amd64	5.15.8+dfsg-11+deb12u3
+mousepad	0.5.10-2
+okular	4:22.12.3-1+deb12u1

@@ -12,7 +12,13 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PublicOperation {
+    SetValue,
+    EditRange,
+    ReadSelection,
     Action(String),
+    EditText {
+        multiline: bool,
+    },
     Selection {
         parent: BackendLocator,
         selected: bool,

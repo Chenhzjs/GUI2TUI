@@ -5,6 +5,12 @@ release is created by this branch.
 
 ## What changed
 
+The current candidate also adds parameterized public text/range/Value operations
+and same-host/SSH single-file resource handoff. See the
+[candidate scope](release-notes-v1.1.0-rc.1.md) and
+[resource usage guide](local-resource-viewing.md). Remote resource mode prevents
+accidental interpretation of a remote path as a receiver-local path.
+
 - The default application view is a bounded Semantic Surface that preserves
   meaningful regions such as shell controls, forms, navigation and document
   structure. Reader remains an explicit continuous-reading projection.

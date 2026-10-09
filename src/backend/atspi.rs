@@ -255,6 +255,8 @@ pub enum BackendError {
     ValueUnsupported(String),
     #[error("AT-SPI Value metadata is unavailable or invalid for {0}")]
     ValueUnavailable(String),
+    #[error("Value changed before submission for {0}; reload the parameter")]
+    ValueConflict(String),
     #[error(
         "no safe convenience action was found on {node_id}\nAvailable actions:\n{available}\nUse --action-name or --action --index for explicit low-level invocation"
     )]
@@ -1358,6 +1360,159 @@ impl AtspiBackend {
             text.get_text(0, count.max(0)),
         )
         .await
+    }
+
+    /// Public character offsets, never byte offsets or selected-child indices.
+    pub async fn text_selections(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<Vec<(i32, i32)>, BackendError> {
+        let (id, object) = self.validate_plain_text_readback(locator).await?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "selection proxies",
+            &id,
+            proxy.proxies(),
+        )
+        .await?;
+        let text = atspi_operation(
+            self.operation_timeout,
+            "selection Text proxy",
+            &id,
+            proxies.text(),
+        )
+        .await?;
+        let count = dbus_operation(
+            self.operation_timeout,
+            "text selection count",
+            &id,
+            text.get_n_selections(),
+        )
+        .await?;
+        if !(0..=64).contains(&count) {
+            return Err(BackendError::ComplexTextIncomplete(id));
+        }
+        let mut ranges = Vec::new();
+        for index in 0..count {
+            ranges.push(
+                dbus_operation(
+                    self.operation_timeout,
+                    "text selection range",
+                    &id,
+                    text.get_selection(index),
+                )
+                .await?,
+            );
+        }
+        Ok(ranges)
+    }
+
+    pub async fn replace_text_range(
+        &self,
+        locator: &BackendLocator,
+        expected: &str,
+        start: usize,
+        end: usize,
+        replacement: &str,
+    ) -> Result<String, BackendError> {
+        let id = locator.encode();
+        let fresh = self.refresh_node(locator, false).await?;
+        if fresh.text_input_kind != Some(TextInputKind::Plain)
+            || !fresh.states.contains(&SemanticState::Editable)
+            || fresh.states.contains(&SemanticState::ReadOnly)
+            || !fresh.debug.interfaces.iter().any(|i| i == "EditableText")
+        {
+            return Err(BackendError::TextEditUnsupported(id));
+        }
+        let current = self.read_authoritative_text(locator).await?;
+        if current != expected {
+            return Err(BackendError::ComplexTextConflict(id));
+        }
+        let count = current.chars().count();
+        if start > end
+            || end > count
+            || end > i32::MAX as usize
+            || current.len().saturating_add(replacement.len()) > external_text_limit()
+        {
+            return Err(BackendError::ComplexTextIncomplete(id));
+        }
+        let candidate = current
+            .chars()
+            .take(start)
+            .chain(replacement.chars())
+            .chain(current.chars().skip(end))
+            .collect::<String>();
+        let object = object_ref_from_id(locator)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(id.clone(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "range edit proxies",
+            &id,
+            proxy.proxies(),
+        )
+        .await?;
+        let editable = atspi_operation(
+            self.operation_timeout,
+            "range EditableText proxy",
+            &id,
+            proxies.editable_text(),
+        )
+        .await?;
+        // Proxy construction is asynchronous; recheck the original text at
+        // the last read boundary before the first mutating call.
+        if self.read_authoritative_text(locator).await? != expected {
+            return Err(BackendError::ComplexTextConflict(id));
+        }
+        if start != end
+            && !dbus_operation(
+                self.operation_timeout,
+                "delete text range",
+                &id,
+                editable.delete_text(start as i32, end as i32),
+            )
+            .await?
+        {
+            return Err(BackendError::TextUpdateRejected(id));
+        }
+        if start != end {
+            let deleted: String = current
+                .chars()
+                .take(start)
+                .chain(current.chars().skip(end))
+                .collect();
+            if self.read_authoritative_text(locator).await? != deleted {
+                return Err(BackendError::TextUpdateNotVerified(id));
+            }
+        }
+        if !replacement.is_empty()
+            && !dbus_operation(
+                self.operation_timeout,
+                "insert text range",
+                &id,
+                editable.insert_text(
+                    start as i32,
+                    replacement,
+                    // InsertText length is UTF-8 bytes; position remains a
+                    // character offset. A scalar count truncates Chinese input.
+                    replacement.len() as i32,
+                ),
+            )
+            .await?
+        {
+            return Err(BackendError::TextUpdateRejected(id));
+        }
+        let actual = self.read_authoritative_text(locator).await?;
+        if actual != candidate {
+            return Err(BackendError::TextUpdateNotVerified(id));
+        }
+        Ok(actual)
     }
 
     /// Read complete bounded text for an explicit whole-content replacement.
@@ -2510,6 +2665,7 @@ impl AtspiBackend {
             proxies.action(),
         )
         .await?;
+        let delivery_started = Instant::now();
         let accepted = dbus_operation(
             self.operation_timeout,
             "invoke action",
@@ -2517,7 +2673,7 @@ impl AtspiBackend {
             action_proxy.do_action(index),
         )
         .await?;
-        tracing::debug!(target: "gui2tui::product", locator = %encoded_id, action_index = selected.index, accepted, "public action delivery returned");
+        tracing::debug!(target: "gui2tui::product", locator = %encoded_id, action_index = selected.index, accepted, delivery_ms = delivery_started.elapsed().as_secs_f64() * 1000.0, "public action delivery returned");
         if !accepted {
             return Err(BackendError::ActionRejected {
                 node_id: id.encode(),
@@ -2533,6 +2689,55 @@ impl AtspiBackend {
         &self,
         locator: &BackendLocator,
         increase: bool,
+    ) -> Result<ValueMutation, BackendError> {
+        self.mutate_value(locator, increase, None).await
+    }
+
+    pub async fn set_value(
+        &self,
+        locator: &BackendLocator,
+        expected: f64,
+        requested: f64,
+    ) -> Result<ValueMutation, BackendError> {
+        self.mutate_value(locator, true, Some((expected, requested)))
+            .await
+    }
+
+    pub async fn value_parameters(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(f64, f64, f64), BackendError> {
+        let fresh = self.refresh_node(locator, false).await?;
+        if !fresh.capabilities.contains(&SemanticCapability::Value) {
+            return Err(BackendError::ValueUnsupported(locator.encode()));
+        }
+        let object = object_ref_from_id(locator)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(locator.encode(), error))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create Value parameter proxies",
+            &locator.encode(),
+            proxy.proxies(),
+        )
+        .await?;
+        let metadata = read_adjustable_value_metadata(
+            self.operation_timeout,
+            &locator.encode(),
+            Some(&proxies),
+        )
+        .await
+        .ok_or_else(|| BackendError::ValueUnavailable(locator.encode()))?;
+        Ok((metadata.current, metadata.minimum, metadata.maximum))
+    }
+
+    async fn mutate_value(
+        &self,
+        locator: &BackendLocator,
+        increase: bool,
+        exact: Option<(f64, f64)>,
     ) -> Result<ValueMutation, BackendError> {
         let encoded_id = locator.encode();
         let object = object_ref_from_id(locator)?;
@@ -2621,7 +2826,12 @@ impl AtspiBackend {
         if !metadata.is_usable() {
             return Err(BackendError::ValueUnavailable(encoded_id));
         }
-        let requested = if increase {
+        if exact.is_some_and(|(expected, _)| expected != current) {
+            return Err(BackendError::ValueConflict(encoded_id));
+        }
+        let requested = if let Some((_, requested)) = exact {
+            requested
+        } else if increase {
             current + increment
         } else {
             current - increment

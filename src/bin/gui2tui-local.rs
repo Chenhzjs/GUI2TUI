@@ -9,10 +9,9 @@ use std::{
 
 use clap::{Parser, Subcommand, ValueEnum};
 use gui2tui::modality::{
-    ArtifactDescriptor, ArtifactHash, ArtifactId, ArtifactLifetime, ArtifactTransport,
-    AuthorizationDecision, CancellationToken, HandlerRegistry, LocalModalityBroker,
-    LocalModalityCapabilities, ModalityKind, PathMapping, ProcessHandler, RecordingHandler,
-    ReferenceProvenance, ReferencedResource, ResourceReference,
+    ArtifactTransport, AuthorizationDecision, CancellationToken, HandlerRegistry,
+    LocalModalityBroker, LocalModalityCapabilities, ModalityKind, PathMapping, ProcessHandler,
+    RecordingHandler, ReferenceProvenance, ReferencedResource, ResourceReference,
 };
 
 #[derive(Debug, Parser)]
@@ -274,7 +273,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             kind,
             cancel_before_transfer,
         } => {
-            let (descriptor, mut file) = describe_file(&input, mime, kind.into())?;
+            let (descriptor, mut file) =
+                gui2tui::modality::file::describe_file(&input, mime, kind.into())?;
             let cancellation = CancellationToken::default();
             if cancel_before_transfer {
                 cancellation.cancel();
@@ -344,7 +344,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             max_bytes,
             cancel_before_transfer,
         } => {
-            let (descriptor, file) = describe_file(&input, mime.clone(), kind.into())?;
+            let (descriptor, file) =
+                gui2tui::modality::file::describe_file(&input, mime.clone(), kind.into())?;
             println!(
                 "descriptor mime={} size={} sha256={} authorized_payload=false",
                 descriptor.mime,
@@ -405,51 +406,6 @@ fn broker(
     Ok((
         LocalModalityBroker::new(capabilities, registry, root)?,
         recorder,
-    ))
-}
-
-fn describe_file(
-    input: &PathBuf,
-    mime: String,
-    kind: ModalityKind,
-) -> Result<(ArtifactDescriptor, fs::File), Box<dyn std::error::Error>> {
-    use sha2::{Digest, Sha256};
-    use std::io::{Seek, SeekFrom};
-    let mut file = fs::File::open(input)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() {
-        return Err("artifact source must be a regular file".into());
-    }
-    if metadata.len() > 512 * 1024 * 1024 {
-        return Err("artifact exceeds 512 MiB producer limit".into());
-    }
-    let mut hasher = Sha256::new();
-    let mut buffer = [0; 65536];
-    let mut size = 0;
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        size += count as u64;
-        if size > 512 * 1024 * 1024 {
-            return Err("artifact grew beyond limit".into());
-        }
-        hasher.update(&buffer[..count]);
-    }
-    file.seek(SeekFrom::Start(0))?;
-    Ok((
-        ArtifactDescriptor {
-            origin: Default::default(),
-            id: ArtifactId::new(1),
-            kind,
-            mime,
-            size,
-            hash: ArtifactHash(hasher.finalize().into()),
-            display_name: input.file_name().map(|s| s.to_string_lossy().into_owned()),
-            lifetime: ArtifactLifetime::Session,
-        },
-        file,
     ))
 }
 

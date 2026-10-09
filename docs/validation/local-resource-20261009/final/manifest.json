@@ -1,0 +1,12 @@
+{
+  "docs/validation/local-resource-20261009/final/result.json": "a4f13fa4dc9657aefb1168d280e52346614e8a2cdcf1c03be0ddd18128c16881",
+  "docs/validation/local-resource-20261009/final/ssh-results.json": "8cd5d891c9def1571a8eeb95413f8ff8e3a5abad86d912d3a724e28b298766e1",
+  "docs/validation/local-resource-20261009/final/ssh-check.py": "20d8771685ab96788d21d3ae4cd14990eb0e0bba83fa26d4eee98a3976b957b8",
+  "docs/validation/local-resource-20261009/final/f4_remote.py": "4a75ebe374e1307509f4411be123bbf2a23098f9456e967cffb0cc53701ef3cc",
+  "docs/validation/local-resource-20261009/final/partial_sender.py": "99478cfd44b5241b9ee53bded9445d79d6fdbbd569933c7820cfdcb58cfe97ac",
+  "docs/validation/local-resource-20261009/final/viewer/result.json": "cac04ec3996e506a318186ff2b3adbc7c094d12f0d2790d9e944336dae8b6768",
+  "target/debug/gui2tui": "1736d8178f5517508851002bb976c2efdc8352d9ef3f614501ac807ec0cb3208",
+  "target/debug/gui2tui-local": "716af5243297762046127dc24500ea3016586981acb9e9f70daa7234a7239363",
+  "target/autonomous-linux/debug/gui2tui": "5c58a7dd3da6ab1b784de5ca033fedb9295da726f2018ed3656ef6cd3ab0e535",
+  "target/autonomous-linux/debug/gui2tui-local": "b706456b5f021eb5439a951a494111ee297fcd5d84d15b0ec95a563605e62d6a"
+}

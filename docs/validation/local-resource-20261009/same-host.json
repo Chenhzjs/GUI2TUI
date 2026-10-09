@@ -1,0 +1,24 @@
+{
+  "handler": "/usr/bin/open",
+  "meaning": "system launcher accepted; visual rendering not asserted",
+  "results": [
+    {
+      "mime": "image/png",
+      "returncode": 0,
+      "stdout": "Opened { reference_only: false, artifact_bytes: 99 } payload_sent=99\n",
+      "stderr": ""
+    },
+    {
+      "mime": "application/pdf",
+      "returncode": 0,
+      "stdout": "Opened { reference_only: false, artifact_bytes: 333 } payload_sent=333\n",
+      "stderr": ""
+    },
+    {
+      "mime": "audio/wav",
+      "returncode": 0,
+      "stdout": "Opened { reference_only: false, artifact_bytes: 1644 } payload_sent=1644\n",
+      "stderr": ""
+    }
+  ]
+}

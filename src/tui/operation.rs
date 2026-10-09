@@ -149,6 +149,39 @@ pub fn resolve_cached_node_operation(
             primitive,
         });
     }
+    if let SemanticOperation::ReplaceText { text, .. } = &operation {
+        if !node.capabilities.contains(&SemanticCapability::EditText)
+            || node.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
+            || !node.states.contains(&SemanticState::Editable)
+            || node.states.contains(&SemanticState::ReadOnly)
+        {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "text target is not a current plain editable control".into(),
+            ));
+        }
+        return Ok(BackendOperation::SetTextContents {
+            locator: node.backend_locator.clone(),
+            text: text.clone(),
+        });
+    }
+    if let SemanticOperation::ReplaceComplexText { expected, text, .. } = &operation {
+        if !node
+            .capabilities
+            .contains(&SemanticCapability::EditComplexText)
+            || node.text_input_kind != Some(crate::semantic::TextInputKind::Plain)
+            || !node.states.contains(&SemanticState::Editable)
+            || node.states.contains(&SemanticState::ReadOnly)
+        {
+            return Err(OperationResolutionError::NoCompatibleOperation(
+                "text target is not qualified for complete replacement".into(),
+            ));
+        }
+        return Ok(BackendOperation::SetComplexTextContents {
+            locator: node.backend_locator.clone(),
+            expected: expected.clone(),
+            text: text.clone(),
+        });
+    }
     if matches!(
         operation,
         SemanticOperation::SelectNode(_)
@@ -659,6 +692,56 @@ mod tests {
 
     use super::*;
     use crate::transcompile::compile_legacy_scene;
+
+    #[test]
+    fn single_line_text_resolves_exact_cached_target_without_scene() {
+        let mut target = node(1, SemanticRole::TextInput, "Shared input");
+        target.text_input_kind = Some(TextInputKind::Plain);
+        target.states.push(SemanticState::Editable);
+        target.capabilities.push(SemanticCapability::EditText);
+        let cache = SemanticCache::from_snapshot(target.clone()).unwrap();
+        let operation = SemanticOperation::ReplaceText {
+            target: cache.runtime_id(&target.backend_locator).unwrap(),
+            text: "你好".into(),
+        };
+        assert_eq!(
+            resolve_cached_node_operation(&cache, operation.clone()).unwrap(),
+            BackendOperation::SetTextContents {
+                locator: target.backend_locator.clone(),
+                text: "你好".into()
+            }
+        );
+        target.text_input_kind = Some(TextInputKind::Password);
+        let cache = SemanticCache::from_snapshot(target).unwrap();
+        assert!(resolve_cached_node_operation(&cache, operation).is_err());
+    }
+
+    #[test]
+    fn complete_text_resolves_without_scene_but_requires_current_qualification() {
+        let mut target = node(1, SemanticRole::TextInput, "secondary text");
+        target.text_input_kind = Some(TextInputKind::Plain);
+        target.states.push(SemanticState::Editable);
+        target
+            .capabilities
+            .push(SemanticCapability::EditComplexText);
+        let cache = SemanticCache::from_snapshot(target.clone()).unwrap();
+        let operation = SemanticOperation::ReplaceComplexText {
+            target: cache.runtime_id(&target.backend_locator).unwrap(),
+            expected: "old".into(),
+            text: "new".into(),
+        };
+        assert_eq!(
+            resolve_cached_node_operation(&cache, operation.clone()).unwrap(),
+            BackendOperation::SetComplexTextContents {
+                locator: target.backend_locator.clone(),
+                expected: "old".into(),
+                text: "new".into()
+            }
+        );
+        target.capabilities.clear();
+        let cache = SemanticCache::from_snapshot(target).unwrap();
+        assert!(resolve_cached_node_operation(&cache, operation).is_err());
+    }
 
     fn node(id: u64, role: SemanticRole, name: &str) -> SemanticNode {
         SemanticNode {

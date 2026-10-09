@@ -1,0 +1,45 @@
+{
+  "topology": "macOS broker, Linux amd64 container producer, authenticated OpenSSH remote Unix socket forwarding",
+  "results": [
+    {
+      "case": "open",
+      "returncode": 0,
+      "stdout": "Opened { reference_only: false, artifact_bytes: 333 } payload_sent=333\n",
+      "stderr": ""
+    },
+    {
+      "case": "cancel",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "error: transfer cancelled\n"
+    },
+    {
+      "case": "remote_f4_to_local_handler",
+      "passed": true
+    },
+    {
+      "case": "deny",
+      "returncode": 1,
+      "stdout": "Failed { reason: \"Local authorization denied\", artifact_bytes: 0 } payload_sent=0\n",
+      "stderr": "error: handoff failed\n"
+    },
+    {
+      "case": "64MiB_integrity_transfer_recording_handler",
+      "stdout": "Opened { reference_only: false, artifact_bytes: 67108864 } payload_sent=67108864\n"
+    },
+    {
+      "case": "mid_payload_disconnect_partial_cleanup",
+      "passed": true
+    },
+    {
+      "case": "fresh_send_after_reconnect",
+      "passed": true
+    },
+    {
+      "case": "disconnected_before_send",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "error: Connection refused (os error 111)\n"
+    }
+  ]
+}

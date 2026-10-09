@@ -1,5 +1,17 @@
 # Configuration (schema version 1)
 
+Optional saved resource endpoint:
+
+    [resources]
+    socket = "/absolute/private/broker.sock"
+    remote = true
+
+Use remote = false for a same-host endpoint. With remote = true, F4 only sends
+explicit file bytes; reference and same-host path opening are disabled. The SSH
+tunnel and receiving broker must already be running. --modality-socket overrides
+the configured socket; --modality-remote forces remote mode. To return to same-host
+mode, set remote = false. See [resource viewing](local-resource-viewing.md).
+
 No file is required. Missing file = safe defaults. No startup write or migration occurs.
 
 ```bash

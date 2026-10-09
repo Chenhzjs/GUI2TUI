@@ -175,8 +175,43 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     if let Some(content) = context.content {
         render_content(frame, content_area, content);
     }
+    // A public text target need not have a visible scene element. The input
+    // surface belongs to the edit session, not to the region projection.
+    if let Some(session) = context.edit_session {
+        let area = Rect::new(
+            content_area.x,
+            content_area.y,
+            content_area.width,
+            content_area.height.min(5),
+        );
+        frame.render_widget(Clear, area);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(if session.range_parameter {
+                " Edit range: start:end:text (Unicode characters, end exclusive) "
+            } else if session.value_parameter {
+                " Set value "
+            } else {
+                " Edit text "
+            });
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        frame.render_widget(
+            Paragraph::new(format!(
+                "[editing] {}\n{}",
+                edit_buffer_window(session, inner.width.saturating_sub(10)),
+                if session.value_parameter || session.range_parameter {
+                    "Ctrl+S / Enter Apply · Esc Cancel"
+                } else {
+                    "Ctrl+S Apply · Enter Apply+Submit · Esc Cancel"
+                }
+            ))
+            .style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
+    }
     let footer = if normal_footer_status(context.status) {
-        format!("{hints} · {}", context.status)
+        format!("{} · {hints}", context.status)
     } else {
         hints.to_owned()
     };
@@ -1175,6 +1210,24 @@ fn render_compact_surface(
         })
         .collect::<Vec<_>>();
     elements.sort_by_key(|element| context.focused != Some(element.id));
+    if let Some(session) = context.edit_session
+        && elements.iter().any(|element| {
+            element
+                .binding
+                .as_ref()
+                .is_some_and(|binding| binding.runtime_id == session.target)
+        })
+    {
+        frame.render_widget(
+            Paragraph::new(format!(
+                "[editing] {}",
+                edit_buffer_window(session, area.width)
+            ))
+            .style(Style::default().fg(Color::Yellow)),
+            area,
+        );
+        return;
+    }
     let mut x = area.x;
     let mut shown = 0_usize;
     for element in &elements {
@@ -1743,6 +1796,51 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(rendered.contains("e Edit externally"));
+        let edit = EditSession::new(
+            RuntimeNodeId::new(1),
+            BackendLocator::new(":1.2", "/node/1"),
+            "typed value".into(),
+            1,
+        );
+        let region = spatial_region(
+            0,
+            "Notes",
+            RegionPresentationKind::InputSurface,
+            crate::transcompile::LayoutDemand::Compact,
+        );
+        terminal
+            .draw(|frame| {
+                render_compact_surface(
+                    frame,
+                    Rect::new(0, 0, 40, 3),
+                    &RenderContext {
+                        scene: &scene,
+                        focused: Some(field_id),
+                        scroll_offset: 0,
+                        status: "ready",
+                        application_available: true,
+                        external_text_handler_available: true,
+                        edit_session: Some(&edit),
+                        palette: None,
+                        choice: None,
+                        content: None,
+                        spatial: None,
+                        active_region: None,
+                        inline_content: None,
+                    },
+                    &region,
+                    &mut Vec::new(),
+                );
+            })
+            .unwrap();
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(rendered.contains("[editing] typed value|"));
     }
 
     #[test]

@@ -1,0 +1,2 @@
+FROM gui2tui-capability-tests:local
+RUN apt-get update -qq && apt-get install -y --no-install-recommends openssh-server && rm -rf /var/lib/apt/lists/* && mkdir -p /run/sshd

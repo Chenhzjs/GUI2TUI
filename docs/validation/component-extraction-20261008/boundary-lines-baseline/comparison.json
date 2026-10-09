@@ -1,0 +1,18 @@
+{
+  "method": "isolated fresh-container baseline versus menu-operation session; not same-session before/after",
+  "observations": [
+    {
+      "source": "docs/validation/component-extraction-20261008/boundary-lines-baseline/result.json",
+      "sha256": "dd61bf91b969662a4ea60a141c79253b27bf78ed9062afde1317da98b3e5fc8f",
+      "binary_sha256": "5e21c52e1c746816ce8e8a7566fe2d946452472fde00d517b0a813251a1ff5e9",
+      "checked": false
+    },
+    {
+      "source": "docs/validation/component-extraction-20261008/boundary-preferences/result.json",
+      "sha256": "8825066eecc9a1005d99b676e0d3af32737cac1cf0417d5b4a013c4b4274fb9e",
+      "binary_sha256": "5e21c52e1c746816ce8e8a7566fe2d946452472fde00d517b0a813251a1ff5e9",
+      "checked": true
+    }
+  ],
+  "confirmed_preference_effect": true
+}

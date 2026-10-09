@@ -112,6 +112,9 @@ struct Cli {
     /// Private local modality broker socket; absent means safe read-only fallback.
     #[arg(long, global = true)]
     modality_socket: Option<std::path::PathBuf>,
+    /// Endpoint is on another host: only explicit file bytes may be handed off.
+    #[arg(long)]
+    modality_remote: bool,
 
     /// Disable terminal mouse capture (keyboard remains available).
     #[arg(long, global = true)]
@@ -513,14 +516,13 @@ fn companion_path(name: &str) -> Result<std::path::PathBuf, Box<dyn Error>> {
 }
 
 fn run_companion(name: &str, args: Vec<String>) -> Result<(), Box<dyn Error>> {
-    let status = ProcessCommand::new(companion_path(name)?)
+    // Preserve process ownership: signals must reach the endpoint/inspector,
+    // rather than terminating a waiting wrapper and orphaning its child.
+    use std::os::unix::process::CommandExt;
+    Err(ProcessCommand::new(companion_path(name)?)
         .args(args)
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("{name} exited with {status}").into())
-    }
+        .exec()
+        .into())
 }
 
 fn run_inspector(mut args: Vec<String>, topology: SessionTopology) -> Result<(), Box<dyn Error>> {
@@ -738,7 +740,8 @@ async fn run(
         }
     };
 
-    app.configure_modality_client(cli.modality_socket);
+    app.configure_modality_client(cli.modality_socket.or(config.resources.socket.clone()));
+    app.configure_modality_remote(cli.modality_remote || config.resources.remote);
 
     // Keep one Crossterm reader during normal attached operation. The complex
     // text path explicitly retires it before giving the real terminal to the
@@ -769,6 +772,7 @@ async fn run(
                             app.begin_terminal_reattach();
                             guard = TerminalGuard::attach(config.terminal.mouse)?;
                             tracing::debug!("terminal modes restored for reattachment");
+                            drop(terminal_events);
                             terminal_events = EventStream::new();
                             input_available = true;
                             // Terminal::clear queries remote cursor position
@@ -782,8 +786,10 @@ async fn run(
                         }
                     }
                     RuntimeSignal::Suspend => {
-                        // The single input stream is not polled while this
-                        // synchronous ownership transition is suspended.
+                        // Retire the reader before constructing its replacement:
+                        // EventStream::new acquires the shared reader lock, which
+                        // the old stream's pending poll can hold until Drop wakes it.
+                        drop(terminal_events);
                         guard.detach();
                         app.set_terminal_attached(false);
                         gui2tui::runtime::signals::suspend_current_process()?;
@@ -865,6 +871,36 @@ async fn run(
                         }
                         if !app.is_available() && key.code == crossterm::event::KeyCode::Char('d') {
                             show_diagnostics(&mut terminal, &mut terminal_events, &session).await?;
+                            continue;
+                        }
+                        if app.prepare_key_feedback(key) && guard.attached {
+                            terminal.draw(|frame| app.render(frame))?;
+                        }
+                        if key.code == crossterm::event::KeyCode::Char('r')
+                            && app.accepts_application_selector_shortcut() && app.is_available() {
+                            let cancellation = app.begin_refresh_wait();
+                            terminal.draw(|frame| app.render(frame))?;
+                            let quit = {
+                                let operation = app.handle_key_event(key);
+                                tokio::pin!(operation);
+                                tokio::select! {
+                                    quit = &mut operation => quit,
+                                    quit = async {
+                                        while let Some(event) = terminal_events.next().await {
+                                            if let Ok(Event::Key(key)) = event {
+                                                if key.code == crossterm::event::KeyCode::Esc { return false; }
+                                                if key.code == crossterm::event::KeyCode::Char('c')
+                                                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) { return true; }
+                                            }
+                                        }
+                                        true
+                                    } => {
+                                        cancellation.cancel();
+                                        operation.await || quit
+                                    }
+                                }
+                            };
+                            if quit { break; }
                             continue;
                         }
                         if app.handle_key_event(key).await {

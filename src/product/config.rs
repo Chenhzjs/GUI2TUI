@@ -7,7 +7,9 @@ use std::{
     path::Path,
 };
 
-pub const EXAMPLE: &str = "# GUI2TUI settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n\n# Optional shell-free handler for qualified complete multiline plain text.\n# The {file} argument is a GUI2TUI-owned private representation, never the app file.\n# [interaction.complex_text]\n# program = \"custom-editor-command\"\n# args = [\"--wait\", \"{file}\"]\n\n# Save launchers with `gui2tui app add`; do not hand-write shell commands.\n";
+pub const EXAMPLE: &str = "# GUI2TUI settings are optional. CLI overrides this file.\nversion = 1\n\n[runtime]\nbackend_timeout_ms = 5000\nevent_queue_capacity = 2048\n\n[terminal]\nmouse = true\n\n# Optional shell-free handler for qualified complete multiline plain text.\n# The {file} argument is a GUI2TUI-owned private representation, never the app file.\n# [interaction.complex_text]\n# program = \"custom-editor-command\"\n# args = [\"--wait\", \"{file}\"]\n\n# Optional resource endpoint: [resources], absolute socket, remote = true for SSH.
+
+# Save launchers with `gui2tui app add`; do not hand-write shell commands.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -16,7 +18,14 @@ pub struct Config {
     pub runtime: RuntimeConfig,
     pub terminal: TerminalConfig,
     pub interaction: InteractionConfig,
+    pub resources: ResourceConfig,
     pub launchers: BTreeMap<String, LauncherConfig>,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ResourceConfig {
+    pub socket: Option<std::path::PathBuf>,
+    pub remote: bool,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
@@ -56,6 +65,7 @@ impl Default for Config {
             runtime: RuntimeConfig::default(),
             terminal: TerminalConfig::default(),
             interaction: InteractionConfig::default(),
+            resources: ResourceConfig::default(),
             launchers: BTreeMap::new(),
         }
     }
@@ -105,6 +115,14 @@ impl Config {
         Ok(result)
     }
     pub fn validate(&self) -> Result<(), String> {
+        if self
+            .resources
+            .socket
+            .as_ref()
+            .is_some_and(|path| !path.is_absolute())
+        {
+            return Err("resources.socket must be an absolute path".into());
+        }
         if self.version != 1 {
             return Err("Unsupported configuration version; expected version = 1".into());
         }
@@ -272,6 +290,23 @@ mod tests {
     }
     #[test]
     fn invalid_config_is_rejected_without_echoing_values() {
+        assert!(
+            Config::parse(
+                r#"[resources]
+socket = 'relative.sock'
+"#
+            )
+            .is_err()
+        );
+        let resources = Config::parse(
+            r#"[resources]
+socket = '/tmp/private/broker.sock'
+remote = true
+"#,
+        )
+        .unwrap()
+        .resources;
+        assert!(resources.remote);
         for text in [
             "version=9",
             "[terminal]\nmouse='password-sentinel'",

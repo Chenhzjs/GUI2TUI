@@ -8,6 +8,20 @@ not create a public tag, GitHub Release or downloadable public artifact.
 
 ## Candidate scope
 
+- Public operations include exact text/selection/range editing and Value input,
+  with conflict checks and authoritative readback. Partial range failures remain
+  visible; an accepted call is distinct from a confirmed task effect.
+- F4 sends an explicitly selected single file to a same-host or SSH-forwarded
+  endpoint. Saved [resources] configuration records the socket and remote mode;
+  remote mode disables reference/path opening and sends bytes only. The local
+  handler remains user-configured. Preparation, authorization, byte progress,
+  cancellation and receipt are reported separately.
+- Qualified resource transport includes integrity verification, denial without
+  payload, partial cleanup on interrupted SSH transfer, and fresh sending after
+  reconnection. This is resource transfer, not remote Accessibility control.
+- Unix companion launch preserves PID/signal ownership so endpoint shutdown
+  does not leave a broker child behind.
+
 - A richer Semantic Surface preserves meaningful application-shell and
   document/content regions while implementation wrappers are normalized.
 - Surface and Reader are separate projections: Surface keeps bounded context

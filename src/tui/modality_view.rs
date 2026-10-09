@@ -8,6 +8,9 @@ use ratatui::{
 };
 
 pub struct ModalityView {
+    pub remote: bool,
+    pub transfer_progress: Option<std::sync::Arc<std::sync::Mutex<String>>>,
+    pub file_input: Option<super::edit::EditBuffer>,
     pub candidates: Vec<ModalityCandidate>,
     pub selected: usize,
     pub resolved: Option<ExternalModality>,
@@ -25,6 +28,11 @@ impl ModalityView {
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, status: &str) {
+        let progress = self
+            .transfer_progress
+            .as_ref()
+            .and_then(|value| value.lock().ok().map(|s| s.clone()));
+        let status = progress.as_deref().unwrap_or(status);
         let area = frame.area();
         frame.render_widget(Clear, area);
         let block = Block::default()
@@ -47,29 +55,40 @@ impl ModalityView {
         if lines.is_empty() {
             lines.push("No external modality objects exposed in the active scope".to_owned());
         }
+        if let Some(input) = &self.file_input {
+            lines = vec![
+                "Send user-selected file: absolute path on this host".into(),
+                "Enter sends; Esc cancels input; file may differ from unsaved GUI".into(),
+                format!("> {}", input.text()),
+            ];
+        }
         frame.render_widget(Paragraph::new(lines.join("\n")), rows[0]);
-        let availability = match &self.resolved {
-            Some(modality) if modality.capabilities.reference_handoff => {
-                "[Open locally] — approval required in local broker"
+        let availability = if self.remote {
+            "Remote endpoint: f transfers file bytes; Enter/o path handoff disabled"
+        } else {
+            match &self.resolved {
+                Some(modality) if modality.capabilities.reference_handoff => {
+                    "[Open locally] — approval required in local broker"
+                }
+                Some(modality) => match &modality.resolution {
+                    ModalityResolution::LiveVisualState { .. } => {
+                        "Live graphical state — no portable representation"
+                    }
+                    ModalityResolution::Unavailable { .. } => {
+                        "Original UNRESOLVED; m Request Image region snapshot (may be occluded)"
+                    }
+                    ModalityResolution::RenderedSnapshot(_) => {
+                        "RenderedSnapshot on host; not original bytes; o Same-host viewer if configured"
+                    }
+                    _ if self.capabilities.is_none() => {
+                        "Headless reference: Enter Inspect; no endpoint required"
+                    }
+                    _ => "No matching local handler or permitted resource scheme (read-only)",
+                },
+                None => "No resolved resource",
             }
-            Some(modality) => match &modality.resolution {
-                ModalityResolution::LiveVisualState { .. } => {
-                    "Live graphical state — no portable representation"
-                }
-                ModalityResolution::Unavailable { .. } => {
-                    "Original UNRESOLVED; m Request Image region snapshot (may be occluded)"
-                }
-                ModalityResolution::RenderedSnapshot(_) => {
-                    "RenderedSnapshot on host; not original bytes; o Same-host viewer if configured"
-                }
-                _ if self.capabilities.is_none() => {
-                    "Headless reference: Enter Inspect; no endpoint required"
-                }
-                _ => "No matching local handler or permitted resource scheme (read-only)",
-            },
-            None => "No resolved resource",
         };
-        frame.render_widget(Paragraph::new(format!("{availability}\n{status}\n↑/↓ Choose | Enter Reference | m Materialize | o Same-host viewer | Esc Return")), rows[1]);
+        frame.render_widget(Paragraph::new(format!("{availability}\n{status}\nf Send file | x Cancel | Enter Reference | m Snapshot | o Same-host | Esc Return")), rows[1]);
     }
 }
 
@@ -98,6 +117,9 @@ mod tests {
             }],
         );
         let mut view = ModalityView {
+            remote: false,
+            transfer_progress: None,
+            file_input: None,
             candidates: vec![candidate],
             selected: 0,
             resolved: Some(resolved),

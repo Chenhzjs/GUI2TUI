@@ -1,0 +1,379 @@
+{
+  "image": "sha256:5b57dfc2b131aec54dd95f76ecd58ce4cfe751694ab82ec859a1a76b8897ecda",
+  "script_sha256": "3d1a5c7b4c952103fd4bf91c62b3a154ecff8b1925bc142068ced5c515d5b9b0",
+  "tasks": [
+    {
+      "application": "firefox",
+      "scenario": "address_navigate",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "destination document title exposed by public Accessibility",
+      "backend_action_deliveries": []
+    },
+    {
+      "application": "firefox",
+      "scenario": "new_tab",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS81NQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "firefox",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "local HTTP fixture received a fresh reload request",
+      "request_counts": [
+        2,
+        3
+      ],
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS83OQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "firefox",
+      "scenario": "list_tabs",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public tab list panel is showing",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zNA",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "firefox",
+      "scenario": "firefox_view",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "Firefox View document exposed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8zMg",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "find",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "search focuses a public editable single-line control",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDU",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new tab and exact document text",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMzQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "fullscreen",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public window bounds changed to Xvfb screen bounds",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84Mw",
+          "action_index": 0,
+          "accepted": true
+        },
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xNDg",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "line_numbers",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": false,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "assertion_failed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84Mw",
+          "action_index": 0,
+          "accepted": true
+        },
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjQ",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "mousepad",
+      "scenario": "word_wrap",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": false,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "assertion_failed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS84OA",
+          "action_index": 0,
+          "accepted": true
+        },
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8xMjk",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "select_text",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjcw",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "new",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "new public page tab",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjU5",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "reload",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "reload restores disk fixture after GUI2TUI unsaved edit",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzODQ4",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "find",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "search focuses a public editable single-line control",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjYx",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "featherpad",
+      "scenario": "side_pane",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "document side pane exposes sample.txt list item",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNjY4",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "okular",
+      "scenario": "sidebar",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNzA1",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "okular",
+      "scenario": "browse",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNzA2",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "okular",
+      "scenario": "highlighter",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNzE0",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "okular",
+      "scenario": "underline",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "exact named control checked state changed",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNzE1",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    },
+    {
+      "application": "okular",
+      "scenario": "zoom_in",
+      "driver": "gui2tui_pty",
+      "layout": "flat",
+      "task_completed": true,
+      "binary_sha256": "5ff2ce7693428c172c17e1fde7aa493ee5817b9e454b220fb0af258c232a7eaa",
+      "operation_dispatched": true,
+      "status": "passed",
+      "assertion": "public zoom percentage increased",
+      "backend_action_deliveries": [
+        {
+          "locator": "atspi1_OjEuMgAvb3JnL2ExMXkvYXRzcGkvYWNjZXNzaWJsZS8yMTQ3NDgzNzEy",
+          "action_index": 0,
+          "accepted": true
+        }
+      ]
+    }
+  ]
+}

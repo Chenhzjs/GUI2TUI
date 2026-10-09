@@ -415,18 +415,34 @@ pub fn send_artifact(
     payload: &mut impl Read,
     cancel: &CancellationToken,
 ) -> io::Result<(Response, u64)> {
+    send_artifact_with_progress(socket, descriptor, payload, cancel, |_, _| {})
+}
+
+pub fn send_artifact_with_progress(
+    socket: &Path,
+    descriptor: ArtifactDescriptor,
+    payload: &mut impl Read,
+    cancel: &CancellationToken,
+    mut progress: impl FnMut(u64, u64),
+) -> io::Result<(Response, u64)> {
     let mut stream = connect(socket)?;
+    stream.set_read_timeout(Some(IO_POLL))?;
     write_control(
         &mut stream,
         &Request::Artifact {
             descriptor: descriptor.clone(),
         },
     )?;
-    let response: Response = read_control(&mut stream)?;
+    let response: Response = read_control(&mut DeadlineReader::new(
+        &stream,
+        Duration::from_secs(60),
+        cancel,
+    ))?;
     if !matches!(response, Response::Approved) {
         return Ok((response, 0));
     }
     let mut bytes = 0;
+    progress(0, descriptor.size);
     let mut buffer = [0; 64 * 1024];
     while bytes < descriptor.size {
         if cancel.is_cancelled() {
@@ -439,9 +455,17 @@ pub fn send_artifact(
         }
         stream.write_all(&buffer[..count])?;
         bytes += count as u64;
+        progress(bytes, descriptor.size);
     }
     stream.shutdown(Shutdown::Write)?;
-    Ok((read_control(&mut stream)?, bytes))
+    Ok((
+        read_control(&mut DeadlineReader::new(
+            &stream,
+            Duration::from_secs(60),
+            cancel,
+        ))?,
+        bytes,
+    ))
 }
 
 pub fn print_metrics(metrics: HandoffMetrics) {

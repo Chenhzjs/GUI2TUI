@@ -1,0 +1,16 @@
+{
+  "relation_edges": 31,
+  "unique_targets": 15,
+  "outside_tree_targets": [],
+  "read_errors": [],
+  "source_urls": [
+    "https://github.com/KDE/okular/tree/v22.12.3",
+    "https://deb.debian.org/debian/pool/main/o/okular/okular_22.12.3-1+deb12u1.debian.tar.xz"
+  ],
+  "hashes": {
+    "gui2tui-okular-source.tar.gz": "423abe1b36f704901589f4b8e0e71c2669f8f64c753cb4a29a16eb162e1277d2",
+    "gui2tui-okular-debian.tar.xz": "9b742246c9580e0c1f146256aca8d0d56151d49a8c13eaed3c36f26fc4f9e0fb",
+    "result.json": "dc32b0ed49a25b54d0bcac1102e1c7f6d61d4a1f7d080c712c9b5acfad48865b",
+    "scenario_session.py": "f50958333dcb41e7dd10688be958f9975ff813e8dcba8b0adb2e5e3d1677218f"
+  }
+}

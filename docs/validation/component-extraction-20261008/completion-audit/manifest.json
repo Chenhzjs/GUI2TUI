@@ -1,0 +1,33 @@
+{
+  "source_commit": "ebdb4053216981b9e9f813428cc031ed4857efe5",
+  "source_patch_sha256": "c3cc5819bc38b6e3c0b99c298b75b0b387308d02e92ac95239420940673cc904",
+  "binary_sha256": "5e21c52e1c746816ce8e8a7566fe2d946452472fde00d517b0a813251a1ff5e9",
+  "recovery_image": "sha256:fed2e3651b1ffdadeb55ebd9ca3445f229656819efec596cc128f40e832f8909",
+  "files": {
+    "tests/research/benchmark/scenario_session.py": "19e90aaaa09f927865ae46d6f97682ff24b98702761747a2987817c64744c41c",
+    "tests/research/benchmark/public_operations_fixture.py": "d77ed7cf2222d2bb8749495a94fa1a913d73a4349f95befa1c84b4340c5a0381",
+    "docs/validation/component-extraction-20261008/completion-audit/transport_driver.py": "71cbf169f2da196c527b75a3c3e69bfad4af7fe5769bfc96f7649fa313b444a6",
+    "docs/validation/component-extraction-20261008/completion-audit/transport.sh": "20e8ae51f9e9981fcb189d6cea2b4383fca9e7c6db7d290b9c878077fd651251",
+    "docs/validation/component-extraction-20261008/completion-audit/Dockerfile": "d63d3afd3044ab12ae381286eb388229d425a3e9598c97f8c9545251697419f5",
+    "tests/research/benchmark/run_scenarios.py": "9bae8eab91dfaf86df744a210470b518f499ddd4d58ddf86ed0da13c944bf137",
+    "docs/validation/component-extraction-20261008/completion-audit/display-ready.py": "837c4de5b9bae35cf0aae970d59118c302439daeb7ec88839f09f79b8768d087",
+    "docs/validation/component-extraction-20261008/lifecycle-current/run.sh": "bd6f7689cd7a0c792840918625012e67ea17ba23d047368f23e9b03b137c6b4a",
+    "docs/validation/component-extraction-20261008/completion-audit/cargo-test.log": "0725ea5dcdffa3494d6e191f571c1629a844d45cab4b6fcd1f55f223422e7486",
+    "docs/validation/component-extraction-20261008/completion-audit/cargo-clippy.log": "70de1fc1f7050cfad2243b53f90d5924720eab484cdab7b0ec8e6a44d2664927",
+    "docs/validation/component-extraction-20261008/completion-audit/transport-final.log": "8b7bc4fc919a1c5aa12074a433f014a9b1dab5ea8bafd83d52ae3f465db8cef1",
+    "docs/validation/component-extraction-20261008/completion-audit/recovery-v2.log": "7d5a1610b8deb499e6da47847969569b599a258438df52623174d4d33a76fb5e",
+    "docs/validation/component-extraction-20261008/completion-audit/recovery-v3.log": "07f0de470eec748d0abd614548d8089563b67d2b31cae4a4d2bfdf6ef41a5861",
+    "docs/validation/component-extraction-20261008/completion-audit/transport-v2.log": "1c23e1ebe43445a741857efb1833a2fc5aaa64bef74df75cd491f54e37ee310f",
+    "docs/validation/component-extraction-20261008/completion-audit/transport.log": "60d9120999c0bf8d1284bb5a9c4de237a9accdcf5f854df37d33c0d4ebbd8fcd",
+    "docs/validation/component-extraction-20261008/completion-audit/recovery-qualified.log": "809871b5c5b70b99a3231e194127b209d6691f0c38d36ebe5c16de35f6a35d30",
+    "docs/validation/component-extraction-20261008/completion-audit/lifecycle-final.log": "dbe3a5a25d9c2337e0385ca22d719c50fe3b718b8348b8897d69143c173e26ea",
+    "docs/validation/component-extraction-20261008/completion-audit/recovery.log": "c7c430f161885318b3e03e77d31417f965715b5884ba6ed8443604b9ab01cea2",
+    "docs/validation/component-extraction-20261008/completion-audit/performance.json": "dcf23216e86a8e56fddc84f5f5fe230762c468728a1a45ccec1bc679ed2239a9",
+    "docs/validation/component-extraction-20261008/completion-audit/fixture-metrics.json": "c3f88b196116b7cfeee0d12fca0d154796ee59b488da2df3d67391f21f29185b",
+    "docs/validation/component-extraction-20261008/audit-feedback-v2/summary.json": "248974a8cddda82ad0b63136682adb6961752f8bbff5b1cbbcc5fb4dc4e015a6",
+    "docs/validation/component-extraction-20261008/audit-final-spatial/summary.json": "7ccfe31a37b97ba7b0591aa6992a1b4008c5ab2c9d6880d57247a5a08741216f",
+    "docs/validation/component-extraction-20261008/audit-final-narrow/summary.json": "73883cdb09ead036cc7ea9b2f748657b9268fc52b1b93eff13576aa24da4eb3f",
+    "docs/validation/component-extraction-20261008/audit-final-flat/summary.json": "6bad64f0404920c9909b4488bca76097b662b8ae41a3aa5c1310c577c4a1d4f4"
+  },
+  "base_image": "sha256:5b57dfc2b131aec54dd95f76ecd58ce4cfe751694ab82ec859a1a76b8897ecda"
+}

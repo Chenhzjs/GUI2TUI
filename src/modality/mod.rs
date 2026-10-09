@@ -1,5 +1,6 @@
 pub mod acquisition;
 mod broker;
+pub mod file;
 pub mod materialize;
 mod model;
 mod resolver;

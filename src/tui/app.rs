@@ -78,6 +78,7 @@ pub struct TuiApplication {
     help_visible: Option<super::help::HelpContext>,
     help_scroll: u16,
     modality_socket: Option<std::path::PathBuf>,
+    modality_remote: bool,
     modality_view: Option<super::modality_view::ModalityView>,
     modality_task: Option<tokio::task::JoinHandle<String>>,
     modality_cancel: crate::modality::CancellationToken,
@@ -113,7 +114,9 @@ pub struct TuiApplication {
     backend_available: bool,
     external_text_handler_available: bool,
     edit_session: Option<EditSession>,
+    refresh_cancel: crate::modality::CancellationToken,
     external_text_requested: bool,
+    external_text_target: Option<(RuntimeNodeId, BackendLocator, String)>,
     command_palette: Option<CommandPalette>,
     choice_overlay: Option<ChoiceOverlay>,
     content: ContentRuntime,
@@ -142,6 +145,41 @@ struct ActionObservationResult {
 }
 
 impl TuiApplication {
+    pub fn begin_refresh_wait(&mut self) -> crate::modality::CancellationToken {
+        self.refresh_cancel = crate::modality::CancellationToken::default();
+        self.status = "Reading application — Esc cancels acquisition".into();
+        self.refresh_cancel.clone()
+    }
+
+    /// Paint feedback before a key starts bounded application I/O. Local
+    /// navigation and search remain immediate and do not show a busy state.
+    pub fn prepare_key_feedback(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+        if key.kind == KeyEventKind::Release {
+            return false;
+        }
+        let palette_group = self.command_palette.as_ref().is_some_and(|palette| {
+            palette
+                .entries()
+                .get(palette.selected())
+                .is_some_and(|entry| entry.group)
+        });
+        let submits = key.code == KeyCode::Enter && !palette_group;
+        let applies_text = self.edit_session.is_some()
+            && key.code == KeyCode::Char('s')
+            && key.modifiers.contains(KeyModifiers::CONTROL);
+        let refreshes = key.code == KeyCode::Char('r')
+            && self.edit_session.is_none()
+            && self.command_palette.is_none()
+            && self.content_view.is_none();
+        if submits || applies_text || refreshes {
+            self.status = "Working — waiting for the application…".into();
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_available(&self) -> bool {
         self.application_available && self.backend_available
     }
@@ -324,6 +362,7 @@ impl TuiApplication {
         }
         self.edit_session = None;
         self.external_text_requested = false;
+        self.external_text_target = None;
         self.content_view = None;
         self.content_return = None;
         self.modality_view = None;
@@ -400,6 +439,7 @@ impl TuiApplication {
         {
             Ok(mut fresh) => {
                 fresh.configure_modality_client(self.modality_socket.clone());
+                fresh.configure_modality_remote(self.modality_remote);
                 let mut runtime = std::mem::take(&mut self.runtime);
                 runtime.open_application(fresh.application_locator.clone());
                 fresh.runtime = runtime;
@@ -440,6 +480,10 @@ impl TuiApplication {
         self.modality_socket = socket;
     }
 
+    pub fn configure_modality_remote(&mut self, remote: bool) {
+        self.modality_remote = remote;
+    }
+
     async fn begin_modality(&mut self) {
         let candidates = crate::modality::ModalityResolver::discover(&self.cache)
             .into_iter()
@@ -474,12 +518,109 @@ impl TuiApplication {
             crate::runtime::EndpointState::Unavailable
         });
         self.modality_view = Some(super::modality_view::ModalityView {
+            remote: self.modality_remote,
+            transfer_progress: None,
+            file_input: None,
             candidates,
             selected: 0,
             resolved: None,
             capabilities,
         });
         self.resolve_selected_modality().await;
+    }
+
+    fn send_explicit_modality_file(&mut self, path: String) {
+        if self.modality_task.is_some() || self.capture_task.is_some() {
+            self.status = "A resource operation is already pending".into();
+            return;
+        }
+        let Some(socket) = self.modality_socket.clone() else {
+            self.status = "No resource endpoint configured; use --modality-socket".into();
+            return;
+        };
+        let path = std::path::PathBuf::from(path);
+        if !path.is_absolute() {
+            self.status = "Choose an absolute file path on this host".into();
+            return;
+        }
+        let Some((mime, kind)) = crate::modality::file::file_type(&path) else {
+            self.status =
+                "Unsupported file type; choose a supported self-contained resource".into();
+            return;
+        };
+        self.modality_cancel = Default::default();
+        let cancel = self.modality_cancel.clone();
+        self.modality_ticket = self
+            .runtime
+            .begin(
+                crate::runtime::OperationKind::ArtifactTransfer,
+                cancel.clone(),
+            )
+            .ok();
+        if self.modality_ticket.is_none() {
+            return;
+        }
+        let progress = std::sync::Arc::new(std::sync::Mutex::new(
+            "Preparing file; x cancels".to_owned(),
+        ));
+        if let Some(view) = &mut self.modality_view {
+            view.transfer_progress = Some(progress.clone());
+        }
+        self.modality_task = Some(tokio::task::spawn_blocking(move || {
+            match crate::modality::wire::capabilities(&socket) {
+                Ok(caps) if caps.artifact_receive && caps.supports_mime(mime) => {}
+                _ => return "Endpoint unavailable or no matching file handler".into(),
+            }
+            if cancel.is_cancelled() {
+                return "File transfer cancelled".into();
+            }
+            let (descriptor, mut file) = match crate::modality::file::describe_file_cancellable(
+                &path,
+                mime.into(),
+                kind,
+                &cancel,
+            ) {
+                Ok(source) => source,
+                Err(_) if cancel.is_cancelled() => return "File preparation cancelled".into(),
+                Err(_) => {
+                    return "Cannot prepare file: regular readable file up to 512 MiB required"
+                        .into();
+                }
+            };
+            if let Ok(mut state) = progress.lock() {
+                *state = "Awaiting endpoint approval; x cancels".into();
+            }
+            match crate::modality::wire::send_artifact_with_progress(
+                &socket,
+                descriptor,
+                &mut file,
+                &cancel,
+                |sent, total| {
+                    if let Ok(mut state) = progress.lock() {
+                        *state = if sent == total {
+                            format!(
+                                "Sent {sent}/{total} bytes; awaiting integrity check and handler"
+                            )
+                        } else {
+                            format!("Transferring {sent}/{total} bytes; x cancels")
+                        };
+                    }
+                },
+            ) {
+                Ok((crate::modality::wire::Response::Opened { artifact_bytes, .. }, _)) => format!(
+                    "Endpoint handler accepted user-selected file ({artifact_bytes} bytes); GUI unchanged"
+                ),
+                _ if cancel.is_cancelled() => {
+                    "File transfer cancelled; no completion confirmed".into()
+                }
+                Ok((crate::modality::wire::Response::Failed { reason, .. }, _)) => {
+                    crate::modality::wire::user_failure_message(&reason).into()
+                }
+                _ => "File transfer or endpoint failed; no completion confirmed".into(),
+            }
+        }));
+        self.status =
+            "Preparing file / awaiting endpoint approval / transferring; x cancels".into();
     }
 
     async fn resolve_selected_modality(&mut self) {
@@ -499,6 +640,10 @@ impl TuiApplication {
     }
 
     fn handoff_selected_modality(&mut self) {
+        if self.modality_remote {
+            self.status = "Remote endpoint: f sends file bytes; references require local access and are disabled".into();
+            return;
+        }
         if self.modality_task.is_some() {
             self.status = "A local handoff is already pending approval".to_owned();
             return;
@@ -664,6 +809,11 @@ impl TuiApplication {
     }
 
     fn open_materialized_same_host(&mut self) {
+        if self.modality_remote {
+            self.status =
+                "Remote endpoint: same-host opening unavailable; use f to send a file".into();
+            return;
+        }
         if self.modality_task.is_some() {
             self.status = "A handoff is already pending".into();
             return;
@@ -897,6 +1047,7 @@ impl TuiApplication {
             help_visible: None,
             help_scroll: 0,
             modality_socket: None,
+            modality_remote: false,
             modality_view: None,
             modality_task: None,
             modality_cancel: Default::default(),
@@ -935,7 +1086,9 @@ impl TuiApplication {
             backend_available: true,
             external_text_handler_available,
             edit_session: None,
+            refresh_cancel: crate::modality::CancellationToken::default(),
             external_text_requested: false,
+            external_text_target: None,
             command_palette: None,
             choice_overlay: None,
             content,
@@ -1635,7 +1788,48 @@ impl TuiApplication {
             return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc);
         }
         if self.modality_view.is_some() {
+            if self.modality_view.as_ref().unwrap().file_input.is_some() {
+                let input = self
+                    .modality_view
+                    .as_mut()
+                    .unwrap()
+                    .file_input
+                    .as_mut()
+                    .unwrap();
+                match key.code {
+                    KeyCode::Esc => self.modality_view.as_mut().unwrap().file_input = None,
+                    KeyCode::Enter => {
+                        let path = input.text().to_owned();
+                        self.modality_view.as_mut().unwrap().file_input = None;
+                        self.send_explicit_modality_file(path);
+                    }
+                    KeyCode::Char(c)
+                        if !key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
+                        input.insert(c)
+                    }
+                    KeyCode::Backspace => input.backspace(),
+                    KeyCode::Left => input.move_left(),
+                    KeyCode::Right => input.move_right(),
+                    KeyCode::Home => input.home(),
+                    KeyCode::End => input.end(),
+                    _ => {}
+                }
+                return false;
+            }
+
             match key.code {
+                KeyCode::Char('f') => {
+                    self.modality_view.as_mut().unwrap().file_input =
+                        Some(super::edit::EditBuffer::new(String::new()));
+                }
+                KeyCode::Char('x') => {
+                    self.modality_cancel.cancel();
+                    self.status = "Resource cancellation requested".into();
+                }
+
                 KeyCode::Esc => {
                     self.modality_view = None;
                     self.status =
@@ -1704,12 +1898,77 @@ impl TuiApplication {
                 if !crate::tui::action::is_public_action_target(&node.states) {
                     continue;
                 }
+                let mut ancestry = Vec::new();
+                let mut parent = node.parent;
+                for _ in 0..8 {
+                    let Some(owner) = parent.and_then(|id| self.cache.node(id)) else {
+                        break;
+                    };
+                    if let Some(name) = owner.name.as_deref().filter(|name| !name.trim().is_empty())
+                    {
+                        ancestry.push(name.to_owned());
+                    }
+                    parent = owner.parent;
+                    if ancestry.len() == 2 {
+                        break;
+                    }
+                }
+                ancestry.reverse();
+                let display_name = node
+                    .name
+                    .as_deref()
+                    .filter(|name| !name.trim().is_empty())
+                    .or_else(|| {
+                        self.scene
+                            .scene_id_for_runtime(node.runtime_id)
+                            .and_then(|id| self.scene.element(id))
+                            .map(element_label)
+                            .filter(|label| !label.trim().is_empty())
+                    })
+                    .unwrap_or("Unnamed");
                 let label = format!(
-                    "{} [{}] #{}",
-                    node.name.as_deref().unwrap_or("Unnamed"),
+                    "{} [{}] #{}{}",
+                    display_name,
                     node.role,
-                    node.runtime_id
+                    node.runtime_id,
+                    if ancestry.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" · {}", ancestry.join(" / "))
+                    },
                 );
+                let multiline = node
+                    .capabilities
+                    .contains(&SemanticCapability::EditComplexText);
+                if multiline || node.capabilities.contains(&SemanticCapability::EditText) {
+                    for (name, operation) in [
+                        (
+                            "Edit range (insert/delete/replace)",
+                            PublicOperation::EditRange,
+                        ),
+                        ("Read text selection", PublicOperation::ReadSelection),
+                    ] {
+                        actions.push((
+                            node.runtime_id,
+                            node.backend_locator.clone(),
+                            format!("{label} › {name}"),
+                            operation,
+                        ));
+                    }
+                    actions.push((
+                        node.runtime_id,
+                        node.backend_locator.clone(),
+                        format!(
+                            "{label} › {}",
+                            if multiline {
+                                "Edit whole text"
+                            } else {
+                                "Edit text"
+                            }
+                        ),
+                        PublicOperation::EditText { multiline },
+                    ));
+                }
                 for action in &node.actions {
                     if !action.name.is_empty() {
                         actions.push((
@@ -1743,6 +2002,12 @@ impl TuiApplication {
                     }
                 }
                 if node.capabilities.contains(&SemanticCapability::Value) {
+                    actions.push((
+                        node.runtime_id,
+                        node.backend_locator.clone(),
+                        format!("{label} › Set value"),
+                        PublicOperation::SetValue,
+                    ));
                     for increase in [true, false] {
                         actions.push((
                             node.runtime_id,
@@ -1788,6 +2053,34 @@ impl TuiApplication {
                             .is_err()
                         {
                             self.status = current_command_unavailable_status().into();
+                        } else if operation == PublicOperation::EditRange
+                            || operation == PublicOperation::ReadSelection
+                        {
+                            self.begin_text_range(
+                                runtime_id,
+                                locator,
+                                operation == PublicOperation::ReadSelection,
+                            )
+                            .await;
+                        } else if operation == PublicOperation::SetValue {
+                            self.begin_value_parameter(runtime_id, locator).await;
+                        } else if let PublicOperation::EditText { multiline } = operation {
+                            if multiline {
+                                let label = self
+                                    .cache
+                                    .node(runtime_id)
+                                    .and_then(|node| node.name.clone())
+                                    .unwrap_or_else(|| "Text".to_owned());
+                                self.external_text_target =
+                                    Some((runtime_id, locator.clone(), label));
+                                self.external_text_requested = true;
+                            } else {
+                                if let Some(scene_id) = self.scene.scene_id_for_runtime(runtime_id)
+                                {
+                                    self.focus.set(&self.scene, scene_id);
+                                }
+                                self.begin_edit_target(runtime_id, locator).await;
+                            }
                         } else if let PublicOperation::Action(name) = operation {
                             match self.backend.refresh_node(&locator, false).await {
                                 Ok(fresh)
@@ -1861,7 +2154,14 @@ impl TuiApplication {
                                         },
                                     )
                                 }
-                                PublicOperation::Action(_) => unreachable!(),
+                                PublicOperation::Action(_)
+                                | PublicOperation::EditText { .. }
+                                | PublicOperation::SetValue => {
+                                    unreachable!()
+                                }
+                                PublicOperation::EditRange | PublicOperation::ReadSelection => {
+                                    unreachable!()
+                                }
                             };
                             if self.runtime.complete(&ticket).is_ok() {
                                 let status = match result {
@@ -2629,6 +2929,9 @@ impl TuiApplication {
             && let Some(task) = self.modality_task.take()
         {
             let result = task.await;
+            if let Some(view) = &mut self.modality_view {
+                view.transfer_progress = None;
+            }
             if let Some(ticket) = self.modality_ticket.take()
                 && self.runtime.complete(&ticket).is_ok()
             {
@@ -3278,10 +3581,23 @@ impl TuiApplication {
             self.status = "Text field has no semantic binding".to_owned();
             return;
         };
-        let binding = binding.clone();
-        let runtime_id = binding.runtime_id;
-        let locator = binding.backend_locator.clone();
-        let label = element_label(element).to_owned();
+        self.begin_edit_target(binding.runtime_id, binding.backend_locator.clone())
+            .await;
+    }
+
+    async fn begin_edit_target(&mut self, runtime_id: RuntimeNodeId, locator: BackendLocator) {
+        let Some(binding) = self
+            .refresh_current_binding(runtime_id, &locator, true)
+            .await
+        else {
+            self.status = "Text target is no longer editable in the current scope".into();
+            return;
+        };
+        let label = self
+            .cache
+            .node(runtime_id)
+            .and_then(|node| node.name.clone())
+            .unwrap_or_else(|| "Text".into());
         match self
             .native_input
             .read_authoritative_text(&self.backend, &self.cache, &binding)
@@ -3310,6 +3626,11 @@ impl TuiApplication {
     }
 
     pub async fn begin_external_text_interaction(&mut self) -> Result<ExternalTextSession, String> {
+        if let Some((target, locator, label)) = self.external_text_target.take() {
+            return self
+                .begin_external_text_for_target(target, locator, label)
+                .await;
+        }
         let scene_id = self
             .focus
             .current()
@@ -3325,22 +3646,32 @@ impl TuiApplication {
         let target = binding.runtime_id;
         let locator = binding.backend_locator.clone();
         let label = element_label(element).to_owned();
+        self.begin_external_text_for_target(target, locator, label)
+            .await
+    }
+
+    async fn begin_external_text_for_target(
+        &mut self,
+        target: RuntimeNodeId,
+        locator: BackendLocator,
+        label: String,
+    ) -> Result<ExternalTextSession, String> {
         let node = self
             .cache
             .node(target)
-            .ok_or_else(|| "Focused text target disappeared".to_owned())?;
+            .ok_or_else(|| "Text target disappeared".to_owned())?;
         if node.backend_locator != locator
             || !node
                 .capabilities
                 .contains(&SemanticCapability::EditComplexText)
             || !self.scopes.allows_node(target)
         {
-            return Err("Focused text target is no longer safely editable".into());
+            return Err("Text target is no longer safely editable".into());
         }
         let scope = self
             .scopes
             .scope_for_node(target)
-            .ok_or_else(|| "Focused text target has no active interaction scope".to_owned())?;
+            .ok_or_else(|| "Text target has no active scope".to_owned())?;
         let generation = self
             .runtime
             .generation()
@@ -3357,7 +3688,7 @@ impl TuiApplication {
                 crate::modality::CancellationToken::default(),
             )
             .map_err(|error| error.to_string())?;
-        match ExternalTextSession::new(
+        ExternalTextSession::new(
             target,
             locator,
             generation,
@@ -3365,13 +3696,11 @@ impl TuiApplication {
             original,
             ticket.clone(),
             label,
-        ) {
-            Ok(session) => Ok(session),
-            Err(error) => {
-                let _ = self.runtime.complete(&ticket);
-                Err(error)
-            }
-        }
+        )
+        .map_err(|error| {
+            let _ = self.runtime.complete(&ticket);
+            error.to_string()
+        })
     }
 
     pub async fn finish_external_text_interaction(
@@ -3451,7 +3780,7 @@ impl TuiApplication {
                     expected: session.original.clone(),
                     text: candidate.clone(),
                 };
-                let operation = match resolve_backend_operation(&self.scene, operation) {
+                let operation = match resolve_cached_node_operation(&self.cache, operation) {
                     Ok(operation) => operation,
                     Err(error) => {
                         if !self.complete_external_text_ticket(
@@ -3572,7 +3901,228 @@ impl TuiApplication {
         }
     }
 
+    async fn begin_text_range(
+        &mut self,
+        target: RuntimeNodeId,
+        locator: BackendLocator,
+        read_only: bool,
+    ) {
+        let result = async {
+            let original = self.backend.read_authoritative_text(&locator).await.map_err(|e| e.to_string())?;
+            let ranges = self.backend.text_selections(&locator).await.map_err(|e| e.to_string())?;
+            if read_only {
+                let selected = ranges.iter().map(|(start, end)| {
+                    let text: String = original.chars().skip((*start).max(0) as usize)
+                        .take((end - start).max(0) as usize).collect();
+                    format!("[{start},{end}): {text}")
+                }).collect::<Vec<_>>().join("; ");
+                self.status = format!("Text selection (Unicode characters): {}", if selected.is_empty() { "none" } else { &selected });
+            } else {
+                let (start, end) = ranges.first().copied().unwrap_or((0, 0));
+                let count = original.chars().count();
+                let mut session = EditSession::new(target, locator, original, self.cache.generation());
+                session.range_parameter = true;
+                session.buffer = crate::tui::edit::EditBuffer::new(format!("{start}:{end}:"));
+                self.edit_session = Some(session);
+                self.status = format!("Edit range — start:end:text; Unicode characters, end exclusive, length {count}. Empty range inserts; empty text deletes");
+            }
+            Ok::<(), String>(())
+        }.await;
+        if let Err(error) = result {
+            self.status = error;
+        }
+    }
+
+    async fn commit_text_range(&mut self) {
+        let Some(session) = self.edit_session.as_ref() else {
+            return;
+        };
+        if !session.can_commit() {
+            self.status = "Text changed; cancel and reopen range editor".into();
+            return;
+        }
+        let mut parts = session.buffer.text().splitn(3, ':');
+        let start = parts.next().and_then(|s| s.parse::<usize>().ok());
+        let end = parts.next().and_then(|s| s.parse::<usize>().ok());
+        let replacement = parts.next();
+        let (Some(start), Some(end), Some(replacement)) = (start, end, replacement) else {
+            self.status = "Use start:end:text with Unicode character offsets".into();
+            return;
+        };
+        let (target, locator, expected, replacement) = (
+            session.target,
+            session.backend_locator.clone(),
+            session.original_value.clone(),
+            replacement.to_owned(),
+        );
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            target,
+            &locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(_) => {
+                self.status = current_command_unavailable_status().into();
+                return;
+            }
+        };
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::TextInteraction,
+            crate::modality::CancellationToken::default(),
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        if authority
+            .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+            .is_err()
+            || !self.runtime.validates_ticket(&ticket)
+        {
+            self.runtime.complete(&ticket).ok();
+            self.status = current_command_unavailable_status().into();
+            return;
+        }
+        let result = self
+            .backend
+            .replace_text_range(&locator, &expected, start, end, &replacement)
+            .await;
+        if self.runtime.complete(&ticket).is_err() {
+            return;
+        }
+        self.edit_session = None;
+        let status = match result {
+            Ok(actual) => format!(
+                "Text range verified by authoritative readback ({} characters)",
+                actual.chars().count()
+            ),
+            Err(error) => {
+                format!("Range edit not confirmed; partial delivery is possible: {error}")
+            }
+        };
+        self.full_reload(Some(status)).await;
+    }
+
+    async fn begin_value_parameter(&mut self, target: RuntimeNodeId, locator: BackendLocator) {
+        match self.backend.value_parameters(&locator).await {
+            Ok((current, minimum, maximum)) => {
+                let mut session = EditSession::new(
+                    target,
+                    locator,
+                    current.to_string(),
+                    self.cache.generation(),
+                );
+                session.value_parameter = true;
+                self.edit_session = Some(session);
+                self.status =
+                    format!("Set value — range {minimum}…{maximum}; Enter Apply; Esc Cancel");
+            }
+            Err(error) => self.status = error.to_string(),
+        }
+    }
+
+    async fn commit_value_parameter(&mut self) {
+        let Some(session) = self.edit_session.as_ref() else {
+            return;
+        };
+        if !session.can_commit() {
+            self.status = "Value changed externally; cancel and reopen the parameter".into();
+            return;
+        }
+        let Ok(requested) = session.buffer.text().trim().parse::<f64>() else {
+            self.status = "Enter a finite number".into();
+            return;
+        };
+        if !requested.is_finite() {
+            self.status = "Enter a finite number".into();
+            return;
+        }
+        let expected = session
+            .original_value
+            .parse::<f64>()
+            .expect("authoritative Value parameter");
+        let locator = session.backend_locator.clone();
+        let authority = match OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            session.target,
+            &locator,
+            &self.cache,
+            &self.scopes,
+        ) {
+            Ok(authority) => authority,
+            Err(_) => {
+                self.status = current_command_unavailable_status().into();
+                return;
+            }
+        };
+        let ticket = match self.runtime.begin(
+            crate::runtime::OperationKind::TextInteraction,
+            crate::modality::CancellationToken::default(),
+        ) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        if authority
+            .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+            .is_err()
+            || !self.runtime.validates_ticket(&ticket)
+        {
+            self.runtime.complete(&ticket).ok();
+            self.status = current_command_unavailable_status().into();
+            return;
+        }
+        let result = self.backend.set_value(&locator, expected, requested).await;
+        if self.runtime.complete(&ticket).is_err() {
+            return;
+        }
+        match result {
+            Ok(value) => {
+                self.edit_session = None;
+                self.full_reload(Some(format!(
+                    "Value {} → {} (requested {}; {})",
+                    value.previous,
+                    value.resulting,
+                    value.requested,
+                    if value.previous == value.resulting {
+                        "unchanged or outside range"
+                    } else if value.normalized {
+                        "normalized by application"
+                    } else {
+                        "readback confirmed"
+                    }
+                )))
+                .await;
+            }
+            Err(error) => self.status = error.to_string(),
+        }
+    }
+
     async fn commit_edit(&mut self, submit_after_edit: bool) {
+        if self
+            .edit_session
+            .as_ref()
+            .is_some_and(|session| session.range_parameter)
+        {
+            self.commit_text_range().await;
+            return;
+        }
+        if self
+            .edit_session
+            .as_ref()
+            .is_some_and(|session| session.value_parameter)
+        {
+            self.commit_value_parameter().await;
+            return;
+        }
         let Some(session) = self.edit_session.as_ref() else {
             return;
         };
@@ -3583,6 +4133,8 @@ impl TuiApplication {
             return;
         }
         let source_locator = session.backend_locator.clone();
+        let original_value = session.original_value.clone();
+        let original_readback = session.readback_locator.clone();
         let text = session.buffer.text().to_owned();
         if let Some(session) = self.edit_session.as_mut() {
             session.commit_pending = true;
@@ -3602,16 +4154,35 @@ impl TuiApplication {
             target,
             text: text.clone(),
         };
-        let edit_backend_operation = match resolve_backend_operation(&self.scene, edit_operation) {
-            Ok(operation) => operation,
-            Err(error) => {
+        match self
+            .native_input
+            .read_authoritative_text(&self.backend, &self.cache, &binding)
+            .await
+        {
+            Ok((targets, current))
+                if targets.readback_target.locator == original_readback
+                    && current == original_value => {}
+            _ => {
                 if let Some(session) = self.edit_session.as_mut() {
                     session.commit_pending = false;
+                    session.mark_external_change();
                 }
-                self.status = format!("Text edit is no longer supported: {error}");
+                self.status =
+                    "Input changed or could not be read; cancel and reload before editing".into();
                 return;
             }
-        };
+        }
+        let edit_backend_operation =
+            match resolve_cached_node_operation(&self.cache, edit_operation) {
+                Ok(operation) => operation,
+                Err(error) => {
+                    if let Some(session) = self.edit_session.as_mut() {
+                        session.commit_pending = false;
+                    }
+                    self.status = format!("Text edit is no longer supported: {error}");
+                    return;
+                }
+            };
         if !matches!(
             edit_backend_operation,
             BackendOperation::SetTextContents { ref locator, .. } if locator == &source_locator
@@ -3742,6 +4313,17 @@ impl TuiApplication {
         locator: &BackendLocator,
         require_editable: bool,
     ) -> Option<SceneBinding> {
+        OperationAuthority::capture(
+            &self.runtime,
+            &self.application_locator,
+            target,
+            locator,
+            &self.cache,
+            &self.scopes,
+        )
+        .ok()?
+        .validate_before_invocation(&self.runtime, &self.cache, &self.scopes)
+        .ok()?;
         let fresh = self.backend.refresh_node(locator, false).await.ok()?;
         if fresh.backend_locator != *locator
             || (require_editable
@@ -3752,6 +4334,31 @@ impl TuiApplication {
         }
         self.cache.refresh_node(fresh).ok()?;
         self.rebuild_view_preserving_focus().await;
+        if !self.scopes.allows_node(target) {
+            return None;
+        }
+        let node = self.cache.node(target)?;
+        if node.backend_locator != *locator {
+            return None;
+        }
+        if require_editable {
+            resolve_cached_node_operation(
+                &self.cache,
+                SemanticOperation::ReplaceText {
+                    target,
+                    text: String::new(),
+                },
+            )
+            .ok()?;
+            return Some(SceneBinding {
+                runtime_id: target,
+                backend_locator: locator.clone(),
+                semantic_role: node.role.clone(),
+                actions: node.actions.clone(),
+                capability: InteractionCapability::EditText,
+                default_intent: UiIntent::BeginEdit,
+            });
+        }
         self.scene
             .scene_id_for_runtime(target)
             .and_then(|scene_id| self.scene.element(scene_id))
@@ -4032,14 +4639,22 @@ impl TuiApplication {
             );
         }
         let started = Instant::now();
-        match load_snapshot(
-            &self.backend,
-            &self.application_locator,
-            self.inspect_options,
-            BootstrapStrategy::Walk,
-        )
-        .await
-        {
+        let cancellation = self.refresh_cancel.clone();
+        let snapshot = tokio::select! {
+            snapshot = load_snapshot(&self.backend, &self.application_locator,
+                self.inspect_options, BootstrapStrategy::Walk) => snapshot,
+            _ = async {
+                while !cancellation.is_cancelled() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            } => {
+                self.refresh_cancel = crate::modality::CancellationToken::default();
+                self.status = "Refresh cancelled; previous snapshot retained".into();
+                return;
+            }
+        };
+        self.refresh_cancel = crate::modality::CancellationToken::default();
+        match snapshot {
             Ok(bootstrap) => {
                 if !self
                     .runtime
@@ -4118,6 +4733,7 @@ impl TuiApplication {
                 self.ensure_focus_visible();
                 tracing::debug!(
                     target: "gui2tui::product",
+                    refresh_ms = started.elapsed().as_secs_f64() * 1000.0,
                     full_snapshots = self.cache.full_snapshot_count(),
                     "full semantic refresh completed"
                 );
@@ -5298,8 +5914,19 @@ impl TuiApplication {
                     }
                 }
                 DirtyScope::Application => {
-                    self.full_reload(Some("Full refresh fallback: application dirty".to_owned()))
-                        .await;
+                    let status = if self.status.starts_with("Value ")
+                        || self.status.starts_with("Range edit not confirmed")
+                        || self.status.starts_with("Text range verified")
+                    {
+                        self.status
+                            .split(" — ")
+                            .next()
+                            .unwrap_or(&self.status)
+                            .to_owned()
+                    } else {
+                        "Full refresh fallback: application dirty".to_owned()
+                    };
+                    self.full_reload(Some(status)).await;
                     return;
                 }
             };
@@ -5318,9 +5945,21 @@ impl TuiApplication {
             .first()
             .map(|id| format!(" first_reconciled={id}"))
             .unwrap_or_default();
+        let retained_status = success_status.or_else(|| {
+            (self.status.starts_with("Value ")
+                || self.status.starts_with("Range edit not confirmed")
+                || self.status.starts_with("Text range verified"))
+            .then(|| {
+                self.status
+                    .split(" — events=")
+                    .next()
+                    .unwrap_or(&self.status)
+                    .to_owned()
+            })
+        });
         self.status = format!(
             "{} — events={raw_count} dirty={dirty_count} refreshed={refreshed_nodes} nodes cache_nodes={cache_nodes} reconciled={reconciled}{reconciled_detail} new_ids={new_ids} removed_ids={removed_ids} update={elapsed} ms full_snapshots={}",
-            success_status.unwrap_or_else(|| "Live update".to_owned()),
+            retained_status.unwrap_or_else(|| "Live update".to_owned()),
             self.cache.full_snapshot_count()
         );
     }
@@ -6003,26 +6642,28 @@ fn build_scene(root: &crate::semantic::SemanticNode, mode: PresentationMode) -> 
 pub async fn qualify_complex_text_capabilities(
     backend: &AtspiBackend,
     cache: &mut SemanticCache,
-    content: &ContentRuntime,
+    _content: &ContentRuntime,
 ) {
-    let mut candidates = content
-        .catalog()
-        .visible_models()
-        .filter(|model| model.completeness == ContentCompleteness::Complete)
-        .map(|model| model.root)
-        .filter(|root| content.text_capability(*root).should_probe())
-        .filter(|root| {
-            cache.node(*root).is_some_and(|node| {
+    // Reader root selection is presentation policy: another independently
+    // complete text object in the same window remains editable.
+    let graph = crate::semantic::RelationalSemanticGraph::new(cache);
+    let scopes = InteractionScopes::analyze(cache, &graph);
+    let mut candidates =
+        cache
+            .nodes()
+            .filter(|node| scopes.allows_node(node.runtime_id))
+            .filter(|node| {
                 node.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
                     && node.states.contains(&SemanticState::Editable)
+                    && !node.states.contains(&SemanticState::ReadOnly)
                     && node.states.iter().any(|state| {
                         matches!(state, SemanticState::Other(value) if value == "multi-line")
                     })
                     && node.debug.interfaces.iter().any(|item| item == "Text")
                     && node.debug.interfaces.iter().any(|item| item == "EditableText")
             })
-        })
-        .collect::<Vec<_>>();
+            .map(|node| node.runtime_id)
+            .collect::<Vec<_>>();
     candidates.sort();
     for runtime_id in candidates {
         let Some(locator) = cache

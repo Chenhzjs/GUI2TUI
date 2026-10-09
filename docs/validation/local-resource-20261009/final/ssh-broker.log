@@ -1,0 +1,9 @@
+broker ready; view-only; executable configuration stays local
+reference_only=0 artifact_bytes=747 denied=0 cancelled=0 handler_unavailable=0
+broker ready; view-only; executable configuration stays local
+reference_only=0 artifact_bytes=0 denied=1 cancelled=0 handler_unavailable=0
+recorded_invocations=0
+broker ready; view-only; executable configuration stays local
+modality connection failed: BrokenPipe
+reference_only=0 artifact_bytes=68157773 denied=0 cancelled=0 handler_unavailable=0
+recorded_invocations=2

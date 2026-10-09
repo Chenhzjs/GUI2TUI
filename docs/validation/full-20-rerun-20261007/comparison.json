@@ -1,0 +1,18 @@
+{
+  "source_commit": "ebdb4053216981b9e9f813428cc031ed4857efe5",
+  "layout": "flat",
+  "total": 20,
+  "passed": 18,
+  "statuses": {
+    "passed": 18,
+    "assertion_failed": 2
+  },
+  "changes_from_previous_full_run": [
+    {
+      "application": "featherpad",
+      "scenario": "reload",
+      "before": "failed",
+      "after": "passed"
+    }
+  ]
+}

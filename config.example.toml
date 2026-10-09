@@ -16,3 +16,9 @@ mouse = true
 # [interaction.complex_text]
 # program = "custom-editor-command"
 # args = ["--wait", "{file}"]
+
+# Optional resource endpoint; socket path is on the GUI2TUI host.
+# [resources]
+# socket = "/absolute/private/broker.sock"
+# remote = false
+# Set remote = true for an SSH-forwarded endpoint on another host.
