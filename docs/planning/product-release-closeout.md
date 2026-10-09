@@ -9,7 +9,7 @@
 - [x] 公开引用、显式文件与受限静态快照入口；没有原文件时手动指定，不猜窗口标题。
 - [x] 单文件传输进度、取消、校验、拒绝、中断清理、重连后新发送。
 - [x] 当前候选 120×40 / 80×24 连续回归；Mousepad 窄端首次超时，独立同 binary 复测通过，保留稳定性记录。
-- [ ] 原生 Linux x86_64/aarch64 包、首次安装 smoke、ABI、版本和 provenance 门禁。
+- [x] 原生 Linux x86_64/aarch64 包、首次安装 smoke、ABI、版本和 provenance 门禁（44c8341）。
 - [ ] 最终支持矩阵、变更审查、提交、候选发布及正式发布。
 
 ## 范围边界
@@ -21,3 +21,5 @@
 发布要求沿用现有 release workflow：Ubuntu 22.04 原生 x86_64 与 aarch64、
 安装包 smoke、ABI、双包 assembly 和 provenance。本机 Docker 仿真只能提供
 本地补充证据，不能替代原生发布 runner。本机包也不得标记为正式发行包。
+
+源码与新增文档已审查提交并推送；[原生门禁记录](../validation/closeout-20261010/RELEASE-GATES.md)。候选产物已生成，正式版本发布尚未执行；后续文档 HEAD 不等于合格源码提交。
