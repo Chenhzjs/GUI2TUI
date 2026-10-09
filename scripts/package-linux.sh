@@ -39,6 +39,28 @@ while IFS= read -r -d '' tracked; do
     mkdir -p -- "$(dirname -- "$destination")"
     cp -- "$tracked" "$destination"
 done < <(git ls-files -z -- docs)
+# Repository evidence retains exact bytes; distributed text uses portable paths.
+# Hashes in evidence manifests refer to repository originals, not these copies.
+python3 - "$stage/$name/docs" <<'PY'
+import pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+for path in root.rglob("*"):
+    if not path.is_file():
+        continue
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeError:
+        continue
+    portable = re.sub(r"/Users/[^/\s]+/", "DEVELOPER_HOME/", text)
+    portable = portable.replace("/home/runner/work/", "CI_WORKSPACE/")
+    if portable != text:
+        path.write_text(portable, encoding="utf-8")
+(root / "PACKAGED-EVIDENCE.txt").write_text(
+    "Developer paths in distributed documentation are normalized. "
+    "Validation manifest hashes describe repository originals; "
+    "use the recorded source commit for byte-exact evidence.\n"
+)
+PY
 install -m 755 scripts/release-smoke.sh "$stage/$name/smoke/run.sh"
 cp tests/live/release_smoke.py tests/fixtures/release_smoke_gtk.py \
     tests/fixtures/release_smoke_qt.py \
