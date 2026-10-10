@@ -466,11 +466,17 @@ fn safe_extension(mime: &str) -> &'static str {
         "image/png" => "png",
         "image/jpeg" => "jpg",
         "image/svg+xml" => "svg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
         "application/pdf" => "pdf",
         "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "audio/ogg" => "ogg",
+        "audio/wav" => "wav",
         "audio/mpeg" => "mp3",
         "model/gltf+json" => "gltf",
         "model/gltf-binary" => "glb",
+        "model/obj" => "obj",
         _ => "bin",
     }
 }
@@ -505,6 +511,32 @@ mod tests {
     use crate::modality::ReferenceProvenance;
 
     use super::*;
+
+    #[test]
+    fn viewable_artifacts_keep_dispatchable_extensions() {
+        for mime in [
+            "image/png",
+            "image/jpeg",
+            "image/svg+xml",
+            "image/gif",
+            "image/webp",
+            "application/pdf",
+            "video/mp4",
+            "video/webm",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/wav",
+            "model/gltf+json",
+            "model/gltf-binary",
+            "model/obj",
+        ] {
+            let path = format!("artifact.{}", safe_extension(mime));
+            assert!(
+                path_extension_matches_mime(Path::new(&path), mime),
+                "{mime}"
+            );
+        }
+    }
 
     #[test]
     fn declared_image_mime_does_not_authorize_opening_a_script_or_installer() {

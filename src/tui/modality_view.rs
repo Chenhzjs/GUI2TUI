@@ -55,14 +55,24 @@ impl ModalityView {
         if lines.is_empty() {
             lines.push("No external modality objects exposed in the active scope".to_owned());
         }
-        if let Some(input) = &self.file_input {
+        if self.file_input.is_some() {
             lines = vec![
                 "Send user-selected file: absolute path on this host".into(),
                 "Enter sends; Esc cancels input; file may differ from unsaved GUI".into(),
-                format!("> {}", input.text()),
+                String::new(),
             ];
         }
         frame.render_widget(Paragraph::new(lines.join("\n")), rows[0]);
+        if let Some(input) = &self.file_input
+            && rows[0].height > 2
+            && rows[0].width > 2
+        {
+            let width = rows[0].width - 2;
+            let (text, cursor) = input_window(input, width);
+            let line = ratatui::layout::Rect::new(rows[0].x, rows[0].y + 2, rows[0].width, 1);
+            frame.render_widget(Paragraph::new(format!("> {text}")), line);
+            frame.set_cursor_position((line.x + 2 + cursor, line.y));
+        }
         let availability = if self.remote {
             "Remote endpoint: f transfers file bytes; Enter/o path handoff disabled"
         } else {
@@ -92,6 +102,31 @@ impl ModalityView {
     }
 }
 
+// Keep the insertion point visible, measuring terminal cells rather than bytes.
+fn input_window(input: &super::edit::EditBuffer, width: u16) -> (String, u16) {
+    let chars: Vec<char> = input.text().chars().collect();
+    let cursor = input.cursor().min(chars.len());
+    let cells = |c: char| ratatui::text::Span::raw(c.to_string()).width();
+    let available = usize::from(width.saturating_sub(1));
+    let mut start = cursor;
+    let mut before = 0;
+    while start > 0 && before + cells(chars[start - 1]) <= available {
+        start -= 1;
+        before += cells(chars[start]);
+    }
+    let mut text = String::new();
+    let mut used = 0;
+    for &c in &chars[start..] {
+        let size = cells(c);
+        if used + size > usize::from(width) {
+            break;
+        }
+        text.push(c);
+        used += size;
+    }
+    (text, before as u16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +135,48 @@ mod tests {
         semantic::{BackendLocator, RuntimeNodeId},
     };
     use ratatui::{Terminal, backend::TestBackend};
+    #[test]
+    fn reopened_view_shows_live_task_progress() {
+        let progress =
+            std::sync::Arc::new(std::sync::Mutex::new("Transferring 1/100 bytes".to_owned()));
+        let make_view = || ModalityView {
+            remote: true,
+            transfer_progress: Some(progress.clone()),
+            file_input: None,
+            candidates: vec![],
+            selected: 0,
+            resolved: None,
+            capabilities: None,
+        };
+        drop(make_view());
+        let view = make_view();
+        *progress.lock().unwrap() = "Transferring 80/100 bytes".into();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| view.render(frame, "idle")).unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Transferring 80/100 bytes"));
+    }
+
+    #[test]
+    fn long_unicode_path_keeps_cursor_and_filename_visible() {
+        let mut input =
+            super::super::edit::EditBuffer::new(format!("/{}文件?.pdf", "long/".repeat(30)));
+        let (text, cursor) = input_window(&input, 20);
+        assert!(text.ends_with("文件?.pdf"));
+        assert!(cursor < 20);
+        assert_eq!(ratatui::text::Span::raw(&text).width(), usize::from(cursor));
+        input.home();
+        let (text, cursor) = input_window(&input, 20);
+        assert!(text.starts_with("/long/"));
+        assert_eq!(cursor, 0);
+    }
+
     #[test]
     fn no_connected_client_never_renders_a_fake_open_button() {
         let candidate = ModalityCandidate {

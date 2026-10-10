@@ -81,6 +81,7 @@ pub struct TuiApplication {
     modality_remote: bool,
     modality_view: Option<super::modality_view::ModalityView>,
     modality_task: Option<tokio::task::JoinHandle<String>>,
+    modality_progress: Option<std::sync::Arc<std::sync::Mutex<String>>>,
     modality_cancel: crate::modality::CancellationToken,
     materialized_artifacts: Vec<crate::modality::materialize::MaterializedArtifact>,
     backend: AtspiBackend,
@@ -352,6 +353,7 @@ impl TuiApplication {
         self.application_available = false;
         self.runtime.invalidate_application();
         self.modality_cancel.cancel();
+        self.modality_progress = None;
         if let Some(task) = self.capture_task.take() {
             task.abort();
         }
@@ -388,6 +390,7 @@ impl TuiApplication {
         self.application_available = false;
         self.runtime.invalidate_application();
         self.modality_cancel.cancel();
+        self.modality_progress = None;
         if let Some(task) = self.capture_task.take() {
             task.abort();
         }
@@ -498,11 +501,14 @@ impl TuiApplication {
                     })
             })
             .collect();
-        if self.modality_socket.is_some() {
+        let pending = self.modality_task.is_some();
+        if !pending && self.modality_socket.is_some() {
             self.runtime
                 .set_endpoint(crate::runtime::EndpointState::Connecting);
         }
-        let capabilities = if let Some(socket) = self.modality_socket.clone() {
+        let capabilities = if pending {
+            None
+        } else if let Some(socket) = self.modality_socket.clone() {
             tokio::task::spawn_blocking(move || crate::modality::wire::capabilities(&socket))
                 .await
                 .ok()
@@ -510,16 +516,18 @@ impl TuiApplication {
         } else {
             None
         };
-        self.runtime.set_endpoint(if capabilities.is_some() {
-            crate::runtime::EndpointState::Available
-        } else if self.modality_socket.is_some() {
-            crate::runtime::EndpointState::Disconnected
-        } else {
-            crate::runtime::EndpointState::Unavailable
-        });
+        if !pending {
+            self.runtime.set_endpoint(if capabilities.is_some() {
+                crate::runtime::EndpointState::Available
+            } else if self.modality_socket.is_some() {
+                crate::runtime::EndpointState::Disconnected
+            } else {
+                crate::runtime::EndpointState::Unavailable
+            });
+        }
         self.modality_view = Some(super::modality_view::ModalityView {
             remote: self.modality_remote,
-            transfer_progress: None,
+            transfer_progress: self.modality_progress.clone(),
             file_input: None,
             candidates,
             selected: 0,
@@ -563,6 +571,7 @@ impl TuiApplication {
         let progress = std::sync::Arc::new(std::sync::Mutex::new(
             "Preparing file; x cancels".to_owned(),
         ));
+        self.modality_progress = Some(progress.clone());
         if let Some(view) = &mut self.modality_view {
             view.transfer_progress = Some(progress.clone());
         }
@@ -1050,6 +1059,7 @@ impl TuiApplication {
             modality_remote: false,
             modality_view: None,
             modality_task: None,
+            modality_progress: None,
             modality_cancel: Default::default(),
             materialized_artifacts: Vec::new(),
             backend,
@@ -1721,7 +1731,11 @@ impl TuiApplication {
             }
             return false;
         }
-        let typing = self.edit_session.is_some()
+        let typing = self
+            .modality_view
+            .as_ref()
+            .is_some_and(|view| view.file_input.is_some())
+            || self.edit_session.is_some()
             || self.command_palette.is_some()
             || self
                 .content_view
@@ -1811,6 +1825,7 @@ impl TuiApplication {
                         input.insert(c)
                     }
                     KeyCode::Backspace => input.backspace(),
+                    KeyCode::Delete => input.delete(),
                     KeyCode::Left => input.move_left(),
                     KeyCode::Right => input.move_right(),
                     KeyCode::Home => input.home(),
@@ -1828,6 +1843,11 @@ impl TuiApplication {
                 KeyCode::Char('x') => {
                     self.modality_cancel.cancel();
                     self.status = "Resource cancellation requested".into();
+                    if let Some(progress) = &self.modality_progress
+                        && let Ok(mut state) = progress.lock()
+                    {
+                        *state = self.status.clone();
+                    }
                 }
 
                 KeyCode::Esc => {
@@ -2929,6 +2949,7 @@ impl TuiApplication {
             && let Some(task) = self.modality_task.take()
         {
             let result = task.await;
+            self.modality_progress = None;
             if let Some(view) = &mut self.modality_view {
                 view.transfer_progress = None;
             }
@@ -6300,6 +6321,7 @@ impl SurfaceSnapshotRefresher for TuiApplication {
 impl Drop for TuiApplication {
     fn drop(&mut self) {
         self.modality_cancel.cancel();
+        self.modality_progress = None;
         if let Some(task) = self.capture_task.take() {
             task.abort();
         }
