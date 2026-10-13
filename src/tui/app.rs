@@ -2786,7 +2786,7 @@ impl TuiApplication {
                     })
                 else {
                     self.status =
-                        "Current Table row is not safely selectable; continue reading".to_owned();
+                        "Current Table row is not selectable; continue reading".to_owned();
                     return;
                 };
                 let Some(table) = self.cache.node(table_owner) else {
@@ -2880,7 +2880,7 @@ impl TuiApplication {
         ) {
             Ok(BackendOperation::InvokeAction { locator, action }) => (locator, action),
             _ => {
-                self.status = "Current Table cell exposes no safe Activate action".to_owned();
+                self.status = "Current Table cell exposes no Activate action".to_owned();
                 return;
             }
         };
@@ -3432,7 +3432,7 @@ impl TuiApplication {
         option: crate::transcompile::ChoiceOption,
     ) {
         let Some(strategy) = option.selection.as_ref() else {
-            self.status = format!("Choice \"{}\" has no safe semantic selection", option.label);
+            self.status = format!("Choice \"{}\" has no semantic selection", option.label);
             self.choice_overlay = Some(overlay.clone());
             return;
         };
@@ -3554,7 +3554,7 @@ impl TuiApplication {
             resolve_cached_node_operation(&self.cache, operation)
         else {
             self.status
-                .push_str("; popup remains open (no safe close operation)");
+                .push_str("; popup remains open (no close operation available)");
             return;
         };
         match self
@@ -3687,7 +3687,7 @@ impl TuiApplication {
                 .contains(&SemanticCapability::EditComplexText)
             || !self.scopes.allows_node(target)
         {
-            return Err("Text target is no longer safely editable".into());
+            return Err("Text target is no longer editable".into());
         }
         let scope = self
             .scopes

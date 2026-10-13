@@ -1,4 +1,4 @@
-# Getting started with GUI2TUI v1.1
+# Getting started with GUI2TUI
 
 GUI2TUI presents public Linux Accessibility semantics, spatial relationships
 and verified operations as a responsive terminal application. It provides
@@ -7,6 +7,47 @@ configured interaction for qualified complete plain text. Insufficient
 capability remains visibly read-only; operations are never guessed. The v1.1
 Surface keeps application regions and document context together, while Reader
 remains an explicit continuous-reading projection.
+
+## Choose your path
+
+GUI2TUI's stable public binary is v1.0.0. The repository currently contains
+the v1.1 development and qualification work, including the `v1.1.0-rc.1`
+version shown by a source build. That source version is not a separate public
+release archive. Use the release installation for normal use and the source
+build instructions only for development.
+
+Live operation requires Linux, a UTF-8 interactive terminal, and a GUI
+application that exposes public AT-SPI Accessibility semantics. You can use an
+existing desktop session or let GUI2TUI create a private Managed headless
+session. macOS can build and test the project, but cannot run the live Linux
+Accessibility path.
+
+For the shortest repeatable first run, use Managed mode:
+
+```bash
+gui2tui setup persistent
+gui2tui --session managed doctor
+gui2tui --session managed app add mousepad
+gui2tui --session managed launch mousepad
+```
+
+Replace `mousepad` with an installed accessible GUI application. Continue with
+`gui2tui --session managed` after `doctor` reports no `FAIL` result. If the
+application is already running in that Managed session, skip `app add` and
+select it from the application list. For an existing Linux desktop session,
+use `gui2tui --session desktop doctor` followed by
+`gui2tui --session desktop`.
+
+After an application is running, the shortest interactive command is its
+accessible name:
+
+```bash
+gui2tui Mousepad
+```
+
+The name can be an exact name or an unambiguous substring. If it is ambiguous,
+run `gui2tui` and choose the current application from the selector. The
+existing `--app NAME` form remains available for scripts.
 
 ## User-prefix installation
 
@@ -65,6 +106,14 @@ Runtime: Linux session D-Bus + AT-SPI accessibility service, a terminal with UTF
 cursor/alternate-screen support, and an already running accessible GUI application.
 On the tested Ubuntu environment, `dbus`, `at-spi2-core` and the GUI application's own toolkit
 provide session accessibility. The binary does not link against GTK/Qt.
+
+Managed mode additionally requires `xvfb`, `dbus-x11`, `at-spi2-core`,
+`x11-utils`, `libglib2.0-bin`, and `python3`. On Ubuntu/Debian, install missing
+dependencies with the command printed by `gui2tui setup persistent`, or use:
+
+```bash
+sudo apt install xvfb x11-utils dbus-x11 at-spi2-core libglib2.0-bin python3
+```
 
 ```bash
 gui2tui --session desktop doctor

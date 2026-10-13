@@ -210,6 +210,9 @@ impl InteractionScopes {
                 )
         });
         node_scope == self.active
+            || (permits_shell_ancestor
+                && self.window_family(node_scope).is_some()
+                && self.window_family(node_scope) == self.window_family(self.active))
             || (permits_descendant_scope
                 && is_descendant_or_same(&self.scopes, node_scope, self.active))
             || (permits_shell_ancestor
@@ -218,6 +221,20 @@ impl InteractionScopes {
                     .get(&node_scope)
                     .is_some_and(|scope| scope.kind == InteractionScopeKind::Window)
                 && is_descendant_or_same(&self.scopes, self.active, node_scope))
+    }
+
+    fn window_family(&self, mut id: InteractionScopeId) -> Option<InteractionScopeId> {
+        let mut window = None;
+        loop {
+            let scope = self.scopes.get(&id)?;
+            match scope.kind {
+                InteractionScopeKind::Window => window = Some(id),
+                InteractionScopeKind::Dialog => {}
+                InteractionScopeKind::Application => return window,
+                _ => return None,
+            }
+            id = scope.parent?;
+        }
     }
 }
 
@@ -230,20 +247,9 @@ fn scope_kind(
 ) -> Option<InteractionScopeKind> {
     let present = surface_is_present(states);
     let modal = present && has_state(states, "modal");
-    // Several AT-SPI implementations expose an application-modal dialog as an
-    // active Dialog without publishing the optional `modal` state. Treating an
-    // active dialog as a modal boundary is the conservative choice: it prevents
-    // commands from escaping to the background window while the dialog owns
-    // interaction. This is protocol/state based and not toolkit specific.
-    let active_dialog = present
-        && role == SemanticRole::Dialog
-        && states.iter().any(|state| {
-            matches!(state, SemanticState::Focused)
-                || matches!(state, SemanticState::Other(value) if value == "active")
-        });
     match role {
         SemanticRole::Application => Some(InteractionScopeKind::Application),
-        SemanticRole::Dialog | SemanticRole::Window if modal || active_dialog => {
+        SemanticRole::Dialog | SemanticRole::Window if modal => {
             Some(InteractionScopeKind::ModalDialog)
         }
         SemanticRole::Dialog => Some(InteractionScopeKind::Dialog),
@@ -455,6 +461,49 @@ mod tests {
             scopes.scope(scopes.active()).unwrap().kind,
             InteractionScopeKind::Window
         );
+    }
+
+    #[test]
+    fn modeless_focus_keeps_nested_window_controls_reachable() {
+        let mut app = node(0, SemanticRole::Application, "App");
+        let mut shell = node(1, SemanticRole::Window, "Shell");
+        let mut page = node(2, SemanticRole::Window, "Page");
+        page.children.push(node(3, SemanticRole::Button, "Login"));
+        let mut prompt = node(4, SemanticRole::Dialog, "Prompt");
+        prompt.states.push(SemanticState::Focused);
+        page.children.push(prompt);
+        shell.children.push(page);
+        let mut other = node(5, SemanticRole::Window, "Other");
+        other
+            .children
+            .push(node(6, SemanticRole::Button, "Unrelated"));
+        app.children = vec![shell, other];
+        let mut cache = SemanticCache::from_snapshot(app).unwrap();
+        for focused_prompt in [true, false] {
+            let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+            let login = cache
+                .nodes()
+                .find(|node| node.name.as_deref() == Some("Login"))
+                .unwrap();
+            let unrelated = cache
+                .nodes()
+                .find(|node| node.name.as_deref() == Some("Unrelated"))
+                .unwrap();
+            assert!(scopes.allows_node(login.runtime_id));
+            assert!(!scopes.allows_node(unrelated.runtime_id));
+            assert!(!scopes.scope(scopes.active()).unwrap().modal);
+            if focused_prompt {
+                let prompt = cache
+                    .nodes()
+                    .find(|node| node.name.as_deref() == Some("Prompt"))
+                    .unwrap()
+                    .backend_locator
+                    .clone();
+                cache
+                    .replace_subtree(&prompt, node(4, SemanticRole::Dialog, "Prompt"))
+                    .unwrap();
+            }
+        }
     }
 
     #[test]

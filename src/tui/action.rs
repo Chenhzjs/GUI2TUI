@@ -79,6 +79,13 @@ pub fn resolve_action<'a>(
                 .iter()
                 .find(|action| action.name.eq_ignore_ascii_case(name))
         })
+        .or_else(|| {
+            let mut named = actions
+                .iter()
+                .filter(|action| !action.name.trim().is_empty());
+            let only = named.next()?;
+            (named.next().is_none() && is_direct_action_name(&only.name)).then_some(only)
+        })
         .ok_or_else(|| ActionResolutionError::NoCompatibleAction {
             available: actions
                 .iter()
@@ -86,6 +93,34 @@ pub fn resolve_action<'a>(
                 .collect::<Vec<_>>()
                 .join(", "),
         })
+}
+
+fn is_direct_action_name(name: &str) -> bool {
+    if name.contains('.') {
+        return false;
+    }
+    !matches!(
+        name.to_ascii_lowercase().as_str(),
+        "activate"
+            | "click"
+            | "collapse"
+            | "decrease"
+            | "delete"
+            | "destroy"
+            | "expand"
+            | "increase"
+            | "open"
+            | "press"
+            | "remove"
+            | "reset"
+            | "clear"
+            | "select"
+            | "show-menu"
+            | "showmenu"
+            | "submit"
+            | "toggle"
+            | "toggle-expand"
+    )
 }
 
 pub fn interaction_capability(
@@ -427,6 +462,23 @@ mod tests {
             resolve_action(&SemanticRole::Button, &[], UiIntent::Activate),
             Err(ActionResolutionError::NoActions)
         );
+    }
+
+    #[test]
+    fn resolves_a_single_explicit_custom_action() {
+        let available = actions(&["open-document"]);
+        let resolved =
+            resolve_action(&SemanticRole::Button, &available, UiIntent::Activate).unwrap();
+        assert_eq!(resolved.name, "open-document");
+    }
+
+    #[test]
+    fn does_not_guess_between_multiple_custom_actions() {
+        let available = actions(&["open-document", "open-properties"]);
+        assert!(matches!(
+            resolve_action(&SemanticRole::Button, &available, UiIntent::Activate),
+            Err(ActionResolutionError::NoCompatibleAction { .. })
+        ));
     }
 
     #[test]

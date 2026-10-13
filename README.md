@@ -79,11 +79,15 @@ X11 target; key delivery is not semantic authority or proof of success.
 
 ## Quick start
 
-For the stable public baseline, download the appropriate archive from the
-[GUI2TUI v1.0.0 release](https://github.com/Chenhzjs/GUI2TUI/releases/tag/v1.0.0).
-The v1.1.0-rc.1 archives are internal qualification artifacts and are not
-published by this branch.
-The archives are named for the target reported by `uname -m`:
+GUI2TUI runs live on Linux. macOS is useful for building and testing the
+project, but it cannot provide the Linux AT-SPI runtime needed to operate a
+GUI application. Before installing, make sure the host has a UTF-8 terminal,
+an accessible GUI application, and either an existing Linux desktop session or
+the Managed headless dependencies (`xvfb`, `dbus-x11`, `at-spi2-core`,
+`x11-utils`, `libglib2.0-bin`, and `python3`).
+
+The stable public binary is v1.0.0. Download the archive matching
+`uname -m`:
 
 ```bash
 ARCH="$(uname -m)"       # x86_64 or aarch64
@@ -97,35 +101,57 @@ gui2tui --version
 
 Verify a downloaded archive with the release `SHA256SUMS` before installing.
 The installer is unprivileged and deliberately refuses to overwrite existing
-targets. For replacement or custom prefixes, see
+targets. The v1.1 source tree and its `v1.1.0-rc.1` build are qualification
+artifacts rather than a separate public download; build from source only when
+developing or validating the project. For replacement or custom prefixes, see
 [Getting started](docs/getting-started.md).
 
-### Start a Managed headless session
+### Recommended first run: Managed headless mode
 
-On a host without a user-operated graphical desktop:
+This is the most repeatable path on a Linux host. It creates a private Xvfb,
+D-Bus and AT-SPI session. The example uses Mousepad; replace it with an
+installed GUI application that exposes public Accessibility semantics.
 
 ```bash
 gui2tui setup persistent
 gui2tui --session managed doctor
-gui2tui --session managed
-```
-
-The target GUI application must run inside the same selected graphical and
-Accessibility session. If it is already running, select it in the application
-list. If it is installed and can be launched directly, register it and let
-GUI2TUI start it in the Managed session:
-
-```bash
 gui2tui --session managed app add mousepad
 gui2tui --session managed launch mousepad
 gui2tui --session managed
 ```
 
-The launcher passes arguments directly without a shell. It cannot create an
-Accessibility tree for an application that does not expose one. Use
-`gui2tui setup status`, `restart` and `stop` to manage the session.
+`doctor` must finish without a `FAIL` result before opening the TUI. If the
+application is already running in the same session, omit `app add` and select
+it from the application list. GUI2TUI cannot create an Accessibility tree for
+an application that exposes none. Use `gui2tui setup status`, `restart` and
+`stop` to manage the session.
+
+On a normal Linux desktop, use the inherited session instead:
+
+```bash
+gui2tui --session desktop doctor
+gui2tui --session desktop
+```
+
+If startup fails, run `gui2tui --session managed doctor` again and follow its
+first `FAIL` instruction. Missing Managed dependencies are reported with the
+corresponding Ubuntu/Debian `apt install` command. Docker, SSH and Wayland
+qualification paths are documented in [Deployment](docs/deployment.md).
 
 ### Use the TUI
+
+Once an application is already running in the selected session, its name can
+be passed directly:
+
+```bash
+gui2tui Mousepad
+gui2tui Firefox
+```
+
+The name may be an exact name or an unambiguous substring. If more than one
+application matches, GUI2TUI reports the ambiguity and the selector remains
+available through plain `gui2tui`. `--app NAME` remains available for scripts
+and explicit command-line use.
 
 The selector accepts arrows, Enter and `/` for filtering. In a scene, use
 Tab/Shift-Tab and the arrow keys to move through available semantic controls;

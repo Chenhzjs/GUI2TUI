@@ -60,6 +60,10 @@ enum InitialApplication {
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
+
+    /// Open an accessible application by its exact name or unambiguous substring.
+    #[arg(value_name = "APP", conflicts_with = "app")]
+    application: Option<String>,
     /// Debug-build-only terminal restoration failpoint used by the lifecycle harness.
     #[cfg(debug_assertions)]
     #[arg(long, hide = true)]
@@ -303,6 +307,7 @@ async fn dispatch(mut cli: Cli, session: Option<SessionSelection>) -> Result<(),
         doctor, launcher, paths,
     };
     let mut launch_id = None;
+    let direct_application = cli.application.take();
     match cli.command.take() {
         Some(Command::Setup { command }) => {
             return run_setup(command);
@@ -440,6 +445,12 @@ async fn dispatch(mut cli: Cli, session: Option<SessionSelection>) -> Result<(),
         }
         Some(Command::Launch { id }) => launch_id = Some(id),
         Some(Command::Run) | None => {}
+    }
+    if let Some(application) = direct_application {
+        if cli.app.is_some() {
+            return Err("use either APP or --app NAME, not both".into());
+        }
+        cli.app = Some(application);
     }
     let session = session.ok_or("Session selection missing for interactive runtime")?;
     let mut config = Config::load(&paths::config_path()?)?;
