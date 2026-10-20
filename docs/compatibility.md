@@ -1,5 +1,11 @@
 # Compatibility matrix
 
+For the current main-branch capability summary and development Agent interface,
+read [current source status (2026-10-20)](current-status-20261020.md).
+The dated matrices below are historical evidence, including earlier write
+restrictions; they are not an exhaustive statement of current source behavior.
+Application names describe validation cases, never production adapters.
+
 ## v0.3 verified capability evidence (2026-09-05)
 
 | Application / family | Result | v0.3 capability evidence / safe limitation |

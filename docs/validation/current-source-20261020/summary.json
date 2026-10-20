@@ -1,0 +1,457 @@
+{
+  "schema_version": 1,
+  "document_date": "2026-10-20",
+  "source_commit": "76dc5ff96170a4516f4a9a382ea971fe3b57d085",
+  "scope": "Sanitized summary of current-source pre-commit checks and separately identified historical evidence. Historical live runs were not rerun at this commit. Raw traces remain local and are not included.",
+  "current_source_precommit_checks": {
+    "environment": "macOS host; non-live Rust checks. No GUI or model evaluation in these checks.",
+    "evidence_kind": "Command results observed during the source commit session; raw command logs are not included in this summary.",
+    "commands": [
+      {
+        "command": "cargo test --offline --locked --lib",
+        "passed": 398,
+        "total": 398
+      },
+      {
+        "command": "python -m unittest discover -s tests/research/web -p 'test_*.py' -v",
+        "passed": 7,
+        "total": 7
+      },
+      {
+        "command": "cargo check --offline --locked --bins",
+        "status": "passed"
+      },
+      {
+        "command": "cargo fmt --all -- --check",
+        "status": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed"
+      }
+    ]
+  },
+  "historical_batches": {
+    "frozen_direct": {
+      "mode": "direct",
+      "source_base": "7bf1116119775d5038376b18d077133e3f6f8ea2",
+      "binary_sha256": "4af84b4cb675bf1bb46e08f952d26ec2a5ec462742901669515798429ae87205",
+      "fixture_sha256": "956370349c9e4125d76109a726d4ba005c5f7922b284384562b07c7b72075961",
+      "image": "sha256:ecc9269b5747352b056c3b15201b80d7164225570d151d8a71b745c1d64b1508",
+      "passed": 50,
+      "total": 54,
+      "source_identity_note": "Historical working tree based on source_base, including uncommitted source changes; source_base alone does not identify the tested tree.",
+      "conditions": "Original frozen tasks, ordering, parameters and oracle; no replacement by the revised batch."
+    },
+    "revised_direct_v3": {
+      "version": "jev-web-public-text-oracle-v3",
+      "mode": "direct",
+      "source_base": "7bf1116119775d5038376b18d077133e3f6f8ea2",
+      "binary_sha256": "4af84b4cb675bf1bb46e08f952d26ec2a5ec462742901669515798429ae87205",
+      "fixture_sha256": "956370349c9e4125d76109a726d4ba005c5f7922b284384562b07c7b72075961",
+      "image_id": "sha256:ecc9269b5747352b056c3b15201b80d7164225570d151d8a71b745c1d64b1508",
+      "input_sha256": {
+        "deep_tasks.json": "76fff96eb3ec01b2c01e6968890bb2531979c8f4fe4418a3edd4b292d90f6a68",
+        "run.py": "c8b769baf5457f6071c4ead20cadff5cd6f3e56ec87ddef2130560d7c9a21eb9",
+        "residual-plans-v2.json": "dc35ea8637c9c7e13f32987f1d3202c286bab8ded582fcc3ab60c05636184464",
+        "revised.py": "f96050d823800ce0b9fdf66a950600a3771a1dcdb57569ba215c08ddecbe95a2",
+        "text_oracle.py": "9d9665d77ec614d6695ff1b2404b4604624971b6147e86dc57172a8ab4cbb4a6"
+      },
+      "revision_sha256": "8c196bbedc49cf5b609c5cdc12ee654764657cd3682a0163ac69986c5b71489c",
+      "passed": 54,
+      "total": 54,
+      "comparison": "Separate revised batch; never a replacement for frozen results",
+      "provider": "not called; direct validation only",
+      "source_identity_note": "Historical working tree; not a rerun of source_commit.",
+      "revision_file": "tests/research/web/residual-plans-v3.json",
+      "changed_tasks": [
+        "name-unicode",
+        "delivery-express",
+        "delivery-membership",
+        "advanced-close"
+      ],
+      "conditions": "Separate version revising three direct plans and the Unicode public-text oracle."
+    },
+    "real_sites_parallel_direct": {
+      "version": "real-production-sites-v2",
+      "mode": "direct",
+      "passed": 20,
+      "total": 20,
+      "model_validation": "not run; provider blocked",
+      "binary_sha256": "941ba10886ffe47cc7a57e1065b01fc80a38b7308e9987aec13407b4c2dd6344",
+      "builder_image": "sha256:1dc2982f2cd4ba58fff5557629297b31e4ef59c02d8a38594afe9b02f59c4bd2",
+      "rustc": "1.88.0",
+      "profile": "dev unoptimized + debuginfo",
+      "runtime_image": "sha256:ecc9269b5747352b056c3b15201b80d7164225570d151d8a71b745c1d64b1508",
+      "conditions": "Historical same-page multi-content and multiple-site single-task direct batch; no model decision calls.",
+      "groups": [
+        {
+          "group": "wikipedia-multi",
+          "passed": 15,
+          "total": 15
+        },
+        {
+          "group": "python-tutorial",
+          "passed": 1,
+          "total": 1
+        },
+        {
+          "group": "rust-chapter",
+          "passed": 1,
+          "total": 1
+        },
+        {
+          "group": "mdn-filter",
+          "passed": 1,
+          "total": 1
+        },
+        {
+          "group": "pypi-search",
+          "passed": 1,
+          "total": 1
+        },
+        {
+          "group": "github-readme",
+          "passed": 1,
+          "total": 1
+        }
+      ]
+    },
+    "protocol_authority": {
+      "passed": 11,
+      "total": 11,
+      "binary_sha256": "941ba10886ffe47cc7a57e1065b01fc80a38b7308e9987aec13407b4c2dd6344",
+      "build_image": "sha256:1dc2982f2cd4ba58fff5557629297b31e4ef59c02d8a38594afe9b02f59c4bd2",
+      "runtime_image": "sha256:ecc9269b5747352b056c3b15201b80d7164225570d151d8a71b745c1d64b1508",
+      "fixture_hashes": {
+        "tests/research/web/capture_tui.py": "a91fcf7ff45bf58bfb2232780363d0987ea96e11388404abc79f12db19cd41f3",
+        "tests/research/web/compare_tui.py": "64c719477f7fe06d24f51730b4aad9848d2275df2d0e6647cebfe603cc447468",
+        "tests/research/web/deep_tasks.json": "76fff96eb3ec01b2c01e6968890bb2531979c8f4fe4418a3edd4b292d90f6a68",
+        "tests/research/web/finish_video.py": "baf5dbbfbc2fdb6c62057469be4f3469f24cfbde9d97a04ef9b6f69246a356fa",
+        "tests/research/web/inspect_live.py": "8c4c7288a5959a6f620e7c57a7019a8adb082da83251762ad2f8e38b7d9be2cd",
+        "tests/research/web/protocol.py": "55dd80800768ce9f2aff9a709c915d2e2acf4ac60dab3d851052f9aec0fc0854",
+        "tests/research/web/public.py": "4f44ee40354fa27e5daba424b6ccda873febfb626291bd9fcf1a6e18575539dd",
+        "tests/research/web/public_tasks.json": "62a23fee4aea5dc429bd8ddeace2955d525d433e066ae10ff88012d45f420659",
+        "tests/research/web/real_session.py": "fee28e27e96c3fac0b24dbce144e8acdafa31ffb907c64b28d6fa3cfebc9f79a",
+        "tests/research/web/real_sites.py": "e388cd4ebfe19266617788f128536c41f8c17b875d47ed580604e4421dd9eb1d",
+        "tests/research/web/real_sites_v1.json": "70ca5f0de4ea0ddc88ae73d65ed09abde7e1804e9a4f6e55c4275f3129c5a070",
+        "tests/research/web/real_sites_v2.json": "bc13091bb35aeb1d476b0470588bdcee7fa67acf263ecad5907537931b93a66a",
+        "tests/research/web/record.py": "c7dbeb66e0c47e89abb64e7ad3c3e8a090092e9202b4b53779d720229d986358",
+        "tests/research/web/record_inside.py": "0d3d5a90f985c085b0028fa9599b80a7fea8f3d40ebaa9b64a601b629553c2dc",
+        "tests/research/web/record_public.py": "99e28ed611f0ec7aaf4255cab60cc5ac47d00234f0909a151c866eafc5744af3",
+        "tests/research/web/replay_decision.py": "0738a2998a9a43d53d700a2745dc030b464d3e2a2db170e68c17d77dd52fa4d9",
+        "tests/research/web/residual-plans-v2.json": "dc35ea8637c9c7e13f32987f1d3202c286bab8ded582fcc3ab60c05636184464",
+        "tests/research/web/residual-plans-v3.json": "8c196bbedc49cf5b609c5cdc12ee654764657cd3682a0163ac69986c5b71489c",
+        "tests/research/web/revised.py": "f96050d823800ce0b9fdf66a950600a3771a1dcdb57569ba215c08ddecbe95a2",
+        "tests/research/web/run.py": "c8b769baf5457f6071c4ead20cadff5cd6f3e56ec87ddef2130560d7c9a21eb9",
+        "tests/research/web/session.py": "fb857ac80c0a789645e9691dd67d8bf553d65a2c5a86f30900f633a269a9fa77",
+        "tests/research/web/test_real_sites.py": "492c85a329485cac27f6d31e861e15bce13e069a73c49315cf266509429e5eff",
+        "tests/research/web/test_revised.py": "3f37e95d04d9bc61e265e88c99b745e42974787fce1c7c24095f7413fa8421cb",
+        "tests/research/web/text_oracle.py": "9d9665d77ec614d6695ff1b2404b4604624971b6147e86dc57172a8ab4cbb4a6",
+        "tests/research/web/validate_tui_edit.py": "abc70238581ceaa6763ca71c073235fb0de695fe290c6102e5e3825c243661a2",
+        "tests/research/web/workbench.html": "956370349c9e4125d76109a726d4ba005c5f7922b284384562b07c7b72075961"
+      },
+      "provider_calls": 0,
+      "conditions": "Historical live browser protocol checks, separate from frozen batches."
+    },
+    "offline_public_input_audit": {
+      "snapshot_count": 20,
+      "no_network_or_gui": true,
+      "all_exported_public_fields_preserved": true,
+      "missing_candidate_targets": 0,
+      "stub_calls": 20,
+      "provider_called": false,
+      "scope": "Recorded G2T observations only. This does not enumerate raw AT-SPI capabilities, measure TUI projection coverage, or measure model choice quality. Parameterless examples do not populate text/value candidate domains. Parent links may terminate outside the exported interaction scope.",
+      "snapshots": [
+        {
+          "group": "wikipedia-multi",
+          "task": "article-introduction",
+          "snapshot_sha256": "055b7036d841f9e8f07ebbabb50878c45da6420b712cf6e534bdf263f44dfbce",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "article-outline",
+          "snapshot_sha256": "4468966418273061be4993ddf6a77f24fcdf3aea04de4d0ae539d0da10d8976f",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "image-alternative",
+          "snapshot_sha256": "cc690a8ce2b87b3f992e22f8d5b0b21a889f9a445ab41a7e1922ba352a93e799",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "table-content",
+          "snapshot_sha256": "58220f215b13b4a3ad36d10328e2c4054e8e41577541f4431aad6426b94b954c",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "list-content",
+          "snapshot_sha256": "c30ffdff128a5a7db3f27968e112b6f32bd6afff28a5ab8e99184202807c785b",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "toc-expand",
+          "snapshot_sha256": "4f1cf8264ad13fc0b60fb0a0fb78e1ede16f90b2d00d9a5561f7bf2923abc9bf",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "toc-collapse",
+          "snapshot_sha256": "1f950a5a7ff4810d18dc606f2559c23241831838eb4b805796108beb22a63305",
+          "public_nodes": 1664,
+          "operations": 1670,
+          "candidates": 1668,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "text-size-large",
+          "snapshot_sha256": "742f94c8fa6d21c361405c4f428b074da5415e106d155b288b271aa901db6bf3",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "content-width-wide",
+          "snapshot_sha256": "a28350d811131f68ca2c3b85aad1d60c9eaf54784e74885029fb6a0cc8d4bb43",
+          "public_nodes": 1660,
+          "operations": 1666,
+          "candidates": 1664,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "colour-dark",
+          "snapshot_sha256": "778da7e79858325a6f83e7bbd823653dd1ab752bce0549cb23518f98517da45e",
+          "public_nodes": 1661,
+          "operations": 1667,
+          "candidates": 1665,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "colour-light",
+          "snapshot_sha256": "59c1301a5dc944b67f4e73239bcd47b02fe6a33e673eeb6c29dfee39fefcb174",
+          "public_nodes": 1662,
+          "operations": 1668,
+          "candidates": 1666,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-89"
+          ]
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "search-literal",
+          "snapshot_sha256": "dd62ad93f14cdf6f764a25b927f688f3d649f5d4aca52d3c3e4b835d7422ed2c",
+          "public_nodes": 1661,
+          "operations": 1667,
+          "candidates": 1667,
+          "operations_without_literal_parameter_options": []
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "search-chinese",
+          "snapshot_sha256": "ddf03faf59514a3fbb0248f3e5bfa1c7ac3c442c395daa7af4bc3e9e05f035cc",
+          "public_nodes": 1671,
+          "operations": 1681,
+          "candidates": 1681,
+          "operations_without_literal_parameter_options": []
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "search-clear",
+          "snapshot_sha256": "324e078e3b7dd34ab071ac4755571ef340b435a0d8e5db869599159d27483f68",
+          "public_nodes": 1666,
+          "operations": 1674,
+          "candidates": 1674,
+          "operations_without_literal_parameter_options": []
+        },
+        {
+          "group": "wikipedia-multi",
+          "task": "article-anchor",
+          "snapshot_sha256": "dad7a27b3a501a84f28a5f3a88e2fef2ff4720877ad821a1b879a622f4273dae",
+          "public_nodes": 1675,
+          "operations": 1687,
+          "candidates": 1685,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-1666"
+          ]
+        },
+        {
+          "group": "python-tutorial",
+          "task": "python-tutorial",
+          "snapshot_sha256": "c462910fe2f4b878ee7a4338f7ea35ca3ad9bad202a65cbed54798fd3f57fc57",
+          "public_nodes": 407,
+          "operations": 534,
+          "candidates": 531,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-187",
+            "op-454"
+          ]
+        },
+        {
+          "group": "rust-chapter",
+          "task": "rust-chapter",
+          "snapshot_sha256": "117e105752b1576522f48aae0899c14483d5047fd22900ef0996406e31f56efa",
+          "public_nodes": 421,
+          "operations": 426,
+          "candidates": 425,
+          "operations_without_literal_parameter_options": [
+            "op-61"
+          ]
+        },
+        {
+          "group": "mdn-filter",
+          "task": "mdn-filter",
+          "snapshot_sha256": "8e329c548b4c9ae9fc9d7bab3944c9031ab1a5a76840be3fe330115df947978d",
+          "public_nodes": 572,
+          "operations": 359,
+          "candidates": 359,
+          "operations_without_literal_parameter_options": []
+        },
+        {
+          "group": "pypi-search",
+          "task": "pypi-search",
+          "snapshot_sha256": "e28f05c36b23631decfb64a4af68202a27b2442eb8fbb15bae98c00639065d23",
+          "public_nodes": 295,
+          "operations": 233,
+          "candidates": 233,
+          "operations_without_literal_parameter_options": []
+        },
+        {
+          "group": "github-readme",
+          "task": "github-readme",
+          "snapshot_sha256": "e7af4bf218fd2d465351a02defbe06264de3af2f12f4a9be0141b4dae4bd101a",
+          "public_nodes": 988,
+          "operations": 994,
+          "candidates": 992,
+          "operations_without_literal_parameter_options": [
+            "op-61",
+            "op-187"
+          ]
+        }
+      ]
+    }
+  },
+  "historical_latency": {
+    "environment": "Rust 1.88 dev/unoptimized Linux amd64 running under emulation on an arm64 host; not a native release benchmark.",
+    "provider_called": false,
+    "model_inference_seconds": null,
+    "model_input_stage_is_not_inference": true,
+    "aggregate": {
+      "g2t_observe": {
+        "count": 60,
+        "median_s": 7.7913888960611075,
+        "p95_nearest_rank_s": 10.278696374967694
+      },
+      "g2t_execute": {
+        "count": 16,
+        "median_s": 7.054730624891818,
+        "p95_nearest_rank_s": 11.044479249976575
+      },
+      "model_input_build_and_artifact_write": {
+        "count": 20,
+        "median_s": 0.059375770506449044,
+        "p95_nearest_rank_s": 0.07061729207634926
+      }
+    },
+    "scope": "Observe includes refresh, public reads and transport. Execute includes fresh observation, authority checks, dispatch and readback. Input-build timing is not model inference."
+  },
+  "model_end_to_end": {
+    "rerun_in_current_source_checks": false,
+    "historical_provider_limit": "Full-input model evaluation was blocked by a provider request-size limit; current provider deployment status was not reverified.",
+    "task_completion_claim": null
+  },
+  "artifact_provenance": [
+    {
+      "local_artifact": "artifacts/jev-unicode-fix-20261019-133941/frozen-direct-v2/summary.json",
+      "sha256": "2237f1cf9de1b5914b47a0b7025654e4b41632685a8cebd7ce8b0e649c47c740"
+    },
+    {
+      "local_artifact": "artifacts/jev-unicode-fix-20261019-133941/revised-v3-modal-safe/summary.json",
+      "sha256": "660e5fe6e07663554214243855c42d2735199fc59e532dc0c91dd02a9ace5dc4"
+    },
+    {
+      "local_artifact": "artifacts/latency-20261019-175733/parallel/build-identity.json",
+      "sha256": "da64793c3a21fc69abe01d895be6697c1ec761d7ea55c479f021d12b34419595"
+    },
+    {
+      "local_artifact": "artifacts/latency-20261019-175733/parallel/batch/summary.json",
+      "sha256": "50a31e6f3569cf57e161a7f107875cf72ffc150b7175b6d6b05b9e1e4103e8a6"
+    },
+    {
+      "local_artifact": "artifacts/latency-20261019-175733/parallel/latency-summary.json",
+      "sha256": "4251d01e020cb11f7576ff33f15fe9bad5fee82028022e7a69460736677fe0cb"
+    },
+    {
+      "local_artifact": "artifacts/capability-research-20261019-233510/research-results.json",
+      "sha256": "e6746cdd954e53a652189a1bfb2048b33538481187598a299cceed9af29b9e8b"
+    },
+    {
+      "local_artifact": "artifacts/capability-research-20261019-233510/validation-identity.json",
+      "sha256": "bda3291abd60526a7c5bd6f02e1fcb20672621e43e4235aee8aa82fcf45763e4"
+    },
+    {
+      "local_artifact": "artifacts/capability-research-20261019-233510/offline-existing-observation-audit.json",
+      "sha256": "159d7638661e2a9c0e66ece932fd30b68d541008bfef79d53fbc2a8b564f2a81"
+    }
+  ]
+}

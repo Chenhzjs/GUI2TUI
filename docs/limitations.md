@@ -5,6 +5,31 @@ on what the target application exposes through public Linux AT-SPI interfaces.
 Read-only or unavailable is an honest result, not a reason to invent
 capability or use private application APIs.
 
+Current source changes and their validation scope are summarized in
+[current source status (2026-10-20)](current-status-20261020.md). They do not
+automatically extend a published release's platform qualification.
+
+## Development Agent boundary
+
+- `gui2tui-agent` shares the TUI runtime's authority and exports current in-scope
+  public nodes and operations. It does not parse TUI rendering or apply its
+  content-preview compression to Agent text. Failed full-text reads explicitly
+  remain incomplete.
+- Agent v1 supports exact named actions, whole-text replacement, selection
+  membership and qualified Value operations. It does not expose range editing,
+  text-selection reads, raw keys or external resource handoff.
+- Observations are consumed on every execution attempt and expire after 120
+  seconds. A rejected request requires a new observation and decision;
+  uncertain delivery must not be blindly replayed.
+- Acceptance and verified primitive effect do not establish task completion.
+  No application-internal atomic transaction or durable cross-process
+  exactly-once guarantee is provided.
+- Tree discovery and edit budgets remain explicit. Separate clients and
+  providers may have deployment limits; these do not authorize silently
+  dropping semantic evidence and reporting a complete observation.
+
+See the [development protocol](agent-protocol.md) for request and readback fields.
+
 ## Semantic and interaction boundaries
 
 - Not every control exposes a compatible public action, selection truth or

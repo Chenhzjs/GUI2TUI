@@ -10,6 +10,17 @@ a resolution.
 are immutable; this guide retains historical architecture and validation
 provenance for maintainers.
 
+**Current development snapshot:** source commit `76dc5ff` adds an
+observation-scoped JSONL decision-client boundary, complete public-text export,
+event-backed text evidence, parallel metadata reads and TUI refinements.
+See [current source status and capabilities](current-status-20261020.md) for
+the change summary, fresh pre-commit checks, historical live evidence and
+remaining limits. These source capabilities do not change published releases.
+The Agent path exports the current public cache and operations directly;
+it does not consume the TUI scene's content-preview compression. Both paths
+share runtime identity, interaction scope and backend authority. The protocol
+is documented in [agent-protocol.md](agent-protocol.md).
+
 ## 1. What GUI2TUI Is
 
 GUI2TUI reads public Linux Accessibility / AT-SPI semantics and recompiles them

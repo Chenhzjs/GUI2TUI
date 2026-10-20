@@ -39,6 +39,11 @@ session D-Bus or qualified Wayland compositor on the same host.
 
 ## What you can do
 
+For the current main-branch changes, capability boundaries and validation
+status, see [Current source status (2026-10-20)](docs/current-status-20261020.md).
+This includes the development JSONL Agent interface; it is separate from the
+human TUI and does not imply a new binary release.
+
 The v1.0 baseline remains supported. The v1.1 line adds a richer semantic
 Surface and keeps user-visible operations tied to fresh authoritative GUI
 state. The current v1.1 release candidate adds:
@@ -248,6 +253,8 @@ unsupported. Long documents and virtualized content may remain partial. See
 
 ## Documentation
 
+- [Current source status, changes and capabilities (2026-10-20)](docs/current-status-20261020.md)
+- [Development Agent protocol](docs/agent-protocol.md)
 - [Getting started](docs/getting-started.md)
 - [Deployment and supported topologies](docs/deployment.md)
 - [Limitations and support boundaries](docs/limitations.md)
