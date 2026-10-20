@@ -68,6 +68,10 @@ use super::{
     },
 };
 
+#[path = "agent.rs"]
+mod agent;
+pub use agent::{AgentExecutionError, AgentObservation};
+
 pub struct TuiApplication {
     capture_task:
         Option<tokio::task::JoinHandle<Result<CaptureCompletion, crate::runtime::RuntimeError>>>,
@@ -1259,14 +1263,12 @@ impl TuiApplication {
             .find_map(|id| self.content.model(*id).map(|_| *id));
         if let Some(root) = root {
             let model = self.content.model(root)?;
-            let mut lines = vec![format!(
-                "Document: {}",
-                model
-                    .metadata
-                    .title
-                    .as_deref()
-                    .unwrap_or("semantic content")
-            )];
+            let (preview_order, excerpt) = surface_preview_order(model, &self.cache);
+            let mut lines = vec![if excerpt {
+                "Reading excerpt · Enter: Reader · F6: controls".into()
+            } else {
+                "Content preview · Enter: Reader · F6: controls".into()
+            }];
             // Surface is a bounded structural/contextual projection. Reader
             // owns the complete reading stream and its progressive materializer;
             // a large document must not expand the normal application scene.
@@ -1276,10 +1278,21 @@ impl TuiApplication {
                 .saturating_add(usize::from(self.viewport.offset))
                 .clamp(24, SURFACE_CONTENT_PREVIEW_LINES);
             let mut total_lines = 1_usize;
-            for id in model.reading_order().into_iter().take(row_budget) {
+            for id in preview_order {
+                if lines.len() >= row_budget {
+                    break;
+                }
                 let Some(block) = model.block(id) else {
                     continue;
                 };
+                if matches!(
+                    block.kind,
+                    crate::content::ContentBlockKind::Group
+                        | crate::content::ContentBlockKind::Landmark
+                        | crate::content::ContentBlockKind::List
+                ) {
+                    continue;
+                }
                 let text = self
                     .content
                     .displayed_block_text(root, block.id)
@@ -1299,6 +1312,12 @@ impl TuiApplication {
                         "[text unavailable through the application's accessibility interface]"
                             .to_owned()
                     });
+                if !crate::transcompile::presentation::has_display_text(&text) {
+                    continue;
+                }
+                // Object references are not missing words that we can guess.
+                // Related child blocks remain available in the full Reader.
+                let text = text.replace('\u{fffc}', "[object]");
                 let prefix = match block.kind {
                     crate::content::ContentBlockKind::Heading { .. } => "# ",
                     crate::content::ContentBlockKind::Link => "[Link] ",
@@ -1441,12 +1460,19 @@ impl TuiApplication {
             return;
         }
         self.viewport_height = frame.area().height.saturating_sub(3).max(1);
-        self.viewport_width = frame.area().width.saturating_sub(2).max(1);
+        self.viewport_width = frame.area().width.max(1);
+        if let Some(palette) = self.command_palette.as_mut() {
+            let detail =
+                super::renderer::palette_areas(super::renderer::main_content_area(frame.area()))[4];
+            palette.set_detail_viewport(detail.width, detail.height.saturating_sub(1));
+        }
         let palette = self.command_palette.as_ref().map(|palette| PaletteRender {
             query: palette.query(),
             entries: palette.entries(),
             selected: palette.selected(),
             all_scopes: palette.searches_all_scopes(),
+            scope_switchable: palette.scope_switchable(),
+            detail_scroll: palette.detail_scroll(),
         });
         let choice = self.choice_overlay.as_ref().map(|overlay| ChoiceRender {
             label: self
@@ -1592,6 +1618,7 @@ impl TuiApplication {
             frame,
             RenderContext {
                 scene: &self.scene,
+                interaction_scope: self.scopes.scope(self.scopes.active()),
                 focused: self.focus.current(),
                 scroll_offset: self.viewport.offset,
                 status: &self.status,
@@ -1708,6 +1735,149 @@ impl TuiApplication {
             }
         }
         false
+    }
+
+    fn public_action_entries(
+        &self,
+    ) -> Vec<(
+        RuntimeNodeId,
+        BackendLocator,
+        String,
+        super::palette::PublicOperation,
+    )> {
+        use crate::tui::palette::PublicOperation;
+        let mut actions = Vec::new();
+        for node in self
+            .cache
+            .nodes()
+            .filter(|n| self.scopes.allows_node(n.runtime_id))
+        {
+            if !crate::tui::action::is_public_action_target(&node.states) {
+                continue;
+            }
+            let mut ancestry = Vec::new();
+            let mut parent = node.parent;
+            for _ in 0..8 {
+                let Some(owner) = parent.and_then(|id| self.cache.node(id)) else {
+                    break;
+                };
+                if let Some(name) = owner.name.as_deref().filter(|name| !name.trim().is_empty()) {
+                    ancestry.push(name.to_owned());
+                }
+                parent = owner.parent;
+                if ancestry.len() == 2 {
+                    break;
+                }
+            }
+            ancestry.reverse();
+            let display_name = node
+                .name
+                .as_deref()
+                .filter(|name| !name.trim().is_empty())
+                .or_else(|| {
+                    self.scene
+                        .scene_id_for_runtime(node.runtime_id)
+                        .and_then(|id| self.scene.element(id))
+                        .map(element_label)
+                        .filter(|label| !label.trim().is_empty())
+                })
+                .unwrap_or("Unnamed");
+            let label = format!(
+                "{} [{}] #{}{}",
+                display_name,
+                node.role,
+                node.runtime_id,
+                if ancestry.is_empty() {
+                    String::new()
+                } else {
+                    format!(" · {}", ancestry.join(" / "))
+                },
+            );
+            let multiline = node
+                .capabilities
+                .contains(&SemanticCapability::EditComplexText);
+            if multiline || node.capabilities.contains(&SemanticCapability::EditText) {
+                for (name, operation) in [
+                    (
+                        "Edit range (insert/delete/replace)",
+                        PublicOperation::EditRange,
+                    ),
+                    ("Read text selection", PublicOperation::ReadSelection),
+                ] {
+                    actions.push((
+                        node.runtime_id,
+                        node.backend_locator.clone(),
+                        format!("{label} › {name}"),
+                        operation,
+                    ));
+                }
+                actions.push((
+                    node.runtime_id,
+                    node.backend_locator.clone(),
+                    format!(
+                        "{label} › {}",
+                        if multiline {
+                            "Edit whole text"
+                        } else {
+                            "Edit text"
+                        }
+                    ),
+                    PublicOperation::EditText { multiline },
+                ));
+            }
+            for action in &node.actions {
+                if !action.name.is_empty() {
+                    actions.push((
+                        node.runtime_id,
+                        node.backend_locator.clone(),
+                        format!("{label} › Action: {}", action.name),
+                        PublicOperation::Action(action.name.clone()),
+                    ));
+                }
+            }
+            if let Some(parent) = node.parent.and_then(|id| self.cache.node(id)) {
+                if parent
+                    .capabilities
+                    .contains(&SemanticCapability::SelectChildren)
+                    && self.scopes.allows_node(parent.runtime_id)
+                {
+                    for selected in [true, false] {
+                        actions.push((
+                            node.runtime_id,
+                            node.backend_locator.clone(),
+                            format!(
+                                "{label} › {} selection",
+                                if selected { "Add to" } else { "Remove from" }
+                            ),
+                            PublicOperation::Selection {
+                                parent: parent.backend_locator.clone(),
+                                selected,
+                            },
+                        ));
+                    }
+                }
+            }
+            if node.capabilities.contains(&SemanticCapability::Value) {
+                actions.push((
+                    node.runtime_id,
+                    node.backend_locator.clone(),
+                    format!("{label} › Set value"),
+                    PublicOperation::SetValue,
+                ));
+                for increase in [true, false] {
+                    actions.push((
+                        node.runtime_id,
+                        node.backend_locator.clone(),
+                        format!(
+                            "{label} › Value {}",
+                            if increase { "increase" } else { "decrease" }
+                        ),
+                        PublicOperation::Value { increase },
+                    ));
+                }
+            }
+        }
+        actions
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
@@ -1908,144 +2078,28 @@ impl TuiApplication {
             && self.edit_session.is_none()
             && self.command_palette.is_none()
         {
-            use crate::tui::palette::PublicOperation;
-            let mut actions = Vec::new();
-            for node in self
-                .cache
-                .nodes()
-                .filter(|n| self.scopes.allows_node(n.runtime_id))
-            {
-                if !crate::tui::action::is_public_action_target(&node.states) {
-                    continue;
-                }
-                let mut ancestry = Vec::new();
-                let mut parent = node.parent;
-                for _ in 0..8 {
-                    let Some(owner) = parent.and_then(|id| self.cache.node(id)) else {
-                        break;
-                    };
-                    if let Some(name) = owner.name.as_deref().filter(|name| !name.trim().is_empty())
-                    {
-                        ancestry.push(name.to_owned());
-                    }
-                    parent = owner.parent;
-                    if ancestry.len() == 2 {
-                        break;
-                    }
-                }
-                ancestry.reverse();
-                let display_name = node
+            let actions = self.public_action_entries();
+            let mut palette = CommandPalette::public_actions(
+                self.commands.clone(),
+                self.scopes.active(),
+                actions,
+            );
+            palette.set_target_titles(|id| {
+                let node = self.cache.node(id)?;
+                let name = node
                     .name
                     .as_deref()
                     .filter(|name| !name.trim().is_empty())
                     .or_else(|| {
                         self.scene
-                            .scene_id_for_runtime(node.runtime_id)
+                            .scene_id_for_runtime(id)
                             .and_then(|id| self.scene.element(id))
                             .map(element_label)
-                            .filter(|label| !label.trim().is_empty())
                     })
                     .unwrap_or("Unnamed");
-                let label = format!(
-                    "{} [{}] #{}{}",
-                    display_name,
-                    node.role,
-                    node.runtime_id,
-                    if ancestry.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" · {}", ancestry.join(" / "))
-                    },
-                );
-                let multiline = node
-                    .capabilities
-                    .contains(&SemanticCapability::EditComplexText);
-                if multiline || node.capabilities.contains(&SemanticCapability::EditText) {
-                    for (name, operation) in [
-                        (
-                            "Edit range (insert/delete/replace)",
-                            PublicOperation::EditRange,
-                        ),
-                        ("Read text selection", PublicOperation::ReadSelection),
-                    ] {
-                        actions.push((
-                            node.runtime_id,
-                            node.backend_locator.clone(),
-                            format!("{label} › {name}"),
-                            operation,
-                        ));
-                    }
-                    actions.push((
-                        node.runtime_id,
-                        node.backend_locator.clone(),
-                        format!(
-                            "{label} › {}",
-                            if multiline {
-                                "Edit whole text"
-                            } else {
-                                "Edit text"
-                            }
-                        ),
-                        PublicOperation::EditText { multiline },
-                    ));
-                }
-                for action in &node.actions {
-                    if !action.name.is_empty() {
-                        actions.push((
-                            node.runtime_id,
-                            node.backend_locator.clone(),
-                            format!("{label} › Action: {}", action.name),
-                            PublicOperation::Action(action.name.clone()),
-                        ));
-                    }
-                }
-                if let Some(parent) = node.parent.and_then(|id| self.cache.node(id)) {
-                    if parent
-                        .capabilities
-                        .contains(&SemanticCapability::SelectChildren)
-                        && self.scopes.allows_node(parent.runtime_id)
-                    {
-                        for selected in [true, false] {
-                            actions.push((
-                                node.runtime_id,
-                                node.backend_locator.clone(),
-                                format!(
-                                    "{label} › {} selection",
-                                    if selected { "Add to" } else { "Remove from" }
-                                ),
-                                PublicOperation::Selection {
-                                    parent: parent.backend_locator.clone(),
-                                    selected,
-                                },
-                            ));
-                        }
-                    }
-                }
-                if node.capabilities.contains(&SemanticCapability::Value) {
-                    actions.push((
-                        node.runtime_id,
-                        node.backend_locator.clone(),
-                        format!("{label} › Set value"),
-                        PublicOperation::SetValue,
-                    ));
-                    for increase in [true, false] {
-                        actions.push((
-                            node.runtime_id,
-                            node.backend_locator.clone(),
-                            format!(
-                                "{label} › Value {}",
-                                if increase { "increase" } else { "decrease" }
-                            ),
-                            PublicOperation::Value { increase },
-                        ));
-                    }
-                }
-            }
-            self.command_palette = Some(CommandPalette::public_actions(
-                self.commands.clone(),
-                self.scopes.active(),
-                actions,
-            ));
+                Some(format!("[{}] {name}", node.role))
+            });
+            self.command_palette = Some(palette);
             self.status = if self.cache.nodes().any(|n| !n.truncations.is_empty()) {
                 "Public actions — partial tree; raise --max-nodes / --max-depth and refresh".into()
             } else {
@@ -6711,6 +6765,71 @@ pub async fn qualify_complex_text_capabilities(
     }
 }
 
+fn surface_preview_order(
+    model: &crate::content::SemanticContentModel,
+    cache: &SemanticCache,
+) -> (Vec<crate::content::ContentBlockId>, bool) {
+    use crate::content::ContentBlockKind;
+    use crate::transcompile::presentation::has_display_text;
+    let order = model.reading_order();
+    let readable = |block: &crate::content::ContentBlock| {
+        block.text.visible_text().is_some_and(has_display_text)
+            || block.label.as_deref().is_some_and(has_display_text)
+            || cache.node(block.source).is_some_and(|node| {
+                node.text_input_kind != Some(crate::semantic::TextInputKind::Password)
+                    && node.value.as_deref().is_some_and(has_display_text)
+            })
+    };
+    let mut narrative = std::collections::HashSet::new();
+    let mut pending = model
+        .blocks
+        .iter()
+        .filter(|block| {
+            matches!(
+                block.kind,
+                ContentBlockKind::Paragraph | ContentBlockKind::Quote
+            ) && readable(block)
+        })
+        .map(|block| block.id)
+        .collect::<Vec<_>>();
+    while let Some(id) = pending.pop() {
+        if narrative.insert(id)
+            && let Some(block) = model.block(id)
+        {
+            pending.extend(block.children.iter().copied());
+        }
+    }
+    // This is a bounded Surface excerpt, never a replacement reading order.
+    // Keep paragraph-owned links/references; the full model and Reader do not change.
+    let preview = if narrative.is_empty() {
+        let start = order
+            .iter()
+            .position(|id| {
+                model.block(*id).is_some_and(|block| {
+                    matches!(block.kind, ContentBlockKind::Heading { .. }) && readable(block)
+                })
+            })
+            .unwrap_or(0);
+        order[start..].to_vec()
+    } else {
+        order
+            .iter()
+            .copied()
+            .filter(|id| {
+                model.block(*id).is_some_and(|block| {
+                    narrative.contains(id)
+                        || matches!(
+                            block.kind,
+                            ContentBlockKind::Heading { .. } | ContentBlockKind::TableAnchor
+                        )
+                })
+            })
+            .collect()
+    };
+    let excerpt = preview.len() < order.len();
+    (preview, excerpt)
+}
+
 fn default_active_region(layout: &LayoutAnalysis) -> Option<SpatialRegionId> {
     layout
         .plan
@@ -7272,6 +7391,60 @@ mod tests {
         assert_eq!(
             summary.binding.as_ref().unwrap().capability,
             InteractionCapability::BrowseContent
+        );
+    }
+
+    #[test]
+    fn surface_excerpt_preserves_reader_order_and_paragraph_owned_links() {
+        let make = |id, role, name: &str| SemanticNode {
+            runtime_id: RuntimeNodeId::new(id),
+            backend_locator: BackendLocator::new(":1.2", format!("/node/{id}")),
+            index_in_parent: None,
+            role,
+            name: Some(name.into()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: Vec::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        };
+        let mut root = make(1, SemanticRole::Document, "Document");
+        let navigation = make(2, SemanticRole::Link, "Navigation destination");
+        let heading = make(3, SemanticRole::Heading, "Topic");
+        let mut paragraph = make(
+            4,
+            SemanticRole::Paragraph,
+            "Body with an embedded reference",
+        );
+        paragraph
+            .children
+            .push(make(5, SemanticRole::Link, "Related reference"));
+        root.children = vec![navigation, heading, paragraph];
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let catalog = crate::content::ContentCatalog::analyze(&cache);
+        let model = catalog.get(cache.root_id()).unwrap();
+        let runtime_id = |id| {
+            cache
+                .runtime_id(&BackendLocator::new(":1.2", format!("/node/{id}")))
+                .unwrap()
+        };
+        let original = model.reading_order();
+        let (preview, excerpt) = surface_preview_order(model, &cache);
+        let sources = preview
+            .iter()
+            .map(|id| model.block(*id).unwrap().source)
+            .collect::<Vec<_>>();
+        assert!(excerpt);
+        assert_eq!(sources, vec![runtime_id(3), runtime_id(4), runtime_id(5)]);
+        assert_eq!(model.reading_order(), original);
+        assert!(
+            original
+                .iter()
+                .any(|id| model.block(*id).unwrap().source == runtime_id(2))
         );
     }
 

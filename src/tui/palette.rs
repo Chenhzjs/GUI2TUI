@@ -31,10 +31,74 @@ pub enum PublicOperation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaletteEntry {
     pub label: String,
+    /// Presentation only; `label` remains the full searchable public label.
+    pub title: String,
     pub group: bool,
     target: Option<(RuntimeNodeId, BackendLocator, UiIntent)>,
     group_index: Option<usize>,
     action: Option<PublicOperation>,
+}
+
+impl PaletteEntry {
+    pub fn short_label(&self) -> String {
+        let Some(action) = &self.action else {
+            return self.title.clone();
+        };
+        let operation = match action {
+            PublicOperation::SetValue => "Set value".into(),
+            PublicOperation::EditRange => "Edit range".into(),
+            PublicOperation::ReadSelection => "Read text selection".into(),
+            PublicOperation::Action(name) => format!("Action: {name}"),
+            PublicOperation::EditText { multiline: true } => "Edit whole text".into(),
+            PublicOperation::EditText { multiline: false } => "Edit text".into(),
+            PublicOperation::Selection { selected: true, .. } => "Add to selection".into(),
+            PublicOperation::Selection {
+                selected: false, ..
+            } => "Remove from selection".into(),
+            PublicOperation::Value { increase: true } => "Increase value".into(),
+            PublicOperation::Value { increase: false } => "Decrease value".into(),
+        };
+        let id = self.target.as_ref().map(|target| target.0).unwrap();
+        format!("#{id}  {operation} · {}", self.title)
+    }
+
+    pub fn detail_text(&self) -> String {
+        match &self.target {
+            Some((id, locator, _)) => format!(
+                "Snapshot target: #{id}\n{}\n\nLocator: {}",
+                self.label,
+                locator.encode()
+            ),
+            None => self.label.clone(),
+        }
+    }
+}
+
+/// Wrap exact detail text at grapheme boundaries using terminal cell widths.
+/// Unlike result labels this is not an ellipsis projection.
+pub(crate) fn detail_lines(text: &str, width: u16) -> Vec<String> {
+    use ratatui::{
+        style::Style,
+        text::{Line, Span},
+    };
+    let width = usize::from(width).max(1);
+    let mut output = Vec::new();
+    for line in text.split('\n') {
+        let line = Line::from(line);
+        let mut current = String::new();
+        let mut used = 0;
+        for grapheme in line.styled_graphemes(Style::default()) {
+            let cells = Span::raw(grapheme.symbol).width();
+            if used + cells > width && !current.is_empty() {
+                output.push(std::mem::take(&mut current));
+                used = 0;
+            }
+            current.push_str(grapheme.symbol);
+            used += cells;
+        }
+        output.push(current);
+    }
+    output
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,6 +112,8 @@ pub struct CommandPalette {
     recent: HashMap<RuntimeNodeId, u32>,
     search_all_scopes: bool,
     public_actions: Option<Vec<PaletteEntry>>,
+    detail_scroll: usize,
+    detail_limit: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,6 +140,8 @@ impl CommandPalette {
             recent,
             search_all_scopes: false,
             public_actions: None,
+            detail_scroll: 0,
+            detail_limit: 0,
         };
         palette.rebuild();
         palette
@@ -92,7 +160,37 @@ impl CommandPalette {
     }
 
     pub fn searches_all_scopes(&self) -> bool {
-        self.search_all_scopes
+        self.search_all_scopes && self.scope_switchable()
+    }
+
+    pub fn scope_switchable(&self) -> bool {
+        self.public_actions.is_none()
+    }
+
+    pub fn detail_scroll(&self) -> usize {
+        self.detail_scroll
+    }
+
+    pub fn set_detail_viewport(&mut self, width: u16, height: u16) {
+        self.detail_limit = self.entries.get(self.selected).map_or(0, |entry| {
+            detail_lines(&entry.detail_text(), width)
+                .len()
+                .saturating_sub(usize::from(height))
+        });
+        self.detail_scroll = self.detail_scroll.min(self.detail_limit);
+    }
+
+    pub fn set_target_titles(&mut self, title: impl Fn(RuntimeNodeId) -> Option<String>) {
+        if let Some(actions) = self.public_actions.as_mut() {
+            for entry in actions {
+                if let Some((id, _, _)) = &entry.target
+                    && let Some(title) = title(*id)
+                {
+                    entry.title = title;
+                }
+            }
+            self.rebuild();
+        }
     }
 
     pub fn handle_key(&mut self, event: KeyEvent) -> PaletteOutcome {
@@ -100,8 +198,21 @@ impl CommandPalette {
             return PaletteOutcome::Continue;
         }
         match event.code {
+            KeyCode::PageDown => {
+                self.detail_scroll = self.detail_scroll.saturating_add(4).min(self.detail_limit);
+                return PaletteOutcome::Continue;
+            }
+            KeyCode::PageUp => {
+                self.detail_scroll = self.detail_scroll.saturating_sub(4);
+                return PaletteOutcome::Continue;
+            }
+            _ => self.detail_scroll = 0,
+        }
+        match event.code {
             KeyCode::F(2) => {
-                self.search_all_scopes = !self.search_all_scopes;
+                if self.scope_switchable() {
+                    self.search_all_scopes = !self.search_all_scopes;
+                }
                 self.rebuild();
                 PaletteOutcome::Continue
             }
@@ -183,6 +294,7 @@ impl CommandPalette {
             actions
                 .into_iter()
                 .map(|(id, locator, label, action)| PaletteEntry {
+                    title: label.clone(),
                     label,
                     group: false,
                     target: Some((id, locator, UiIntent::Activate)),
@@ -224,6 +336,7 @@ impl CommandPalette {
                 )
                 .into_iter()
                 .map(|ranked| PaletteEntry {
+                    title: ranked.command.label.clone(),
                     label: format!("{} › {}", ranked.path.join(" › "), ranked.command.label),
                     group: false,
                     target: Some((
@@ -263,6 +376,7 @@ fn browse_entries(
         .filter_map(|(index, entry)| match entry {
             CommandEntry::Group(group) if all_scopes || group_contains_scope(group, scope) => {
                 Some(PaletteEntry {
+                    title: group.label.clone(),
                     label: format!("{} ›", group.label),
                     group: true,
                     target: None,
@@ -289,6 +403,7 @@ fn group_contains_scope(group: &CommandGroup, scope: InteractionScopeId) -> bool
 
 fn command_entry(command: &SemanticCommand) -> PaletteEntry {
     PaletteEntry {
+        title: command.label.clone(),
         label: command.label.clone(),
         group: false,
         target: Some((
@@ -317,6 +432,72 @@ mod tests {
             visible: true,
             shortcut: None,
         })
+    }
+
+    #[test]
+    fn compact_titles_preserve_full_search_paged_details_and_exact_target() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let label = format!(
+            "{} needle-at-the-end › Action: press",
+            "中文e\u{301}".repeat(120)
+        );
+        let mut palette = CommandPalette::public_actions(
+            CommandHierarchy {
+                root: CommandGroup {
+                    source: RuntimeNodeId::new(1),
+                    label: "Workspace".into(),
+                    scope,
+                    children: vec![],
+                },
+            },
+            scope,
+            vec![
+                (
+                    RuntimeNodeId::new(2),
+                    BackendLocator::new(":1.2", "/first"),
+                    label.clone(),
+                    PublicOperation::Action("press".into()),
+                ),
+                (
+                    RuntimeNodeId::new(3),
+                    BackendLocator::new(":1.2", "/second"),
+                    "Other target › Action: press".into(),
+                    PublicOperation::Action("press".into()),
+                ),
+            ],
+        );
+        palette.set_target_titles(|_| Some("Same title".into()));
+        palette.handle_key(KeyEvent::from(KeyCode::F(2)));
+        assert!(!palette.searches_all_scopes());
+        assert!(!palette.scope_switchable());
+        assert_ne!(
+            palette.entries()[0].short_label(),
+            palette.entries()[1].short_label()
+        );
+        let text = palette.entries()[0].detail_text();
+        let lines = detail_lines(&text, 20);
+        assert!(
+            lines
+                .iter()
+                .all(|line| ratatui::text::Line::from(line.as_str()).width() <= 20)
+        );
+        assert_eq!(lines.concat(), text.replace('\n', ""));
+        palette.set_detail_viewport(20, 3);
+        for _ in 0..100 {
+            palette.handle_key(KeyEvent::from(KeyCode::PageDown));
+        }
+        assert_eq!(palette.detail_scroll(), lines.len() - 3);
+        assert_eq!(palette.selected(), 0);
+        palette.handle_key(KeyEvent::from(KeyCode::Down));
+        assert_eq!(palette.detail_scroll(), 0);
+        for c in "needle-at-the-end".chars() {
+            palette.handle_key(KeyEvent::from(KeyCode::Char(c)));
+        }
+        assert_eq!(palette.entries().len(), 1);
+        assert_eq!(palette.entries()[0].label, label);
+        assert!(matches!(palette.handle_key(KeyEvent::from(KeyCode::Enter)),
+            PaletteOutcome::InvokeAction(id, locator, PublicOperation::Action(name))
+                if id == RuntimeNodeId::new(2) && locator == BackendLocator::new(":1.2", "/first") && name == "press"));
     }
 
     #[test]

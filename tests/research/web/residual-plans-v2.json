@@ -1,0 +1,43 @@
+{
+  "version": "jev-web-residual-plans-v2",
+  "description": "Separate direct validation revision. Preserve the frozen tasks, goals, parameters and order; explicitly correct three plans and strengthen the no-submit check. Never combine its score with the frozen batch.",
+  "overrides": {
+    "name-unicode": {
+      "forbid_events": ["profile"]
+    },
+    "delivery-express": {
+      "plans": [
+        {
+          "label": "Express delivery",
+          "target_role": "MenuItem",
+          "target_states": ["Other(\"showing\")"],
+          "kind": "action",
+          "name": "click"
+        }
+      ]
+    },
+    "delivery-membership": {
+      "plans": [
+        {
+          "label": "Express delivery",
+          "target_role": "MenuItem",
+          "ancestor": {"role": "ComboBox", "label": "Delivery speed"},
+          "kind": "selection",
+          "selected": true
+        }
+      ],
+      "expect_unique_selected": {"name": "Express delivery", "role": "menu item"}
+    },
+    "advanced-close": {
+      "plans": [
+        {
+          "label": "Advanced settings",
+          "target_role": "Button",
+          "target_states": ["Expanded"],
+          "kind": "action",
+          "name": "expand"
+        }
+      ]
+    }
+  }
+}

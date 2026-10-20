@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Semantic Web Workbench</title>
+<style>body{font:16px sans-serif;max-width:1050px;margin:20px auto}section{padding:10px;border:1px solid #aaa;margin:8px}label,button,select,input,textarea{margin:5px}dialog{padding:25px} [hidden]{display:none}table{border-collapse:collapse}td,th{padding:6px}</style>
+<h1>Semantic Web Workbench</h1><p>Accessibility-driven functional validation. All state changes are normal user operations.</p>
+<section><h2>Editing and form submission</h2>
+<form id="profile" onsubmit="event.preventDefault();send('profile', {name:fullName.value,email:email.value});profileStatus.textContent='Profile saved: '+fullName.value">
+<label>Full name <input id="fullName" name="fullName"></label><label>Email address <input id="email" name="email" type="email"></label><button>Save profile</button></form>
+<p id="profileStatus" role="status">Profile not saved</p>
+<label>Notes <textarea id="notes" rows="3" oninput="send('notes',this.value)"></textarea></label>
+<div role="textbox" aria-label="Rich notes" contenteditable="true" oninput="send('rich-notes',this.textContent)">Initial <b>formatted</b> content</div>
+<label>Read only reference <input value="Read only sentinel" readonly></label>
+<label>Disabled reference <input value="Disabled sentinel" disabled></label>
+<label>Secret test field <input type="password" value="G2T-DO-NOT-EXPORT-9371"></label>
+</section>
+<section><h2>Buttons, checkboxes and radio choices</h2>
+<button onclick="count++;updateCount()">Increase counter</button><button onclick="count--;updateCount()">Decrease counter</button><button onclick="count=0;updateCount()">Reset counter</button><output id="counter" aria-live="polite">Counter: 0</output>
+<label><input type="checkbox" id="notifications" onchange="send('notifications',this.checked);noticeStatus.textContent=this.checked?'Notifications enabled':'Notifications disabled'"> Enable notifications</label><span id="noticeStatus" role="status">Notifications disabled</span>
+<label><input type="radio" name="theme" checked value="light" onchange="send('theme',this.value)"> Light theme</label><label><input type="radio" name="theme" value="dark" onchange="send('theme',this.value)"> Dark theme</label>
+<button id="pressed" aria-pressed="false" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')==='false');send('pressed',this.getAttribute('aria-pressed'))"> Pin panel</button>
+</section>
+<section><h2>Collections and numeric values</h2>
+<label>Delivery speed <select id="delivery" onchange="send('delivery',this.value)"><option value="standard">Standard delivery</option><option value="express">Express delivery</option><option value="overnight">Overnight delivery</option></select></label>
+<label>Project tags <select multiple size="3" id="tags" onchange="send('tags',Array.from(this.selectedOptions).map(o=>o.value))"><option>Alpha tag</option><option>Beta tag</option><option>Gamma tag</option></select></label>
+<label>Volume <input id="volume" type="range" min="0" max="100" step="5" value="30" oninput="send('volume',Number(this.value));volumeStatus.textContent='Volume: '+this.value"></label><output id="volumeStatus">Volume: 30</output>
+<label>Quantity <input type="number" id="quantity" min="0" max="20" step="1" value="2" oninput="send('quantity',Number(this.value))"></label>
+</section>
+<section><h2>Disclosure and tabs</h2>
+<details id="details" ontoggle="send('details',this.open)"><summary>Advanced settings</summary><button onclick="send('advanced-action',true);advancedStatus.textContent='Advanced action completed'">Run advanced action</button><p id="advancedStatus">Advanced action idle</p></details>
+<div role="tablist" aria-label="Workspace tabs"><button role="tab" aria-selected="true" onclick="tab(this,'Overview')">Overview tab</button><button role="tab" aria-selected="false" onclick="tab(this,'Activity')">Activity tab</button><button role="tab" aria-selected="false" onclick="tab(this,'Settings')">Settings tab</button></div><div role="tabpanel" id="tabPanel">Overview panel</div>
+</section>
+<section><h2>Modal dialog</h2><button onclick="confirmDialog.showModal();send('dialog-open',true)">Open confirmation dialog</button>
+<dialog id="confirmDialog" aria-label="Confirm project"><h2>Confirm project</h2><label>Confirmation note <input id="confirmationNote"></label><button onclick="send('dialog-confirm',confirmationNote.value);confirmDialog.close();dialogStatus.textContent='Project confirmed'">Confirm project</button><button onclick="send('dialog-cancel',true);confirmDialog.close();dialogStatus.textContent='Confirmation cancelled'">Cancel confirmation</button></dialog><p id="dialogStatus" role="status">No confirmation requested</p></section>
+<section><h2>Dynamic controls</h2>
+<button onclick="gated.disabled=false;send('enable-gated',true)">Enable gated action</button><button id="gated" disabled onclick="send('gated-action',true);dynamicStatus.textContent='Gated action completed'">Gated action</button>
+<button onclick="hiddenAction.hidden=false;send('reveal',true)">Reveal hidden action</button><button id="hiddenAction" hidden onclick="send('hidden-action',true);dynamicStatus.textContent='Hidden action completed'">Hidden action</button>
+<button onclick="let old=document.getElementById('replaceTarget');let next=old.cloneNode(true);old.replaceWith(next);send('replace-target',true)">Replace target identity</button><button id="replaceTarget" onclick="send('replacement-action',true);dynamicStatus.textContent='Replacement action completed'">Replacement action</button>
+<button onclick="dynamicStatus.textContent='Working asynchronously';setTimeout(()=>{dynamicStatus.textContent='Delayed operation completed';send('delayed',true)},1000)">Start delayed operation</button><p id="dynamicStatus" role="status">Dynamic actions idle</p>
+</section>
+<section><h2>Table filtering and sorting</h2><label>Filter products <input id="filter" oninput="renderProducts();send('filter',this.value)"></label><button onclick="ascending=!ascending;renderProducts();send('sort',ascending?'ascending':'descending')">Reverse product sort</button>
+<table aria-label="Product catalog"><thead><tr><th>Name</th><th>Price</th></tr></thead><tbody id="products"></tbody></table></section>
+<section><h2>Task list</h2><label>New task title <input id="taskTitle"></label><button onclick="addTask()">Add task</button><ul id="taskList"></ul><p id="taskStatus" role="status">No tasks yet</p></section>
+<section><h2>Links and embedded content</h2><a href="#destination" onclick="send('fragment',true)">Jump to destination section</a><div id="destination"><h3>Destination section</h3><p>Destination content is available.</p></div><iframe title="Embedded controls" src="/embedded"></iframe></section>
+<script>
+const send=(name,value)=>fetch('/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,value})});
+window.send=send;
+let count=0,ascending=true,taskIndex=0;
+function updateCount(){counter.textContent='Counter: '+count;send('counter',count)}
+function tab(button,name){document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected',t===button));tabPanel.textContent=name+' panel';send('tab',name)}
+function renderProducts(){let rows=[['Apple',10],['Banana',20],['Cherry',30]].filter(r=>r[0].toLowerCase().includes(filter.value.toLowerCase()));rows.sort((a,b)=>ascending?a[0].localeCompare(b[0]):b[0].localeCompare(a[0]));products.replaceChildren(...rows.map(row=>{let tr=document.createElement('tr');row.forEach(v=>{let td=document.createElement('td');td.textContent=v;tr.append(td)});return tr}))}
+function addTask(){if(!taskTitle.value.trim()){taskStatus.textContent='Task title is required';send('task-invalid',true);return}let name=taskTitle.value;let li=document.createElement('li');let label=document.createElement('label');let check=document.createElement('input');check.type='checkbox';check.onchange=()=>{send('task-check',{name,checked:check.checked});taskStatus.textContent=name+(check.checked?' completed':' active')};label.append(check,document.createTextNode('Complete '+name));let del=document.createElement('button');del.textContent='Delete '+name;del.onclick=()=>{li.remove();send('task-delete',name);taskStatus.textContent='Deleted '+name};li.append(label,del);taskList.append(li);taskTitle.value='';taskStatus.textContent='Added '+name;send('task-add',name)}
+renderProducts();
+</script></html>

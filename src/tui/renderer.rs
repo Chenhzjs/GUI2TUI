@@ -28,6 +28,7 @@ use super::{
 
 pub struct RenderContext<'a> {
     pub scene: &'a TuiScene,
+    pub interaction_scope: Option<&'a crate::transcompile::InteractionScope>,
     pub focused: Option<SceneElementId>,
     pub scroll_offset: u16,
     pub status: &'a str,
@@ -55,6 +56,71 @@ pub struct PaletteRender<'a> {
     pub entries: &'a [PaletteEntry],
     pub selected: usize,
     pub all_scopes: bool,
+    pub scope_switchable: bool,
+    pub detail_scroll: usize,
+}
+
+// Terminal-native colors preserve the user's background. Focus also has a
+// marker and weight so no operation/state depends on color alone.
+fn accent() -> Style {
+    Style::default().add_modifier(Modifier::BOLD)
+}
+
+fn secondary() -> Style {
+    Style::default().add_modifier(Modifier::DIM)
+}
+
+fn selected_style() -> Style {
+    Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+}
+
+fn scope_caption(scope: Option<&crate::transcompile::InteractionScope>, fallback: &str) -> String {
+    use crate::transcompile::InteractionScopeKind;
+    let Some(scope) = scope else {
+        return fallback.into();
+    };
+    let kind = if scope.modal {
+        "Modal"
+    } else {
+        match scope.kind {
+            InteractionScopeKind::Dialog => "Dialog",
+            InteractionScopeKind::Popup | InteractionScopeKind::MenuPopup => "Popup",
+            _ => return fallback.into(),
+        }
+    };
+    format!("[{kind}] {}", scope.label.as_deref().unwrap_or("Unnamed"))
+}
+
+fn clipped(text: &str, width: u16) -> String {
+    let text = text.replace(['\n', '\r', '\t'], " ");
+    let line = Line::from(text.as_str());
+    if line.width() <= usize::from(width) {
+        return text;
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut result = String::new();
+    let mut used = 0;
+    for grapheme in line.styled_graphemes(Style::default()) {
+        let cells = Span::raw(grapheme.symbol).width();
+        if used + cells > usize::from(width - 1) {
+            break;
+        }
+        result.push_str(grapheme.symbol);
+        used += cells;
+    }
+    result.push('…');
+    result
+}
+
+pub(crate) fn main_content_area(area: Rect) -> Rect {
+    Rect::new(
+        area.x,
+        area.y.saturating_add(1),
+        area.width,
+        area.height.saturating_sub(2),
+    )
 }
 
 pub struct ChoiceRender<'a> {
@@ -94,7 +160,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     } else if context.choice.is_some() {
         "? Help · ↑/↓ Select · Enter Apply · Esc Cancel"
     } else if context.palette.is_some() {
-        "? Help · F2 Scope · Enter Use · Esc Back"
+        "↑/↓ Select · Enter Use · PgUp/PgDn Details · Esc Back"
     } else if let Some(content) = &context.content {
         match content.mode {
             ContentViewMode::Reader => "? Help · j/k Scroll · / Search · o Outline · Esc Back",
@@ -138,14 +204,34 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     } else {
         "? Help · F6 Region · Tab Control · Enter Use · : Commands · F3 Actions"
     };
-    let areas = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(frame.area());
-    let main_area = areas[0];
-    let footer_area = areas[1];
-    let block = Block::default()
-        .title(format!(" GUI2TUI — {} ", context.scene.title))
-        .borders(Borders::ALL);
-    let content_area = block.inner(main_area);
-    frame.render_widget(block, main_area);
+    let area = frame.area();
+    let content_area = main_content_area(area);
+    let footer_area = Rect::new(
+        area.x,
+        area.bottom().saturating_sub(1),
+        area.width,
+        u16::from(area.height > 0),
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("GUI2TUI", accent()),
+            Span::styled(
+                clipped(
+                    &format!(
+                        " · {}",
+                        scope_caption(context.interaction_scope, &context.scene.title)
+                    ),
+                    area.width.saturating_sub(7),
+                ),
+                if context.interaction_scope.is_some_and(|scope| scope.modal) {
+                    accent()
+                } else {
+                    secondary()
+                },
+            ),
+        ])),
+        Rect::new(area.x, area.y, area.width, u16::from(area.height > 0)),
+    );
     let mut hit_regions = Vec::new();
     if context.application_available {
         if let Some(plan) = context.spatial {
@@ -187,6 +273,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         frame.render_widget(Clear, area);
         let block = Block::default()
             .borders(Borders::ALL)
+            .border_style(accent())
             .title(if session.range_parameter {
                 " Edit range: start:end:text (Unicode characters, end exclusive) "
             } else if session.value_parameter {
@@ -206,7 +293,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
                     "Ctrl+S Apply · Enter Apply+Submit · Esc Cancel"
                 }
             ))
-            .style(Style::default().fg(Color::Yellow)),
+            .style(accent()),
             inner,
         );
     }
@@ -215,10 +302,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     } else {
         hints.to_owned()
     };
-    frame.render_widget(
-        Paragraph::new(footer).style(Style::default().fg(Color::Cyan)),
-        footer_area,
-    );
+    frame.render_widget(Paragraph::new(footer).style(secondary()), footer_area);
     hit_regions
 }
 
@@ -384,7 +468,7 @@ fn render_spatial(
     let main = if let Some(navigator) = navigator.filter(|navigator| navigator.region_count() > 1)
         && area.height >= 7
     {
-        let height = if navigator.has_subregions() { 4 } else { 3 };
+        let height = if navigator.has_subregions() { 2 } else { 1 };
         let areas = Layout::vertical([Constraint::Length(height), Constraint::Min(3)]).split(area);
         render_region_navigator(frame, areas[0], navigator, context.active_region);
         areas[1]
@@ -485,14 +569,7 @@ fn render_region_navigator(
     let active_group = navigator.active_group_index(active).unwrap_or(0);
     let groups = navigator.groups();
     let hierarchical = navigator.has_subregions();
-    let title = if hierarchical {
-        " Regions — F6 major · Ctrl+Tab pane "
-    } else {
-        " Regions — F6 switch "
-    };
-    let block = Block::default().title(title).borders(Borders::ALL);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = area;
     let major = groups
         .iter()
         .map(|group| RegionNavigationItem {
@@ -506,7 +583,7 @@ fn render_region_navigator(
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(navigation_line(
-            if hierarchical { "Major" } else { "Region" },
+            &format!("F6 Regions ({})", groups.len()),
             &major,
             active_group,
             inner.width,
@@ -522,7 +599,7 @@ fn render_region_navigator(
             .unwrap_or(0);
         frame.render_widget(
             Paragraph::new(navigation_line(
-                "Pane",
+                "Ctrl+Tab Pane",
                 &group.regions,
                 selected,
                 inner.width,
@@ -540,18 +617,25 @@ fn navigation_line(
 ) -> Line<'static> {
     let prefix = format!("{label}: ");
     let mut spans = vec![Span::raw(prefix.clone())];
-    let mut used = prefix.chars().count();
+    let mut used = Line::from(prefix.as_str()).width();
     for offset in 0..items.len() {
         let index = (selected + offset) % items.len();
         let item = &items[index];
         let suffix = if item.empty { " · empty" } else { "" };
         let text = if index == selected {
-            format!("[{}{}]", item.title, suffix)
+            let available = usize::from(width).saturating_sub(used).saturating_sub(2);
+            format!(
+                "[{}]",
+                clipped(
+                    &format!("{}{suffix}", item.title),
+                    available.min(usize::from(u16::MAX)) as u16
+                )
+            )
         } else {
             format!("{}{}", item.title, suffix)
         };
         let separator = usize::from(offset > 0) * 3;
-        let text_width = text.chars().count();
+        let text_width = Line::from(text.as_str()).width();
         if used.saturating_add(separator).saturating_add(text_width) > usize::from(width) {
             if used.saturating_add(2) <= usize::from(width) {
                 spans.push(Span::raw(" …"));
@@ -563,11 +647,9 @@ fn navigation_line(
             used = used.saturating_add(3);
         }
         let style = if index == selected {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            selected_style()
         } else {
-            Style::default()
+            secondary()
         };
         spans.push(Span::styled(text, style));
         used = used.saturating_add(text_width);
@@ -639,8 +721,12 @@ fn terminal_height_demand(plan: &TuiLayoutPlan, node: &LayoutNode) -> Option<u16
                         )
                     }
                 }
-                crate::transcompile::LayoutDemand::Compact => Some(4),
-                crate::transcompile::LayoutDemand::Minimal => Some(3),
+                crate::transcompile::LayoutDemand::Compact => {
+                    Some(if context_summary(region) { 1 } else { 3 })
+                }
+                crate::transcompile::LayoutDemand::Minimal => {
+                    Some(if context_summary(region) { 1 } else { 3 })
+                }
                 crate::transcompile::LayoutDemand::Hidden => Some(0),
             }
         }
@@ -702,7 +788,7 @@ fn render_spatial_node(
     node: &LayoutNode,
     hit_regions: &mut Vec<HitRegion>,
 ) {
-    if area.width < 4 || area.height < 2 {
+    if area.width < 4 || area.height == 0 {
         return;
     }
     match node {
@@ -741,7 +827,7 @@ fn render_spatial_node(
             }
             let constraints = children
                 .iter()
-                .map(|child| stack_constraint(plan, child))
+                .map(|child| stack_constraint(plan, child, context.scene, area.width))
                 .collect::<Vec<_>>();
             for (child, child_area) in Layout::vertical(constraints).split(area).iter().enumerate()
             {
@@ -789,7 +875,9 @@ fn render_spatial_node(
             if children.is_empty() {
                 return;
             }
-            let constraints = weighted_constraints(plan, &children, weights, stack_constraint);
+            let constraints = weighted_constraints(plan, &children, weights, |plan, child| {
+                stack_constraint(plan, child, context.scene, area.width)
+            });
             for (index, child_area) in Layout::vertical(constraints).split(area).iter().enumerate()
             {
                 render_spatial_node(
@@ -952,8 +1040,41 @@ fn region_for_node<'a>(plan: &'a TuiLayoutPlan, node: &LayoutNode) -> Option<&'a
     plan.regions.iter().find(|region| region.id == *id)
 }
 
-fn stack_constraint(plan: &TuiLayoutPlan, node: &LayoutNode) -> Constraint {
+fn stack_constraint(
+    plan: &TuiLayoutPlan,
+    node: &LayoutNode,
+    scene: &TuiScene,
+    width: u16,
+) -> Constraint {
     let region = region_for_node(plan, node);
+    if region.is_some_and(context_summary) {
+        return Constraint::Length(1);
+    }
+    if let Some(region) = region
+        && region.demand == crate::transcompile::LayoutDemand::Supporting
+        && region.presentation.kind == RegionPresentationKind::Form
+    {
+        let rows = scene
+            .elements
+            .iter()
+            .filter(|element| {
+                element
+                    .sources
+                    .iter()
+                    .any(|source| region.presentation.source_nodes.contains(source))
+                    && !matches!(
+                        element.kind,
+                        SceneElementKind::Unsupported { .. }
+                            | SceneElementKind::CommandHeader { .. }
+                    )
+            })
+            .fold(0_u16, |height, element| {
+                height.saturating_add(element.height_for_width(width.saturating_sub(2)))
+            });
+        // Border plus one extra row for the currently edited field. This
+        // supporting pane need not grow merely because the terminal is tall.
+        return Constraint::Length(rows.saturating_add(3).max(5));
+    }
     if region.is_some_and(|region| {
         region.presentation.kind == RegionPresentationKind::GraphicalPlaceholder
             && region.demand == crate::transcompile::LayoutDemand::Supporting
@@ -963,7 +1084,7 @@ fn stack_constraint(plan: &TuiLayoutPlan, node: &LayoutNode) -> Constraint {
     match region.map(|region| region.demand) {
         Some(crate::transcompile::LayoutDemand::Expand) => Constraint::Min(8),
         Some(crate::transcompile::LayoutDemand::Supporting) => Constraint::Min(5),
-        Some(crate::transcompile::LayoutDemand::Compact) => Constraint::Length(4),
+        Some(crate::transcompile::LayoutDemand::Compact) => Constraint::Length(3),
         Some(crate::transcompile::LayoutDemand::Minimal) => Constraint::Length(3),
         _ => Constraint::Min(3),
     }
@@ -983,6 +1104,19 @@ fn spatial_title(region: &SpatialRegion) -> String {
     region.presentation.title.clone()
 }
 
+fn context_summary(region: &SpatialRegion) -> bool {
+    matches!(
+        region.demand,
+        crate::transcompile::LayoutDemand::Compact | crate::transcompile::LayoutDemand::Minimal
+    ) && !matches!(
+        region.semantic_kind,
+        crate::transcompile::SemanticRegionKind::Dialog
+            | crate::transcompile::SemanticRegionKind::Overlay
+    ) && (region.presentation.kind == RegionPresentationKind::CommandBar
+        || (region.presentation.kind == RegionPresentationKind::Navigation
+            && region.kind == crate::transcompile::SpatialRegionKind::TabStrip))
+}
+
 fn render_spatial_leaf(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -990,6 +1124,50 @@ fn render_spatial_leaf(
     region: &SpatialRegion,
     hit_regions: &mut Vec<HitRegion>,
 ) {
+    if context_summary(region) {
+        // Each region retains its own row, identity and focus position. Only
+        // its frame is compressed; same-named contexts are not merged.
+        let title = format!(
+            "{}{} · ",
+            if context.active_region == Some(region.id) {
+                "> "
+            } else {
+                ""
+            },
+            spatial_title(region)
+        );
+        let title = clipped(&title, area.width / 2);
+        let width = Line::from(title.as_str()).width() as u16;
+        frame.render_widget(
+            Paragraph::new(title).style(if context.active_region == Some(region.id) {
+                accent()
+            } else {
+                secondary()
+            }),
+            Rect::new(area.x, area.y, width, 1),
+        );
+        let payload = Rect::new(
+            area.x.saturating_add(width),
+            area.y,
+            area.width.saturating_sub(width),
+            1,
+        );
+        render_compact_surface(frame, payload, context, region, hit_regions);
+        return;
+    }
+    let active = context.active_region == Some(region.id);
+    let borders = if matches!(
+        region.presentation.kind,
+        RegionPresentationKind::Form | RegionPresentationKind::Table
+    ) || matches!(
+        region.semantic_kind,
+        crate::transcompile::SemanticRegionKind::Dialog
+            | crate::transcompile::SemanticRegionKind::Overlay
+    ) {
+        Borders::ALL
+    } else {
+        Borders::TOP
+    };
     let block = Block::default()
         .title(format!(
             " {}{} ",
@@ -1000,7 +1178,12 @@ fn render_spatial_leaf(
             },
             spatial_title(region)
         ))
-        .borders(Borders::ALL);
+        .borders(borders)
+        .border_style(if active {
+            accent()
+        } else {
+            Style::default().fg(Color::DarkGray)
+        });
     let inner = block.inner(area);
     frame.render_widget(block, area);
     if region.kind == crate::transcompile::SpatialRegionKind::PrimaryContent
@@ -1010,6 +1193,7 @@ fn render_spatial_leaf(
         )
     {
         if let Some(inline) = context.inline_content.as_ref() {
+            let areas = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(inner);
             let suffix = if inline.partial { " (partial)" } else { "" };
             let mut lines = inline.lines.clone();
             if let Some(element) = context
@@ -1038,21 +1222,47 @@ fn render_spatial_leaf(
                     };
                     *first = format!("{marker}{first}");
                 }
-                if let Some(interaction) = interaction(element) {
+                if let Some(interaction) = interaction(element)
+                    && areas[1].height > 0
+                {
                     hit_regions.push(HitRegion {
                         scene_id: element.id,
-                        rect: Rect::new(inner.x, inner.y, inner.width, 1),
+                        rect: Rect::new(areas[1].x, areas[1].y, areas[1].width, 1),
                         interaction,
                     });
                 }
             }
-            let status = format!("{} lines{}", inline.total_lines, suffix);
+            let status = format!("preview{suffix}");
+            let status_width = Line::from(status.as_str())
+                .width()
+                .min(usize::from(u16::MAX)) as u16;
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(
+                        clipped(
+                            &inline.title,
+                            areas[0]
+                                .width
+                                .saturating_sub(status_width.saturating_add(3)),
+                        ),
+                        secondary(),
+                    ),
+                    Span::styled(
+                        format!(" · {status}"),
+                        if inline.partial {
+                            Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+                        } else {
+                            secondary()
+                        },
+                    ),
+                ])),
+                areas[0],
+            );
             frame.render_widget(
                 Paragraph::new(lines.join("\n"))
-                    .block(Block::default().title(format!(" {} — {} ", inline.title, status)))
                     .wrap(Wrap { trim: true })
                     .scroll((context.scroll_offset, 0)),
-                inner,
+                areas[1],
             );
             return;
         }
@@ -1144,7 +1354,16 @@ fn render_spatial_leaf(
                 break;
             }
             frame.render_widget(
-                Paragraph::new(line),
+                Paragraph::new(line).style(if focused {
+                    selected_style()
+                } else if matches!(
+                    element.kind,
+                    SceneElementKind::Group { .. } | SceneElementKind::Unsupported { .. }
+                ) {
+                    secondary()
+                } else {
+                    Style::default()
+                }),
                 Rect::new(inner.x, inner.y + rendered, inner.width, 1),
             );
             rendered += 1;
@@ -1223,7 +1442,7 @@ fn render_compact_surface(
                 "[editing] {}",
                 edit_buffer_window(session, area.width)
             ))
-            .style(Style::default().fg(Color::Yellow)),
+            .style(accent()),
             area,
         );
         return;
@@ -1232,14 +1451,27 @@ fn render_compact_surface(
     let mut shown = 0_usize;
     for element in &elements {
         let focused = context.focused == Some(element.id);
-        let label = format!("[{}{}]", if focused { "> " } else { "" }, element.label());
-        let width = label.chars().count().min(usize::from(u16::MAX)) as u16;
+        let label = match &element.kind {
+            SceneElementKind::Field { label, display, .. } => format!(
+                "[{}{label}: {display}{}]",
+                if focused { "> " } else { "" },
+                if element.capability() == InteractionCapability::None {
+                    " · read only"
+                } else {
+                    ""
+                }
+            ),
+            _ => format!("[{}{}]", if focused { "> " } else { "" }, element.label()),
+        };
+        let width = Line::from(label.as_str())
+            .width()
+            .min(usize::from(u16::MAX)) as u16;
         let reserve = if shown + 1 < elements.len() { 9 } else { 0 };
         if x.saturating_add(width).saturating_add(reserve) > area.right() {
             break;
         }
         let style = if focused {
-            Style::default().add_modifier(Modifier::REVERSED)
+            selected_style()
         } else {
             Style::default()
         };
@@ -1266,6 +1498,11 @@ fn render_compact_surface(
         let label = match region.presentation.kind {
             RegionPresentationKind::CommandBar => ": Commands",
             RegionPresentationKind::InputSurface => "— read only",
+            RegionPresentationKind::Navigation
+                if region.kind == crate::transcompile::SpatialRegionKind::TabStrip =>
+            {
+                "Current context"
+            }
             _ => "— empty",
         };
         frame.render_widget(Paragraph::new(label), area);
@@ -1322,6 +1559,7 @@ fn render_elements(
             area.width,
             context.external_text_handler_available,
         );
+        let line_count = lines.len().min(usize::from(u16::MAX)) as u16;
         let mut first_y = None;
         let mut visible_height = 0_u16;
         for (line_index, line) in lines.into_iter().enumerate() {
@@ -1334,9 +1572,7 @@ fn render_elements(
                 .saturating_add(logical_y.saturating_sub(context.scroll_offset));
             let line_area = Rect::new(area.x, y, area.width, 1);
             let style = if focused {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
+                selected_style()
             } else {
                 Style::default()
             };
@@ -1351,7 +1587,7 @@ fn render_elements(
                 interaction,
             });
         }
-        logical_top = logical_top.saturating_add(element.height_for_width(area.width));
+        logical_top = logical_top.saturating_add(line_count);
     }
 }
 
@@ -1429,7 +1665,7 @@ fn element_lines_for_width(
                     format!("{marker}{label}  [editing]"),
                     format!("    > {}", edit_buffer_window(session, width)),
                 ]
-            } else if width >= 100 {
+            } else if element.height_for_width(width) == 1 {
                 vec![format!("{marker}{label}: {display}{unavailable}")]
             } else {
                 vec![
@@ -1489,67 +1725,149 @@ fn element_lines_for_width(
     }
 }
 
-fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
-    let width = area.width.min(160);
-    let text_width = usize::from(width.saturating_sub(2)).max(1);
-    let entry_lines: usize = palette
-        .entries
-        .iter()
-        .map(|entry| {
-            // Leave room for wrapping at word boundaries, as well as the marker.
-            (entry.label.chars().count() + 2)
-                .div_ceil(text_width)
-                .max(1)
-                + 1
-        })
-        .sum();
-    let height = (entry_lines.saturating_add(5).min(usize::from(area.height))) as u16;
+pub(crate) fn palette_areas(area: Rect) -> [Rect; 6] {
+    let width = area.width.min(120);
+    let height = area.height.min(30);
     let popup = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
         area.y + area.height.saturating_sub(height) / 2,
         width,
         height,
     );
+    let inner = Block::default().borders(Borders::ALL).inner(popup);
+    let rows = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(2),
+        Constraint::Length(1),
+    ])
+    .split(inner);
+    let body = rows[2];
+    let panes = if body.width >= 100 {
+        Layout::horizontal([Constraint::Percentage(45), Constraint::Percentage(55)]).split(body)
+    } else {
+        let detail_height = (body.height / 3)
+            .clamp(3, 7)
+            .min(body.height.saturating_sub(2));
+        Layout::vertical([Constraint::Min(2), Constraint::Length(detail_height)]).split(body)
+    };
+    [popup, rows[0], rows[1], panes[0], panes[1], rows[3]]
+}
+
+fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
+    let [popup, search, scope, results, details, footer] = palette_areas(area);
     frame.render_widget(Clear, popup);
     let search_scope = if palette.all_scopes {
         "all application commands"
     } else {
         "current interaction scope"
     };
-    let mut lines = vec![format!(
-        "> {}  [search: {search_scope}; F2 toggle]",
-        palette.query
-    )];
-    lines.extend(
-        palette
-            .entries
-            .iter()
-            .enumerate()
-            .skip(palette.selected)
-            .map(|(index, entry)| {
-                format!(
-                    "{} {}",
-                    if index == palette.selected { ">" } else { " " },
-                    entry.label
-                )
-            }),
+    frame.render_widget(
+        Block::default()
+            .title(format!(
+                " Command palette {}/{} ",
+                palette
+                    .selected
+                    .saturating_add(1)
+                    .min(palette.entries.len()),
+                palette.entries.len()
+            ))
+            .borders(Borders::ALL)
+            .border_style(accent()),
+        popup,
     );
     frame.render_widget(
-        Paragraph::new(lines.join("\n"))
-            .block(
-                Block::default()
-                    .title(format!(
-                        " Command palette {}/{} ",
-                        palette
-                            .selected
-                            .saturating_add(1)
-                            .min(palette.entries.len()),
-                        palette.entries.len()
-                    ))
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: true }),
-        popup,
+        Paragraph::new(clipped(
+            &format!("> Search: {}", palette.query),
+            search.width,
+        ))
+        .style(accent()),
+        search,
+    );
+    frame.render_widget(
+        Paragraph::new(clipped(
+            &format!(
+                "Scope: {search_scope}{}",
+                if palette.scope_switchable {
+                    " · F2 toggle"
+                } else {
+                    " · fixed"
+                }
+            ),
+            scope.width,
+        ))
+        .style(secondary()),
+        scope,
+    );
+    let result_block = Block::default()
+        .title(" Results ")
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let list_area = result_block.inner(results);
+    frame.render_widget(result_block, results);
+    let visible = usize::from(list_area.height);
+    let start = palette
+        .selected
+        .saturating_sub(visible / 2)
+        .min(palette.entries.len().saturating_sub(visible));
+    for (index, entry) in palette.entries.iter().enumerate().skip(start).take(visible) {
+        let selected = index == palette.selected;
+        let text = format!(
+            "{} {}{}",
+            if selected { ">" } else { " " },
+            entry.short_label(),
+            if entry.group { " ›" } else { "" }
+        );
+        frame.render_widget(
+            Paragraph::new(clipped(&text, list_area.width)).style(if selected {
+                selected_style()
+            } else {
+                Style::default()
+            }),
+            Rect::new(
+                list_area.x,
+                list_area.y + (index - start) as u16,
+                list_area.width,
+                1,
+            ),
+        );
+    }
+    if palette.entries.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No matching operations").style(secondary()),
+            list_area,
+        );
+    }
+    let detail_block = Block::default()
+        .title(" Details · PgUp/PgDn ")
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let detail_area = detail_block.inner(details);
+    frame.render_widget(detail_block, details);
+    if let Some(entry) = palette.entries.get(palette.selected) {
+        let lines = super::palette::detail_lines(&entry.detail_text(), detail_area.width);
+        let offset = palette
+            .detail_scroll
+            .min(lines.len().saturating_sub(usize::from(detail_area.height)));
+        frame.render_widget(
+            Paragraph::new(
+                lines
+                    .into_iter()
+                    .skip(offset)
+                    .take(usize::from(detail_area.height))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            detail_area,
+        );
+    }
+    frame.render_widget(
+        Paragraph::new(clipped(
+            "↑/↓ Select · Enter Use · PgUp/PgDn Details · Esc Back",
+            footer.width,
+        ))
+        .style(secondary()),
+        footer,
     );
 }
 
@@ -1667,12 +1985,24 @@ mod tests {
             input_kind: crate::semantic::TextInputKind::Plain,
         });
         assert_eq!(
-            element_lines_for_width(&field, false, None, 80, false).len(),
+            element_lines_for_width(&field, false, None, 12, false).len(),
             2
         );
         assert_eq!(
-            element_lines_for_width(&field, false, None, 120, false).len(),
+            element_lines_for_width(&field, false, None, 80, false).len(),
             1
+        );
+        assert_eq!(field.height_for_width(12), 2);
+        assert_eq!(field.height_for_width(80), 1);
+        let wide = element(SceneElementKind::Field {
+            label: "名字".into(),
+            display: "中文".into(),
+            input_kind: crate::semantic::TextInputKind::Plain,
+        });
+        assert_eq!(wide.height_for_width(10), 2);
+        assert_eq!(
+            element_lines_for_width(&wide, true, None, 10, false).len(),
+            2
         );
     }
 
@@ -1772,6 +2102,7 @@ mod tests {
                     frame,
                     RenderContext {
                         scene: &scene,
+                        interaction_scope: None,
                         focused: Some(field_id),
                         scroll_offset: 0,
                         status: "ready",
@@ -1815,6 +2146,7 @@ mod tests {
                     Rect::new(0, 0, 40, 3),
                     &RenderContext {
                         scene: &scene,
+                        interaction_scope: None,
                         focused: Some(field_id),
                         scroll_offset: 0,
                         status: "ready",
@@ -1926,10 +2258,10 @@ mod tests {
         };
         let lines = (0..20).map(|line| format!("line {line}")).collect();
         let inline = InlineContentRender {
-            title: "Document".into(),
+            title: "Long document title ".repeat(20),
             lines,
             total_lines: 20,
-            partial: false,
+            partial: true,
         };
         let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
         terminal
@@ -1938,6 +2270,7 @@ mod tests {
                     frame,
                     RenderContext {
                         scene: &scene,
+                        interaction_scope: None,
                         focused: None,
                         scroll_offset: 3,
                         status: "ready",
@@ -1965,6 +2298,7 @@ mod tests {
         assert!(!rendered.contains("Regions —"));
         assert!(!rendered.contains("line 0"));
         assert!(!rendered.contains("line 19"));
+        assert!(rendered.contains("preview (partial)"));
     }
 
     #[test]
@@ -1994,6 +2328,169 @@ mod tests {
             .collect::<String>();
         assert!(rendered.contains("[Surface 0]"));
         assert!(!rendered.contains("Surface 5"));
+        let clipped_label = clipped("中文e\u{301}标题", 5);
+        assert!(Line::from(clipped_label.as_str()).width() <= 5);
+        assert!(!clipped_label.ends_with('e'));
+    }
+
+    #[test]
+    fn long_palette_labels_do_not_wrap_over_other_results() {
+        use crate::transcompile::{CommandGroup, CommandHierarchy, InteractionScopeId};
+        use crate::tui::palette::{CommandPalette, PublicOperation};
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let mut palette = CommandPalette::public_actions(
+            CommandHierarchy {
+                root: CommandGroup {
+                    source: RuntimeNodeId::new(1),
+                    label: "App".into(),
+                    scope,
+                    children: vec![],
+                },
+            },
+            scope,
+            vec![
+                (
+                    RuntimeNodeId::new(2),
+                    BackendLocator::new(":1.2", "/first"),
+                    "Very long full name ".repeat(400),
+                    PublicOperation::Action("press".into()),
+                ),
+                (
+                    RuntimeNodeId::new(3),
+                    BackendLocator::new(":1.2", "/second"),
+                    "Other".into(),
+                    PublicOperation::Action("press".into()),
+                ),
+            ],
+        );
+        palette.set_target_titles(|_| Some("中文e\u{301} long title ".repeat(50)));
+        for (width, height) in [(60, 20), (120, 40)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    render_palette(
+                        frame,
+                        frame.area(),
+                        PaletteRender {
+                            query: "",
+                            entries: palette.entries(),
+                            selected: 0,
+                            all_scopes: false,
+                            scope_switchable: false,
+                            detail_scroll: 0,
+                        },
+                    )
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let rows = (0..height)
+                .map(|y| {
+                    (0..width)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>();
+            let first = rows
+                .iter()
+                .position(|row| row.contains("#2  Action: press"))
+                .unwrap();
+            assert!(rows[first + 1].contains("#3  Action: press"));
+            assert!(rows.iter().any(|row| row.contains("Snapshot target: #2")));
+        }
+    }
+
+    #[test]
+    fn same_named_compact_contexts_keep_separate_rows_and_bindings() {
+        let mut command = spatial_region(
+            0,
+            "Same context",
+            RegionPresentationKind::CommandBar,
+            crate::transcompile::LayoutDemand::Compact,
+        );
+        command.source_nodes = vec![RuntimeNodeId::new(1)];
+        let mut modal = command.clone();
+        modal.semantic_kind = SemanticRegionKind::Dialog;
+        assert!(!context_summary(&modal));
+        let mut tabs = spatial_region(
+            1,
+            "Same context",
+            RegionPresentationKind::Navigation,
+            crate::transcompile::LayoutDemand::Minimal,
+        );
+        tabs.kind = SpatialRegionKind::TabStrip;
+        let plan = TuiLayoutPlan {
+            root: LayoutNode::Stack(vec![
+                LayoutNode::Leaf(command.id),
+                LayoutNode::Leaf(tabs.id),
+            ]),
+            regions: vec![command, tabs],
+            topology: Default::default(),
+            generation: ApplicationGenerationId(1),
+            geometry_trust: GeometryTrust::Unavailable,
+            composition: CompositionKind::ContentDominant,
+        };
+        let root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(0),
+            backend_locator: BackendLocator::new(":1.2", "/root"),
+            index_in_parent: None,
+            role: SemanticRole::Window,
+            name: Some("App".into()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![],
+            actions: vec![],
+            capabilities: vec![],
+            children: vec![],
+            truncations: vec![],
+            debug: Default::default(),
+        };
+        let mut first = element(SceneElementKind::Button {
+            label: "One".into(),
+        });
+        first.sources = vec![RuntimeNodeId::new(1)];
+        let mut second = first.clone();
+        second.id = SceneElementId::new(10);
+        second.sources = vec![RuntimeNodeId::new(2)];
+        second.binding.as_mut().unwrap().runtime_id = RuntimeNodeId::new(2);
+        second.binding.as_mut().unwrap().backend_locator = BackendLocator::new(":1.2", "/second");
+        let scene = TuiScene::new("App".into(), &root, vec![first, second]);
+        let mut terminal = Terminal::new(TestBackend::new(80, 4)).unwrap();
+        let mut hits = vec![];
+        terminal
+            .draw(|frame| {
+                render_spatial_node(
+                    frame,
+                    frame.area(),
+                    &RenderContext {
+                        scene: &scene,
+                        interaction_scope: None,
+                        focused: None,
+                        scroll_offset: 0,
+                        status: "",
+                        application_available: true,
+                        external_text_handler_available: false,
+                        edit_session: None,
+                        palette: None,
+                        choice: None,
+                        content: None,
+                        spatial: Some(&plan),
+                        active_region: None,
+                        inline_content: None,
+                    },
+                    &plan,
+                    &plan.root,
+                    &mut hits,
+                )
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_ne!(hits[0].scene_id, hits[1].scene_id);
+        assert_ne!(hits[0].rect.y, hits[1].rect.y);
+        assert_eq!(
+            stack_constraint(&plan, &LayoutNode::Leaf(SpatialRegionId(0)), &scene, 80),
+            Constraint::Length(1)
+        );
     }
 
     #[test]
@@ -2027,7 +2524,7 @@ mod tests {
         };
         let area =
             bounded_non_expanding_composition_area(&plan, &plan.root, Rect::new(0, 0, 100, 50));
-        assert_eq!(area.height, 18);
+        assert_eq!(area.height, 17);
         assert!(area.y > 0);
     }
 }

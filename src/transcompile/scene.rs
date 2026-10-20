@@ -172,8 +172,21 @@ impl SceneElement {
     }
 
     pub fn height_for_width(&self, width: u16) -> u16 {
-        match self.kind {
-            SceneElementKind::Field { .. } if width < 100 => 2,
+        match &self.kind {
+            SceneElementKind::Field { label, display, .. } => {
+                let suffix =
+                    if self.capability() == InteractionCapability::None && self.is_focusable() {
+                        " · read only"
+                    } else {
+                        ""
+                    };
+                let line = ratatui::text::Line::from(format!("> {label}: {display}{suffix}"));
+                if !display.contains(['\n', '\r']) && line.width() <= usize::from(width) {
+                    1
+                } else {
+                    2
+                }
+            }
             SceneElementKind::OpaqueContent { dimensions, .. } if dimensions.is_some() => 3,
             SceneElementKind::OpaqueContent { .. } => 2,
             SceneElementKind::DocumentSummary { .. } => 5,

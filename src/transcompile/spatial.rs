@@ -1361,12 +1361,12 @@ fn is_user_content_kind(kind: &ContentBlockKind) -> bool {
 
 fn is_meaningful_text(text: &str) -> bool {
     let text = text.trim();
-    !text.is_empty()
+    super::presentation::has_display_text(text)
         && text != "[text unavailable through the application's accessibility interface]"
 }
 
 fn is_substantial_inline_text(text: &str) -> bool {
-    text.contains('\n') || text.chars().count() > 80
+    is_meaningful_text(text) && (text.contains('\n') || text.chars().count() > 80)
 }
 
 fn semantic_title(region: &SemanticRegion, source: Option<&SemanticNode>) -> String {
@@ -1383,7 +1383,7 @@ fn semantic_title(region: &SemanticRegion, source: Option<&SemanticNode>) -> Str
                 return region
                     .label
                     .clone()
-                    .filter(|label| !label.trim().is_empty())
+                    .filter(|label| super::presentation::has_display_text(label))
                     .unwrap_or_else(|| "Navigation".to_owned());
             }
             SemanticRole::TabList | SemanticRole::Tab => return "Tabs".to_owned(),
@@ -1397,7 +1397,7 @@ fn semantic_title(region: &SemanticRegion, source: Option<&SemanticNode>) -> Str
     region
         .label
         .clone()
-        .filter(|label| !label.trim().is_empty() && label.chars().count() <= 80)
+        .filter(|label| super::presentation::has_display_text(label) && label.chars().count() <= 80)
         .unwrap_or_else(|| match region.kind {
             SemanticRegionKind::ApplicationShell => "Application".to_owned(),
             SemanticRegionKind::Document => "Document".to_owned(),
@@ -1434,7 +1434,7 @@ fn descendant_presentation_items(region: &SemanticRegion) -> usize {
                     || child
                         .label
                         .as_deref()
-                        .is_some_and(|label| !label.trim().is_empty()),
+                        .is_some_and(super::presentation::has_display_text),
             ) + descendant_presentation_items(child)
         })
         .sum()
@@ -1620,13 +1620,24 @@ fn presentation_for_region(
             )
         }
         (_, Some(SemanticRole::TextInput))
-            if source.is_some_and(is_presentable_single_line_input) =>
+            if source.is_some_and(|node| {
+                is_presentable_single_line_input(node)
+                    || (node.role == SemanticRole::TextInput
+                        && node.states.iter().any(|state| {
+                            matches!(state,
+                            SemanticState::Other(value) if value == "showing")
+                        })
+                        && !node.states.iter().any(|state| {
+                            matches!(state,
+                            SemanticState::Other(value) if value == "multi-line")
+                        }))
+            }) =>
         {
             (
                 RegionPresentationKind::ControlGroup,
                 1,
                 false,
-                "safe single-line editable input has a direct presentation payload",
+                "visible single-line field has a direct, possibly read-only presentation payload",
             )
         }
         (SemanticRegionKind::Field | SemanticRegionKind::Control, _) if actionable > 0 => (
@@ -1639,7 +1650,7 @@ fn presentation_for_region(
             if region
                 .label
                 .as_deref()
-                .is_some_and(|label| !label.trim().is_empty()) =>
+                .is_some_and(super::presentation::has_display_text) =>
         {
             (
                 RegionPresentationKind::CollapsedSummary,
@@ -2558,12 +2569,10 @@ pub fn realize_responsive_layout(
             selected.push(region.id);
         }
     }
-    let prefer_direct_limit = match class {
-        TerminalWidthClass::Wide | TerminalWidthClass::Medium => direct_limit,
-        TerminalWidthClass::Narrow | TerminalWidthClass::Compact => {
-            selected.len().saturating_add(1)
-        }
-    };
+    // Pinned compact context may consume the normal pane count even when a
+    // supporting task still fits. Allow one preferred surface beyond that
+    // count; minimum viable width/height remains the hard space constraint.
+    let prefer_direct_limit = direct_limit.max(selected.len().saturating_add(1));
     for region in candidates
         .iter()
         .filter(|region| region.visibility == VisibilityGuarantee::PreferDirect)
@@ -2650,7 +2659,7 @@ fn minimum_viable_direct_width(region: &SpatialRegion) -> u16 {
 fn surface_rank(
     region: &SpatialRegion,
     active_region: Option<SpatialRegionId>,
-) -> (bool, u8, u8, u8, usize, std::cmp::Reverse<u64>) {
+) -> (bool, u8, u8, u8, u8, usize, std::cmp::Reverse<u64>) {
     let visibility = match region.visibility {
         VisibilityGuarantee::Pinned => 4,
         VisibilityGuarantee::PreferDirect => 3,
@@ -2671,11 +2680,21 @@ fn surface_rank(
         LayoutDemand::Minimal => 2,
         LayoutDemand::Hidden => 0,
     };
+    // With equal visibility and space demands, task payload takes precedence
+    // over a control collection merely having more widgets.
+    let task = match region.presentation.kind {
+        RegionPresentationKind::InlineContent => 3,
+        RegionPresentationKind::Form
+        | RegionPresentationKind::Table
+        | RegionPresentationKind::WorkspacePane => 2,
+        _ => 1,
+    };
     (
         Some(region.id) == active_region,
         visibility,
         obligation,
         demand,
+        task,
         region.presentation.meaningful_items,
         std::cmp::Reverse(region.id.0),
     )
@@ -3076,6 +3095,14 @@ pub fn refine_layout_demands_from_scene(analysis: &mut LayoutAnalysis, scene: &T
             })
             .count();
         if realized == 0 {
+            if region.presentation.kind == RegionPresentationKind::Form
+                && region.visibility == VisibilityGuarantee::PreferDirect
+            {
+                // Backend Showing alone does not make a scoped scene surface
+                // available, e.g. a background form behind a modal.
+                region.visibility = VisibilityGuarantee::Collapsible;
+                region.obligation = PresentationObligation::Contextual;
+            }
             let command_only_duplicate = has_command_surface
                 && region.presentation.kind == RegionPresentationKind::ControlGroup
                 && !matching.is_empty()
@@ -3793,6 +3820,17 @@ fn refine_surface_policy(
                 .iter()
                 .any(|state| matches!(state, SemanticState::Focused | SemanticState::Selected))
         });
+        let form_inputs = source_nodes
+            .iter()
+            .filter(|node| {
+                (node.role == SemanticRole::TextInput
+                    || node.capabilities.contains(&SemanticCapability::EditText))
+                    && node.states.iter().any(|state| {
+                        matches!(state,
+                    SemanticState::Other(value) if value == "showing")
+                    })
+            })
+            .count();
         let persistent_input = source_nodes.iter().find(|node| {
             is_presentable_single_line_input(node)
                 && !descends_from_any(node.runtime_id, &primary_sources, &parents)
@@ -3904,6 +3942,14 @@ fn refine_surface_policy(
             region
                 .reasons
                 .push("current tab/context surface is persistently represented".into());
+        } else if region.presentation.kind == RegionPresentationKind::Form && form_inputs >= 2 {
+            region.obligation = PresentationObligation::Persistent;
+            region.demand = LayoutDemand::Supporting;
+            region.visibility = VisibilityGuarantee::PreferDirect;
+            region.reasons.push(
+                "multi-field semantic form prefers direct presentation when terminal space permits"
+                    .into(),
+            );
         } else if has_current_state {
             region.obligation = PresentationObligation::Persistent;
             if region.demand == LayoutDemand::Minimal {
@@ -4463,6 +4509,87 @@ mod tests {
             r.kind == SpatialRegionKind::Structural
                 && r.priority == PresentationPriority::Structural
         }));
+    }
+
+    #[test]
+    fn multi_field_form_remains_direct_beside_a_document_preview() {
+        let mut root = node(0, SemanticRole::Window, "Workspace", None);
+        let mut document = node(1, SemanticRole::Document, "Document", None);
+        let mut form = node(2, SemanticRole::Form, "Credentials", None);
+        let mut input = node(3, SemanticRole::TextInput, "Account", None);
+        input.text_input_kind = Some(TextInputKind::Plain);
+        input.capabilities.push(SemanticCapability::EditText);
+        input.states.extend([
+            SemanticState::Editable,
+            SemanticState::Other("showing".into()),
+        ]);
+        let mut password = node(4, SemanticRole::TextInput, "Password", None);
+        password.text_input_kind = Some(TextInputKind::Password);
+        password.states.push(SemanticState::Other("showing".into()));
+        form.children = vec![input, password];
+        document.children.push(form);
+        root.children.push(document);
+        let analysis = analyze_regions(&root);
+        let evidence = SpatialEvidenceIndex::from_tree(
+            &root,
+            ApplicationGenerationId(1),
+            SpatialProbeBudget::default(),
+        );
+        let presentation =
+            RegionPresentationContext::default().with_content(RuntimeNodeId::new(1), "Document", 1);
+        let layout =
+            infer_layout_with_presentations(&analysis, &root, &evidence, Some(&presentation));
+        let form = layout
+            .plan
+            .regions
+            .iter()
+            .find(|region| {
+                region.presentation.kind == RegionPresentationKind::Form
+                    && region.source_nodes.contains(&RuntimeNodeId::new(2))
+            })
+            .unwrap();
+        assert_eq!(form.visibility, VisibilityGuarantee::PreferDirect);
+        assert_eq!(form.demand, LayoutDemand::Supporting);
+        let primary = layout
+            .plan
+            .regions
+            .iter()
+            .find(|region| region.kind == SpatialRegionKind::PrimaryContent)
+            .unwrap();
+        let composed = realize_responsive_layout(&layout.plan, 80, 40, Some(primary.id));
+        assert!(composed.represented.contains(&form.id));
+        assert!(!composed.collapsed.contains(&form.id));
+        let mut with_context = layout.plan.clone();
+        for id in [900, 901] {
+            let mut context = form.clone();
+            context.id = SpatialRegionId(id);
+            context.kind = SpatialRegionKind::Auxiliary;
+            context.presentation.kind = RegionPresentationKind::Navigation;
+            context.presentation.title = "Current context".into();
+            context.demand = LayoutDemand::Compact;
+            context.visibility = VisibilityGuarantee::Pinned;
+            with_context.regions.push(context);
+        }
+        let mut dense_controls = form.clone();
+        dense_controls.id = SpatialRegionId(902);
+        dense_controls.kind = SpatialRegionKind::Auxiliary;
+        dense_controls.presentation.kind = RegionPresentationKind::ControlGroup;
+        dense_controls.presentation.meaningful_items = 1_000;
+        with_context.regions.push(dense_controls);
+        let composed = realize_responsive_layout(&with_context, 80, 40, Some(primary.id));
+        assert!(!composed.collapsed.contains(&form.id));
+        let form_id = form.id;
+        let mut unavailable = layout.clone();
+        let scoped_scene = TuiScene::new("Modal".into(), &root, Vec::new());
+        refine_layout_demands_from_scene(&mut unavailable, &scoped_scene);
+        let form = unavailable
+            .plan
+            .regions
+            .iter()
+            .find(|region| region.id == form_id)
+            .unwrap();
+        assert_eq!(form.visibility, VisibilityGuarantee::Collapsible);
+        assert_eq!(form.obligation, PresentationObligation::Contextual);
     }
 
     #[test]

@@ -26,6 +26,7 @@ use thiserror::Error;
 use tracing::warn;
 use zbus::{MessageStream, message::Type as MessageType, names::UniqueName, zvariant::ObjectPath};
 
+use super::text_evidence::{TextChangeProof, TextReadbackEvidence};
 use crate::{
     backend::{
         bootstrap::{
@@ -311,6 +312,41 @@ pub struct AtspiBackend {
     operation_timeout: Duration,
     application_peers: Arc<std::sync::Mutex<HashMap<String, zbus::Connection>>>,
     application_peer_addresses: Arc<std::sync::Mutex<HashMap<String, String>>>,
+}
+
+/// A private, operation-scoped subscriber for one previously validated Text
+/// target. Dropping it closes its separate public connection and event stream.
+pub struct TextReadbackObservation {
+    locator: BackendLocator,
+    proof: Arc<std::sync::Mutex<TextChangeProof>>,
+    producer: tokio::task::JoinHandle<()>,
+}
+
+impl TextReadbackObservation {
+    pub fn revision(&self) -> u64 {
+        self.proof.lock().expect("text evidence").revision
+    }
+
+    pub fn verify(
+        &self,
+        locator: &BackendLocator,
+        revision: u64,
+        raw: &str,
+    ) -> Option<TextReadbackEvidence> {
+        if locator != &self.locator {
+            return None;
+        }
+        self.proof
+            .lock()
+            .expect("text evidence")
+            .verify(revision, raw)
+    }
+}
+
+impl Drop for TextReadbackObservation {
+    fn drop(&mut self) {
+        self.producer.abort();
+    }
 }
 
 pub const DEFAULT_EVENT_BUFFER_CAPACITY: usize = 2048;
@@ -1317,6 +1353,139 @@ impl AtspiBackend {
         self.read_authoritative_text(locator).await
     }
 
+    /// Observe literal insert/delete payloads without exporting any unrelated
+    /// node's text. Fresh Text readback must still match the entire projection.
+    pub async fn observe_text_readback(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<TextReadbackObservation, BackendError> {
+        self.validate_plain_text_readback(locator).await?;
+        let encoded = locator.encode();
+        // Use a plain public bus connection: an SDK peer-listener task would
+        // otherwise outlive this short operation-scoped subscription.
+        let session = dbus_operation(
+            self.operation_timeout,
+            "connect text observer session",
+            &encoded,
+            zbus::Connection::session(),
+        )
+        .await?;
+        let bus_error = |error: zbus::Error| BackendError::EventStream(error.into());
+        let bus = atspi::proxy::bus::BusProxy::new(&session)
+            .await
+            .map_err(bus_error)?;
+        let address = dbus_operation(
+            self.operation_timeout,
+            "locate text observer bus",
+            &encoded,
+            bus.get_address(),
+        )
+        .await?;
+        let connection = dbus_operation(
+            self.operation_timeout,
+            "connect operation text observer",
+            &encoded,
+            async {
+                zbus::connection::Builder::address(address.as_str())?
+                    .build()
+                    .await
+            },
+        )
+        .await?;
+        if connection.server_guid() != self.connection.connection().server_guid() {
+            return Err(BackendError::SemanticCache(
+                "Text observer bus changed".into(),
+            ));
+        }
+        let rule = zbus::MatchRule::builder()
+            .msg_type(MessageType::Signal)
+            .sender(locator.bus_name())
+            .map_err(bus_error)?
+            .path(locator.object_path())
+            .map_err(bus_error)?
+            .interface("org.a11y.atspi.Event.Object")
+            .map_err(bus_error)?
+            .member("TextChanged")
+            .map_err(bus_error)?
+            .build();
+        let mut stream = MessageStream::for_match_rule(rule, &connection, None)
+            .await
+            .map_err(bus_error)?;
+        let registry = atspi::proxy::registry::RegistryProxy::new(&connection)
+            .await
+            .map_err(bus_error)?;
+        dbus_operation(
+            self.operation_timeout,
+            "register operation text events",
+            &encoded,
+            registry.register_event("object:text-changed"),
+        )
+        .await?;
+        // The reply's sender serial is a fence: pre-baseline signals cannot
+        // certify this operation even if they were buffered during setup.
+        let baseline = dbus_operation(
+            self.operation_timeout,
+            "read text observation baseline",
+            &encoded,
+            connection.call_method(
+                Some(locator.bus_name()),
+                locator.object_path(),
+                Some("org.a11y.atspi.Text"),
+                "GetText",
+                &(0_i32, -1_i32),
+            ),
+        )
+        .await?;
+        if baseline.header().sender().map(|s| s.as_str()) != Some(locator.bus_name()) {
+            return Err(BackendError::SemanticCache(
+                "Text baseline sender changed".into(),
+            ));
+        }
+        let fence = baseline.primary_header().serial_num().get();
+        let initial = baseline.body().deserialize::<String>().map_err(bus_error)?;
+        let proof = Arc::new(std::sync::Mutex::new(TextChangeProof::new(initial)));
+        let writer = proof.clone();
+        let producer = tokio::spawn(async move {
+            // Own the connection until cancellation; registration is scoped to
+            // this client and never deregisters the normal semantic subscriber.
+            let _connection = connection;
+            while let Some(message) = stream.next().await {
+                let Ok(message) = message else {
+                    writer.lock().expect("text evidence").fail();
+                    return;
+                };
+                let delta = message
+                    .primary_header()
+                    .serial_num()
+                    .get()
+                    .wrapping_sub(fence);
+                if delta == 0 || delta >= (1_u32 << 31) {
+                    continue;
+                }
+                match Event::try_from(&message) {
+                    Ok(Event::Object(ObjectEvents::TextChanged(event))) => {
+                        writer.lock().expect("text evidence").apply(
+                            event.operation == atspi::Operation::Insert,
+                            event.start_pos,
+                            event.length,
+                            event.text,
+                        );
+                    }
+                    _ => {
+                        writer.lock().expect("text evidence").fail();
+                        return;
+                    }
+                }
+            }
+            writer.lock().expect("text evidence").fail();
+        });
+        Ok(TextReadbackObservation {
+            locator: locator.clone(),
+            proof,
+            producer,
+        })
+    }
+
     /// Read a fresh complete value from the public AT-SPI Text interface.
     ///
     /// The readback target may differ from the node exposing EditableText (for
@@ -2004,7 +2173,9 @@ impl AtspiBackend {
             self.operation_timeout,
             "read semantic block text",
             &encoded_id,
-            proxy.get_text(0, character_count),
+            // Public end-of-text sentinel avoids cutting a block that grew
+            // between CharacterCount and GetText.
+            proxy.get_text(0, -1),
         )
         .await?;
         Ok(TextRangeRead {
@@ -2851,13 +3022,26 @@ impl AtspiBackend {
             value.set_current_value(requested),
         )
         .await?;
-        let resulting = dbus_operation(
-            self.operation_timeout,
-            "verify current Value",
-            &locator.encode(),
-            value.current_value(),
-        )
-        .await?;
+        // A successful property write may precede public value publication.
+        // Poll readback only; never repeat the mutation to obtain confirmation.
+        let deadline = Instant::now() + TEXT_WRITE_VERIFICATION_TIMEOUT;
+        let resulting = loop {
+            let observed = dbus_operation(
+                self.operation_timeout,
+                "verify current Value",
+                &encoded_id,
+                value.current_value(),
+            )
+            .await?;
+            if !observed.is_finite() || observed < minimum || observed > maximum {
+                return Err(BackendError::ValueUnavailable(encoded_id));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if observed == requested || remaining.is_zero() {
+                break observed;
+            }
+            tokio::time::sleep(TEXT_WRITE_VERIFICATION_POLL.min(remaining)).await;
+        };
         if !resulting.is_finite() || resulting < minimum || resulting > maximum {
             return Err(BackendError::ValueUnavailable(encoded_id));
         }
@@ -2940,27 +3124,42 @@ impl AtspiBackend {
                 index: *index,
             });
         }
-        let current_children = dbus_operation(
-            self.operation_timeout,
-            "refresh selection children",
-            &parent.encode(),
-            proxy.get_children(),
-        )
-        .await?;
-        if current_children != children {
-            return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+        let deadline = Instant::now() + TEXT_WRITE_VERIFICATION_TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+            }
+            // Accepted delivery can precede the provider's selected-state update.
+            // Poll public readback, while retaining exact child-list authority.
+            let readback = tokio::time::timeout(remaining, async {
+                let current_children = dbus_operation(
+                    self.operation_timeout,
+                    "refresh selection children",
+                    &parent.encode(),
+                    proxy.get_children(),
+                )
+                .await?;
+                if current_children != children {
+                    return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+                }
+                dbus_operation(
+                    self.operation_timeout,
+                    "read selected child",
+                    &parent.encode(),
+                    selection.is_child_selected(child_index),
+                )
+                .await
+            })
+            .await;
+            match readback {
+                Ok(Ok(actual)) if actual == selected => return Ok(()),
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(_) => return Err(BackendError::SelectionReadbackAmbiguous(parent.encode())),
+            }
+            tokio::time::sleep(TEXT_WRITE_VERIFICATION_POLL.min(remaining)).await;
         }
-        let actual = dbus_operation(
-            self.operation_timeout,
-            "read selected child",
-            &parent.encode(),
-            selection.is_child_selected(child_index),
-        )
-        .await?;
-        if actual != selected {
-            return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
-        }
-        Ok(())
     }
 
     pub async fn select_child(
@@ -3759,57 +3958,72 @@ impl AtspiBackend {
                 .accessible_proxy(&object)
                 .await
                 .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
-            let role = dbus_operation(
-                self.operation_timeout,
-                "read role",
-                &encoded_id,
-                proxy.get_role(),
-            )
-            .await?;
-            let name = dbus_operation(
-                self.operation_timeout,
-                "read name",
-                &encoded_id,
-                proxy.name(),
-            )
-            .await
-            .map(nonempty)
-            .unwrap_or_else(|error| {
+            // These public metadata reads are independent. Keep the walk's
+            // deterministic child order, identity allocation and node/depth
+            // accounting, while overlapping D-Bus round trips within a node.
+            let (role, name, description, states, interfaces, child_refs) = tokio::join!(
+                dbus_operation(
+                    self.operation_timeout,
+                    "read role",
+                    &encoded_id,
+                    proxy.get_role(),
+                ),
+                dbus_operation(
+                    self.operation_timeout,
+                    "read name",
+                    &encoded_id,
+                    proxy.name(),
+                ),
+                dbus_operation(
+                    self.operation_timeout,
+                    "read description",
+                    &encoded_id,
+                    proxy.description(),
+                ),
+                dbus_operation(
+                    self.operation_timeout,
+                    "read states",
+                    &encoded_id,
+                    proxy.get_state(),
+                ),
+                dbus_operation(
+                    self.operation_timeout,
+                    "read interfaces",
+                    &encoded_id,
+                    proxy.get_interfaces(),
+                ),
+                async {
+                    if depth < context.options.max_depth {
+                        Some(
+                            dbus_operation(
+                                self.operation_timeout,
+                                "read children",
+                                &encoded_id,
+                                proxy.get_children(),
+                            )
+                            .await,
+                        )
+                    } else {
+                        None
+                    }
+                },
+            );
+            let role = role?;
+            let name = name.map(nonempty).unwrap_or_else(|error| {
                 warn!(node_id = %encoded_id, %error, "could not read AT-SPI name");
                 None
             });
-            let description = dbus_operation(
-                self.operation_timeout,
-                "read description",
-                &encoded_id,
-                proxy.description(),
-            )
-            .await
-            .map(nonempty)
-            .unwrap_or_else(|error| {
+            let description = description.map(nonempty).unwrap_or_else(|error| {
                 warn!(node_id = %encoded_id, %error, "could not read AT-SPI description");
                 None
             });
-            let states = dbus_operation(
-                self.operation_timeout,
-                "read states",
-                &encoded_id,
-                proxy.get_state(),
-            )
-            .await
-            .map(|set| set.into_iter().map(SemanticState::from).collect())
-            .unwrap_or_else(|error| {
-                warn!(node_id = %encoded_id, %error, "could not read AT-SPI states");
-                Vec::new()
-            });
-            let interfaces = dbus_operation(
-                self.operation_timeout,
-                "read interfaces",
-                &encoded_id,
-                proxy.get_interfaces(),
-            )
-            .await
-            .unwrap_or_else(|error| {
+            let states = states
+                .map(|set| set.into_iter().map(SemanticState::from).collect())
+                .unwrap_or_else(|error| {
+                    warn!(node_id = %encoded_id, %error, "could not read AT-SPI states");
+                    Vec::new()
+                });
+            let interfaces = interfaces.unwrap_or_else(|error| {
                 warn!(node_id = %encoded_id, %error, "could not read AT-SPI interfaces");
                 Default::default()
             });
@@ -3900,15 +4114,8 @@ impl AtspiBackend {
 
             let mut children = Vec::new();
             let mut truncations = Vec::new();
-            if depth < context.options.max_depth {
-                match dbus_operation(
-                    self.operation_timeout,
-                    "read children",
-                    &encoded_id,
-                    proxy.get_children(),
-                )
-                .await
-                {
+            if let Some(child_refs) = child_refs {
+                match child_refs {
                     Ok(child_refs) => {
                         for (child_index, child) in child_refs.into_iter().enumerate() {
                             if context.nodes >= context.options.max_nodes {

@@ -161,14 +161,20 @@ impl SceneCompiler<'_> {
             | SemanticRegionKind::Landmark
             | SemanticRegionKind::Dialog
             | SemanticRegionKind::Overlay => {
-                self.push(
-                    SceneElementKind::Group {
-                        label: region_group_label(region),
-                    },
-                    region.source_nodes.clone(),
-                    None,
-                    PresentationStrategy::ReflowGroup,
-                );
+                // An unnamed section is a boundary, not a useful terminal row.
+                // Keep its descendants and canonical region/source identities.
+                if region.label.as_deref().is_some_and(has_display_text)
+                    || (region.label.is_none() && region.kind != SemanticRegionKind::Section)
+                {
+                    self.push(
+                        SceneElementKind::Group {
+                            label: region_group_label(region),
+                        },
+                        region.source_nodes.clone(),
+                        None,
+                        PresentationStrategy::ReflowGroup,
+                    );
+                }
                 for child in &region.children {
                     self.compile_region(child);
                 }
@@ -176,7 +182,11 @@ impl SceneCompiler<'_> {
             SemanticRegionKind::Control => self.compile_control(region),
             SemanticRegionKind::Field => self.compile_field(region),
             SemanticRegionKind::Form => {
-                if let Some(label) = &region.label {
+                if let Some(label) = region
+                    .label
+                    .as_ref()
+                    .filter(|label| has_display_text(label))
+                {
                     self.push(
                         SceneElementKind::Group {
                             label: label.clone(),
@@ -285,7 +295,11 @@ impl SceneCompiler<'_> {
                 );
             }
             SemanticRegionKind::Navigation | SemanticRegionKind::Group => {
-                if let Some(label) = &region.label {
+                if let Some(label) = region
+                    .label
+                    .as_ref()
+                    .filter(|label| has_display_text(label))
+                {
                     self.push(
                         SceneElementKind::Group {
                             label: label.clone(),
@@ -404,6 +418,17 @@ impl SceneCompiler<'_> {
         else {
             return;
         };
+        if node.role == SemanticRole::Menu
+            && region.interactions.is_empty()
+            && node.actions.is_empty()
+            && !node.name.as_deref().is_some_and(has_display_text)
+            && !node.value.as_deref().is_some_and(has_display_text)
+        {
+            for child in &region.children {
+                self.compile_region(child);
+            }
+            return;
+        }
         if node.role == SemanticRole::TextInput
             || node.capabilities.contains(&SemanticCapability::EditText)
         {
@@ -535,9 +560,13 @@ fn region_group_label(region: &SemanticRegion) -> String {
     })
 }
 
+pub(crate) fn has_display_text(value: &str) -> bool {
+    value.chars().any(|c| !c.is_whitespace() && c != '\u{fffc}')
+}
+
 fn is_accessibility_diagnostic(value: &str) -> bool {
     let normalized = value.trim().to_ascii_lowercase();
-    normalized.is_empty()
+    !has_display_text(value)
         || matches!(normalized.as_str(), "empty" | "unknown" | "unsupported")
         || normalized.contains("text unavailable through")
         || normalized.contains("unavailable through the accessibility")
@@ -670,6 +699,52 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn structural_placeholders_do_not_hide_named_groups_or_controls() {
+        let mut root = node(0, SemanticRole::Window, "Workspace");
+        let mut wrapper = node(1, SemanticRole::Section, "");
+        wrapper.value = Some("\u{fffc} \u{fffc}".into());
+        let mut button = node(2, SemanticRole::Button, "Run");
+        button.states = vec![SemanticState::Enabled];
+        button.actions.push(SemanticAction {
+            index: 0,
+            name: "press".into(),
+            description: None,
+            keybinding: None,
+        });
+        wrapper.children.push(button);
+        let mut named = node(3, SemanticRole::Section, "Details");
+        named
+            .children
+            .push(node(4, SemanticRole::Label, "Useful information"));
+        root.children = vec![wrapper, named, node(5, SemanticRole::Label, "\u{fffc}")];
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        assert!(
+            scene
+                .elements
+                .iter()
+                .all(|element| has_display_text(element.label()))
+        );
+        assert!(
+            !scene
+                .elements
+                .iter()
+                .any(|element| element.label() == "Section")
+        );
+        assert!(scene.elements.iter().any(|element| matches!(&element.kind, SceneElementKind::Group { label } if label == "Details")));
+        let run = scene
+            .elements
+            .iter()
+            .find(|element| element.label() == "Run")
+            .unwrap();
+        assert_eq!(
+            run.binding.as_ref().unwrap().runtime_id,
+            RuntimeNodeId::new(2)
+        );
+        assert_eq!(run.binding.as_ref().unwrap().actions[0].name, "press");
+        assert!(has_display_text("Text with \u{fffc} embedded content"));
     }
 
     #[test]

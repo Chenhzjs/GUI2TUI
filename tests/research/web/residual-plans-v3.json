@@ -1,0 +1,62 @@
+{
+  "version": "jev-web-public-text-oracle-v3",
+  "description": "Separate revision: v2 plans plus an independent public TextChanged/fresh Text oracle for Unicode; never replace frozen scores.",
+  "overrides": {
+    "name-unicode": {
+      "forbid_events": [
+        "profile"
+      ],
+      "expect_public_text_literal": {
+        "label": "Full name",
+        "value": "陈小明 🧪"
+      }
+    },
+    "delivery-express": {
+      "plans": [
+        {
+          "label": "Express delivery",
+          "target_role": "MenuItem",
+          "target_states": [
+            "Other(\"showing\")"
+          ],
+          "kind": "action",
+          "name": "click"
+        }
+      ]
+    },
+    "delivery-membership": {
+      "plans": [
+        {
+          "label": "Express delivery",
+          "target_role": "MenuItem",
+          "ancestor": {
+            "role": "ComboBox",
+            "label": "Delivery speed"
+          },
+          "kind": "selection",
+          "selected": true
+        }
+      ],
+      "expect_unique_selected": {
+        "name": "Express delivery",
+        "role": "menu item"
+      }
+    },
+    "advanced-close": {
+      "plans": [
+        {
+          "label": "Advanced settings",
+          "target_role": "Button",
+          "target_states": [
+            "Expanded"
+          ],
+          "kind": "action",
+          "name": "expand"
+        }
+      ]
+    }
+  },
+  "public_text_oracle": {
+    "label": "Full name"
+  }
+}

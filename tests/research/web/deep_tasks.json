@@ -1,0 +1,890 @@
+[
+  {
+    "id": "name-ascii",
+    "goal": "Set Full name to Ada Lovelace. Do not save the profile yet.",
+    "plans": [
+      {
+        "label": "Full name",
+        "kind": "replace_text",
+        "parameter": "Ada Lovelace"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Full name",
+      "value": "Ada Lovelace"
+    }
+  },
+  {
+    "id": "name-unicode",
+    "goal": "Replace Full name with 陈小明 🧪. Do not submit the profile.",
+    "plans": [
+      {
+        "label": "Full name",
+        "kind": "replace_text",
+        "parameter": "陈小明 🧪"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Full name",
+      "value": "陈小明 🧪"
+    }
+  },
+  {
+    "id": "email",
+    "goal": "Set Email address to ada@example.test. Do not submit yet.",
+    "plans": [
+      {
+        "label": "Email address",
+        "kind": "replace_text",
+        "parameter": "ada@example.test"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Email address",
+      "value": "ada@example.test"
+    }
+  },
+  {
+    "id": "save-profile",
+    "goal": "Press Save profile to save the currently filled profile.",
+    "plans": [
+      {
+        "label": "Save profile",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "profile",
+      "value": {
+        "name": "陈小明 🧪",
+        "email": "ada@example.test"
+      }
+    },
+    "expect_node": null
+  },
+  {
+    "id": "notes-multiline",
+    "goal": "Replace Notes with the supplied two-line text.",
+    "plans": [
+      {
+        "label": "Notes",
+        "kind": "replace_text",
+        "parameter": "First line\n第二行 🧪"
+      }
+    ],
+    "expect_event": {
+      "name": "notes",
+      "value": "First line\n第二行 🧪"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "notes-clear",
+    "goal": "Clear all text from Notes.",
+    "plans": [
+      {
+        "label": "Notes",
+        "kind": "replace_text",
+        "parameter": ""
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Notes",
+      "value": ""
+    }
+  },
+  {
+    "id": "rich-text",
+    "goal": "Replace the entire Rich notes content with Plain replacement text, including its current formatting.",
+    "plans": [
+      {
+        "label": "Rich notes",
+        "kind": "replace_text",
+        "parameter": "Plain replacement text"
+      }
+    ],
+    "expect_event": {
+      "name": "rich-notes",
+      "value": "Plain replacement text"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "counter-increase",
+    "goal": "Press Increase counter once, resulting in Counter: 1.",
+    "plans": [
+      {
+        "label": "Increase counter",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "counter",
+      "value": 1
+    },
+    "expect_node": null
+  },
+  {
+    "id": "counter-increase-again",
+    "goal": "Press Increase counter once, resulting in Counter: 2.",
+    "plans": [
+      {
+        "label": "Increase counter",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "counter",
+      "value": 2
+    },
+    "expect_node": null
+  },
+  {
+    "id": "counter-decrease",
+    "goal": "Press Decrease counter once, resulting in Counter: 1.",
+    "plans": [
+      {
+        "label": "Decrease counter",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "counter",
+      "value": 1
+    },
+    "expect_node": null
+  },
+  {
+    "id": "counter-reset",
+    "goal": "Press Reset counter, resulting in Counter: 0.",
+    "plans": [
+      {
+        "label": "Reset counter",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "counter",
+      "value": 0
+    },
+    "expect_node": null
+  },
+  {
+    "id": "notifications-on",
+    "goal": "Enable notifications by checking Enable notifications.",
+    "plans": [
+      {
+        "label": "Enable notifications",
+        "kind": "action",
+        "name": "check"
+      }
+    ],
+    "expect_event": {
+      "name": "notifications",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "notifications-off",
+    "goal": "Disable notifications by unchecking Enable notifications.",
+    "plans": [
+      {
+        "label": "Enable notifications",
+        "kind": "action",
+        "name": "check"
+      }
+    ],
+    "expect_event": {
+      "name": "notifications",
+      "value": false
+    },
+    "expect_node": null
+  },
+  {
+    "id": "theme-dark",
+    "goal": "Select Dark theme.",
+    "plans": [
+      {
+        "label": "Dark theme",
+        "kind": "action",
+        "name": "select"
+      }
+    ],
+    "expect_event": {
+      "name": "theme",
+      "value": "dark"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "theme-light",
+    "goal": "Select Light theme.",
+    "plans": [
+      {
+        "label": "Light theme",
+        "kind": "action",
+        "name": "select"
+      }
+    ],
+    "expect_event": {
+      "name": "theme",
+      "value": "light"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "pin-panel",
+    "goal": "Press Pin panel to make it pressed.",
+    "plans": [
+      {
+        "label": "Pin panel",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "pressed",
+      "value": "true"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "unpin-panel",
+    "goal": "Press Pin panel to make it not pressed.",
+    "plans": [
+      {
+        "label": "Pin panel",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "pressed",
+      "value": "false"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "delivery-open",
+    "goal": "Open the Delivery speed dropdown without selecting an option.",
+    "plans": [
+      {
+        "label": "Delivery speed",
+        "kind": "action",
+        "name": "open"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Express delivery",
+      "value": null
+    }
+  },
+  {
+    "id": "delivery-express",
+    "goal": "Select Express delivery in the already open Delivery speed dropdown.",
+    "plans": [
+      {
+        "label": "Express delivery",
+        "kind": "action",
+        "name": "select"
+      }
+    ],
+    "expect_event": {
+      "name": "delivery",
+      "value": "express"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "delivery-membership",
+    "goal": "Select Express delivery using its public selection membership operation.",
+    "plans": [
+      {
+        "label": "Express delivery",
+        "kind": "selection",
+        "selected": true
+      }
+    ],
+    "expect_event": null,
+    "expect_selected": "Express delivery"
+  },
+  {
+    "id": "tags-alpha",
+    "goal": "Add Alpha tag to the Project tags selection, preserving other selected tags.",
+    "plans": [
+      {
+        "label": "Alpha tag",
+        "kind": "selection",
+        "selected": true
+      }
+    ],
+    "expect_event": {
+      "name": "tags",
+      "value": [
+        "Alpha tag"
+      ]
+    },
+    "expect_node": null,
+    "expect_selection": [
+      "Alpha tag"
+    ]
+  },
+  {
+    "id": "tags-beta",
+    "goal": "Add Beta tag to the Project tags selection, preserving other selected tags.",
+    "plans": [
+      {
+        "label": "Beta tag",
+        "kind": "selection",
+        "selected": true
+      }
+    ],
+    "expect_event": {
+      "name": "tags",
+      "value": [
+        "Alpha tag",
+        "Beta tag"
+      ]
+    },
+    "expect_node": null,
+    "expect_selection": [
+      "Alpha tag",
+      "Beta tag"
+    ]
+  },
+  {
+    "id": "tags-remove-alpha",
+    "goal": "Remove Alpha tag from the Project tags selection, preserving other selected tags.",
+    "plans": [
+      {
+        "label": "Alpha tag",
+        "kind": "selection",
+        "selected": false
+      }
+    ],
+    "expect_event": {
+      "name": "tags",
+      "value": [
+        "Beta tag"
+      ]
+    },
+    "expect_node": null,
+    "expect_selection": [
+      "Beta tag"
+    ]
+  },
+  {
+    "id": "volume-increase",
+    "goal": "Increase Volume by one advertised step, from 30 to 35.",
+    "plans": [
+      {
+        "label": "Volume",
+        "kind": "adjust_value",
+        "increase": true
+      }
+    ],
+    "expect_event": {
+      "name": "volume",
+      "value": 35
+    },
+    "expect_node": null
+  },
+  {
+    "id": "volume-decrease",
+    "goal": "Decrease Volume by one advertised step, from 35 to 30.",
+    "plans": [
+      {
+        "label": "Volume",
+        "kind": "adjust_value",
+        "increase": false
+      }
+    ],
+    "expect_event": {
+      "name": "volume",
+      "value": 30
+    },
+    "expect_node": null
+  },
+  {
+    "id": "volume-set",
+    "goal": "Set Volume to 65.",
+    "plans": [
+      {
+        "label": "Volume",
+        "kind": "set_value",
+        "parameter": 65
+      }
+    ],
+    "expect_event": {
+      "name": "volume",
+      "value": 65
+    },
+    "expect_node": null
+  },
+  {
+    "id": "quantity-set",
+    "goal": "Set Quantity to 7.",
+    "plans": [
+      {
+        "label": "Quantity",
+        "kind": "set_value",
+        "parameter": 7
+      }
+    ],
+    "expect_event": {
+      "name": "quantity",
+      "value": 7
+    },
+    "expect_node": null,
+    "expect_value": {
+      "name": "Quantity",
+      "value": 7
+    }
+  },
+  {
+    "id": "advanced-open",
+    "goal": "Expand Advanced settings and leave it expanded.",
+    "plans": [
+      {
+        "label": "Advanced settings",
+        "kind": "action",
+        "name": "expand"
+      }
+    ],
+    "expect_event": {
+      "name": "details",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "advanced-action",
+    "goal": "Press Run advanced action in the expanded Advanced settings.",
+    "plans": [
+      {
+        "label": "Run advanced action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "advanced-action",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "advanced-close",
+    "goal": "Collapse Advanced settings.",
+    "plans": [
+      {
+        "label": "Advanced settings",
+        "kind": "action",
+        "name": "collapse"
+      }
+    ],
+    "expect_event": {
+      "name": "details",
+      "value": false
+    },
+    "expect_node": null
+  },
+  {
+    "id": "activity-tab",
+    "goal": "Switch to Activity tab.",
+    "plans": [
+      {
+        "label": "Activity tab",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "tab",
+      "value": "Activity"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "settings-tab",
+    "goal": "Switch to Settings tab.",
+    "plans": [
+      {
+        "label": "Settings tab",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "tab",
+      "value": "Settings"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "dialog-open",
+    "goal": "Open confirmation dialog and leave it open. Do not confirm or cancel.",
+    "plans": [
+      {
+        "label": "Open confirmation dialog",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "dialog-open",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "dialog-edit",
+    "goal": "Set Confirmation note to Approved after review. Leave the dialog open.",
+    "plans": [
+      {
+        "label": "Confirmation note",
+        "kind": "replace_text",
+        "parameter": "Approved after review"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "Confirmation note",
+      "value": "Approved after review"
+    }
+  },
+  {
+    "id": "dialog-confirm",
+    "goal": "Press Confirm project in the modal dialog.",
+    "plans": [
+      {
+        "label": "Confirm project",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "dialog-confirm",
+      "value": "Approved after review"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "dialog-reopen",
+    "goal": "Open confirmation dialog again and leave it open.",
+    "plans": [
+      {
+        "label": "Open confirmation dialog",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "dialog-open",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "dialog-cancel",
+    "goal": "Press Cancel confirmation in the modal dialog.",
+    "plans": [
+      {
+        "label": "Cancel confirmation",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "dialog-cancel",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "enable-gated",
+    "goal": "Press Enable gated action to enable the Gated action button. Do not run Gated action yet.",
+    "plans": [
+      {
+        "label": "Enable gated action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "enable-gated",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "gated-action",
+    "goal": "Press the now enabled Gated action.",
+    "plans": [
+      {
+        "label": "Gated action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "gated-action",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "reveal-hidden",
+    "goal": "Press Reveal hidden action to reveal the hidden control. Do not run Hidden action yet.",
+    "plans": [
+      {
+        "label": "Reveal hidden action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "reveal",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "hidden-action",
+    "goal": "Press the now visible Hidden action.",
+    "plans": [
+      {
+        "label": "Hidden action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "hidden-action",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "replace-target",
+    "goal": "Press Replace target identity to recreate the Replacement action button.",
+    "plans": [
+      {
+        "label": "Replace target identity",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "replace-target",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "replacement-action",
+    "goal": "Press the new Replacement action button.",
+    "plans": [
+      {
+        "label": "Replacement action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "replacement-action",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "delayed",
+    "goal": "Press Start delayed operation and wait for Delayed operation completed.",
+    "plans": [
+      {
+        "label": "Start delayed operation",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "delayed",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "filter",
+    "goal": "Set Filter products to Banana.",
+    "plans": [
+      {
+        "label": "Filter products",
+        "kind": "replace_text",
+        "parameter": "Banana"
+      }
+    ],
+    "expect_event": {
+      "name": "filter",
+      "value": "Banana"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "filter-clear",
+    "goal": "Clear Filter products so all products are visible.",
+    "plans": [
+      {
+        "label": "Filter products",
+        "kind": "replace_text",
+        "parameter": ""
+      }
+    ],
+    "expect_event": {
+      "name": "filter",
+      "value": ""
+    },
+    "expect_node": null
+  },
+  {
+    "id": "table-sort",
+    "goal": "Press Reverse product sort to change the catalog to descending order.",
+    "plans": [
+      {
+        "label": "Reverse product sort",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "sort",
+      "value": "descending"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "task-validation",
+    "goal": "Press Add task with New task title empty to check required-title validation.",
+    "plans": [
+      {
+        "label": "Add task",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "task-invalid",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "task-title",
+    "goal": "Set New task title to Review specification. Do not add the task yet.",
+    "plans": [
+      {
+        "label": "New task title",
+        "kind": "replace_text",
+        "parameter": "Review specification"
+      }
+    ],
+    "expect_event": null,
+    "expect_node": {
+      "name": "New task title",
+      "value": "Review specification"
+    }
+  },
+  {
+    "id": "task-add",
+    "goal": "Press Add task to create Review specification.",
+    "plans": [
+      {
+        "label": "Add task",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "task-add",
+      "value": "Review specification"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "task-complete",
+    "goal": "Check Complete Review specification to complete the task.",
+    "plans": [
+      {
+        "label": "Complete Review specification",
+        "kind": "action",
+        "name": "check"
+      }
+    ],
+    "expect_event": {
+      "name": "task-check",
+      "value": {
+        "name": "Review specification",
+        "checked": true
+      }
+    },
+    "expect_node": null
+  },
+  {
+    "id": "task-delete",
+    "goal": "Press Delete Review specification to delete that task.",
+    "plans": [
+      {
+        "label": "Delete Review specification",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "task-delete",
+      "value": "Review specification"
+    },
+    "expect_node": null
+  },
+  {
+    "id": "fragment-link",
+    "goal": "Follow Jump to destination section.",
+    "plans": [
+      {
+        "label": "Jump to destination section",
+        "kind": "action",
+        "name": "jump"
+      }
+    ],
+    "expect_event": {
+      "name": "fragment",
+      "value": true
+    },
+    "expect_node": null
+  },
+  {
+    "id": "embedded-button",
+    "goal": "Press Run embedded action inside Embedded controls.",
+    "plans": [
+      {
+        "label": "Run embedded action",
+        "kind": "action",
+        "name": "press"
+      }
+    ],
+    "expect_event": {
+      "name": "embedded",
+      "value": true
+    },
+    "expect_node": null
+  }
+]

@@ -15,6 +15,10 @@ use x11rb::{
     wrapper::ConnectionExt as _,
 };
 
+use crate::backend::{
+    atspi::TextReadbackObservation,
+    text_evidence::{TextReadbackEvidence, has_ambiguous_padding},
+};
 use crate::{
     backend::{AtspiBackend, BackendError},
     capability::{KeyIdentity, KeyboardPrimitive},
@@ -105,6 +109,7 @@ pub struct TextEditTrace {
 pub struct TextEditResult {
     pub observed_text: String,
     pub trace: TextEditTrace,
+    pub readback_evidence: Option<TextReadbackEvidence>,
 }
 
 struct PreparedNativeInput {
@@ -140,7 +145,7 @@ pub enum KeyboardBackendError {
     KeyUnavailable { key: KeyboardPrimitive },
     #[error("X11 keyboard backend failed: {0}")]
     Protocol(String),
-    #[error("X11 text input currently supports printable ASCII only")]
+    #[error("X11 native text input cannot represent this payload or keymap")]
     UnsupportedText,
 }
 
@@ -152,7 +157,62 @@ pub trait KeyboardBackend: Send + Sync {
 /// called after the delivery component has verified the target window and
 /// focus through the operation authority supplied by its caller.
 pub trait NativeTextInputBackend: Send + Sync {
-    fn replace_text(&self, text: &str) -> Result<(), KeyboardBackendError>;
+    fn replace_text(&self, text: &str) -> Result<NativeTextInputGuard, KeyboardBackendError>;
+}
+
+/// Keep temporary platform mappings alive until authoritative text readback.
+/// Restoring them as soon as input is queued races the application's key lookup.
+#[derive(Default)]
+pub struct NativeTextInputGuard {
+    _mapping: Option<TemporaryTextMapping>,
+}
+
+struct TemporaryTextMapping {
+    connection: Arc<x11rb::rust_connection::RustConnection>,
+    width: u8,
+    entries: Vec<(u8, Vec<u32>, Vec<u32>)>,
+}
+
+impl Drop for TemporaryTextMapping {
+    fn drop(&mut self) {
+        for (code, original, installed) in &self.entries {
+            let restore = || -> Result<(), String> {
+                let current = self
+                    .connection
+                    .get_keyboard_mapping(*code, 1)
+                    .map_err(|e| e.to_string())?
+                    .reply()
+                    .map_err(|e| e.to_string())?;
+                // XKB may expand a constant mapping with trailing NoSymbol
+                // columns. Recognize that equivalent form, but never restore
+                // over a row containing a different actor's symbol.
+                if installed.first().is_some_and(|symbol| {
+                    current.keysyms.first() == Some(symbol)
+                        && current.keysyms.iter().all(|s| *s == 0 || s == symbol)
+                }) {
+                    self.connection
+                        .change_keyboard_mapping(1, *code, self.width, original)
+                        .map_err(|e| e.to_string())?
+                        .check()
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(())
+            };
+            if let Err(error) = restore() {
+                warn!(target: "gui2tui::product", %error, "temporary text mapping cleanup failed");
+            }
+        }
+        let _ = self.connection.flush();
+    }
+}
+
+fn text_keysym(character: char) -> Option<u32> {
+    match character {
+        '\n' => Some(0xff0d), // Only authorized for a public multiline target.
+        c if c.is_control() => None,
+        c if u32::from(c) <= 0xff => Some(u32::from(c)),
+        c => Some(0x0100_0000 | u32::from(c)),
+    }
 }
 
 #[async_trait]
@@ -174,6 +234,69 @@ trait EditableTextBackend: Send + Sync {
         &self,
         target: &BackendLocator,
     ) -> Result<String, BackendError>;
+
+    fn readback_is_unambiguous(&self, _text: &str) -> bool {
+        true
+    }
+}
+
+struct ObservedTextBackend<'a> {
+    backend: &'a AtspiBackend,
+    observation: Option<TextReadbackObservation>,
+    evidence: std::sync::Mutex<Option<TextReadbackEvidence>>,
+}
+
+#[async_trait]
+impl EditableTextBackend for ObservedTextBackend<'_> {
+    async fn deliver_set_contents(
+        &self,
+        target: &BackendLocator,
+        text: &str,
+    ) -> Result<(), BackendError> {
+        self.backend.deliver_set_text_contents(target, text).await
+    }
+
+    async fn deliver_delete_and_insert(
+        &self,
+        target: &BackendLocator,
+        _existing: usize,
+        text: &str,
+    ) -> Result<(), BackendError> {
+        // Mutation offsets belong to the exposed Text representation, even
+        // when a literal event/readback proof is available to the caller.
+        let exposed = self.backend.read_authoritative_text(target).await?;
+        self.backend
+            .deliver_delete_and_insert_text(target, exposed.chars().count(), text)
+            .await
+    }
+
+    async fn read_authoritative_text(
+        &self,
+        target: &BackendLocator,
+    ) -> Result<String, BackendError> {
+        let revision = self
+            .observation
+            .as_ref()
+            .map(TextReadbackObservation::revision);
+        let raw = self.backend.read_authoritative_text(target).await?;
+        let evidence = self
+            .observation
+            .as_ref()
+            .zip(revision)
+            .and_then(|(observation, revision)| observation.verify(target, revision, &raw));
+        let literal = evidence.as_ref().map(|e| e.literal_text.clone());
+        *self.evidence.lock().expect("verified text evidence") = evidence;
+        Ok(literal.unwrap_or(raw))
+    }
+
+    fn readback_is_unambiguous(&self, text: &str) -> bool {
+        self.evidence
+            .lock()
+            .expect("verified text evidence")
+            .as_ref()
+            .is_some_and(|e| e.literal_text == text)
+            || !has_ambiguous_padding(text)
+    }
 }
 
 #[async_trait]
@@ -610,15 +733,15 @@ impl KeyboardBackend for X11KeyboardBackend {
 }
 
 impl NativeTextInputBackend for X11KeyboardBackend {
-    fn replace_text(&self, text: &str) -> Result<(), KeyboardBackendError> {
-        if !text
+    fn replace_text(&self, text: &str) -> Result<NativeTextInputGuard, KeyboardBackendError> {
+        let text_symbols = text
             .chars()
-            .all(|character| character.is_ascii() && !character.is_ascii_control())
-        {
-            return Err(KeyboardBackendError::UnsupportedText);
-        }
+            .map(text_keysym)
+            .collect::<Option<Vec<_>>>()
+            .ok_or(KeyboardBackendError::UnsupportedText)?;
         let (connection, screen) = x11rb::connect(None)
             .map_err(|error| KeyboardBackendError::Unavailable(error.to_string()))?;
+        let connection = Arc::new(connection);
         let setup = connection.setup();
         let min = setup.min_keycode;
         let count = setup.max_keycode.saturating_sub(min).saturating_add(1);
@@ -641,6 +764,7 @@ impl NativeTextInputBackend for X11KeyboardBackend {
                 .find_map(|(offset, symbols)| {
                     symbols
                         .iter()
+                        .take(2)
                         .position(|symbol| *symbol == keysym)
                         .map(|column| (min.saturating_add(offset as u8), column % 2 == 1))
                 })
@@ -656,6 +780,62 @@ impl NativeTextInputBackend for X11KeyboardBackend {
         let select_all = find(u32::from(b'a'))
             .map(|(keycode, _)| keycode)
             .ok_or(KeyboardBackendError::UnsupportedText)?;
+        // Selecting existing content alone does not implement an empty replacement.
+        let clear = if text.is_empty() {
+            Some(find(0xff08).ok_or(KeyboardBackendError::UnsupportedText)?.0)
+        } else {
+            None
+        };
+
+        let mut missing = Vec::new();
+        for symbol in &text_symbols {
+            if find(*symbol).is_none() && !missing.contains(symbol) {
+                missing.push(*symbol);
+            }
+        }
+        let pressed = connection
+            .query_keymap()
+            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?
+            .reply()
+            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
+        let modifiers = connection
+            .get_modifier_mapping()
+            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?
+            .reply()
+            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
+        let unused = mapping
+            .keysyms
+            .chunks(symbols_per_key)
+            .enumerate()
+            .filter_map(|(offset, symbols)| {
+                let code = min.saturating_add(offset as u8);
+                (symbols.iter().all(|symbol| *symbol == 0)
+                    && !modifiers.keycodes.contains(&code)
+                    && pressed.keys[usize::from(code / 8)] & (1 << (code % 8)) == 0)
+                    .then_some((code, symbols.to_vec()))
+            })
+            .collect::<Vec<_>>();
+        if missing.len() > unused.len() {
+            return Err(KeyboardBackendError::Unavailable(
+                "X11 has insufficient unused keycodes for this literal text".into(),
+            ));
+        }
+        let mut temporary = TemporaryTextMapping {
+            connection: connection.clone(),
+            width: mapping.keysyms_per_keycode,
+            entries: Vec::new(),
+        };
+        let mut text_codes = Vec::new();
+        for (symbol, (code, original)) in missing.into_iter().zip(unused) {
+            let installed = vec![symbol; symbols_per_key];
+            temporary.entries.push((code, original, installed.clone()));
+            connection
+                .change_keyboard_mapping(1, code, mapping.keysyms_per_keycode, &installed)
+                .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?
+                .check()
+                .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
+            text_codes.push((symbol, code));
+        }
 
         let emit = |event_type, keycode| {
             connection
@@ -667,9 +847,20 @@ impl NativeTextInputBackend for X11KeyboardBackend {
         emit(KEY_RELEASE_EVENT, select_all)?;
         emit(KEY_RELEASE_EVENT, control)?;
 
-        for character in text.chars() {
-            let (keycode, shifted) =
-                find(character as u32).ok_or(KeyboardBackendError::UnsupportedText)?;
+        if let Some(keycode) = clear {
+            emit(KEY_PRESS_EVENT, keycode)?;
+            emit(KEY_RELEASE_EVENT, keycode)?;
+        }
+
+        for symbol in text_symbols {
+            let (keycode, shifted) = find(symbol)
+                .or_else(|| {
+                    text_codes
+                        .iter()
+                        .find(|(s, _)| *s == symbol)
+                        .map(|(_, c)| (*c, false))
+                })
+                .ok_or(KeyboardBackendError::UnsupportedText)?;
             if shifted {
                 emit(KEY_PRESS_EVENT, shift)?;
             }
@@ -684,7 +875,10 @@ impl NativeTextInputBackend for X11KeyboardBackend {
             .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
         connection
             .sync()
-            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))
+            .map_err(|error| KeyboardBackendError::Protocol(error.to_string()))?;
+        Ok(NativeTextInputGuard {
+            _mapping: Some(temporary),
+        })
     }
 }
 
@@ -889,8 +1083,23 @@ impl NativeInputDelivery {
             focus_verified: false,
             verified: false,
         };
-        let accessibility = try_accessibility_text_edit(
+        let mut observed_backend = ObservedTextBackend {
             backend,
+            observation: match backend
+                .observe_text_readback(&targets.readback_target.locator)
+                .await
+            {
+                Ok(observation) => Some(observation),
+                Err(error) => {
+                    debug!(%error, "operation text evidence unavailable; retaining strict raw readback");
+                    None
+                }
+            },
+            evidence: std::sync::Mutex::new(None),
+        };
+        authority()?;
+        let accessibility = try_accessibility_text_edit(
+            &observed_backend,
             &targets,
             &desired,
             TEXT_EDIT_VERIFICATION_TIMEOUT,
@@ -904,28 +1113,71 @@ impl NativeInputDelivery {
         let observed = accessibility.observed;
         trace.attempts = accessibility.attempts;
         if accessibility.verified {
+            authority()?;
             trace.verified = true;
             log_text_edit_trace(&trace);
             return Ok(TextEditResult {
                 observed_text: observed,
                 trace,
+                readback_evidence: observed_backend
+                    .evidence
+                    .lock()
+                    .expect("verified text evidence")
+                    .clone(),
             });
         }
 
         let focus_node = resolve_bound_target(cache, &targets.focus_target)?;
-        for _ in 0..2 {
-            let prepared = self
-                .prepare_native_input(backend, cache, target, focus_node)
-                .await?;
-            trace.window = Some(prepared.window.clone());
-            trace.native_window = Some(prepared.native_window.clone());
-            trace.window_activation_verified = true;
-            trace.focus_verified = true;
-            // Window and focus preparation can await external providers. The
-            // authority gate therefore runs again at the last possible point,
-            // immediately before native input is emitted.
+        let multiline = resolve_bound_target(cache, &targets.edit_target)?
+            .states
+            .iter()
+            .any(|state| matches!(state, SemanticState::Other(value) if value == "multi-line"));
+        if !native_text_payload_supported(&desired, multiline) {
+            return Err(ActuationError::KeyboardBackendUnavailable(
+                "Native text cannot deliver control characters to this target".into(),
+            ));
+        }
+        let prepared = self
+            .prepare_native_input(backend, cache, target, focus_node)
+            .await?;
+        trace.window = Some(prepared.window.clone());
+        trace.native_window = Some(prepared.native_window.clone());
+        trace.window_activation_verified = true;
+        trace.focus_verified = true;
+        if has_ambiguous_padding(&observed) {
+            // Establish an exact empty baseline when the existing public value
+            // itself has an unresolved representation. This is the clear phase
+            // of the same explicit whole-text replacement, not an unknown replay.
             authority()?;
-            if let Err(error) = self.native_text.replace_text(&desired) {
+            let _clear_guard = self
+                .native_text
+                .replace_text("")
+                .map_err(|error| ActuationError::KeyboardBackendUnavailable(error.to_string()))?;
+            let cleared = wait_for_text_readback(backend, &targets.readback_target.locator, "")
+                .await
+                .map_err(|error| ActuationError::TextReadbackFailed {
+                    target,
+                    reason: error.to_string(),
+                })?;
+            if !cleared.verified {
+                return Err(ActuationError::TextEditNotVerified(target));
+            }
+            authority()?;
+            self.prepare_native_input(backend, cache, target, focus_node)
+                .await?;
+            observed_backend.observation = backend
+                .observe_text_readback(&targets.readback_target.locator)
+                .await
+                .ok();
+            observed_backend.evidence = std::sync::Mutex::new(None);
+        }
+        // Window and focus preparation can await external providers. The
+        // authority gate therefore runs again at the last possible point,
+        // immediately before native input is emitted.
+        authority()?;
+        let _input_guard = match self.native_text.replace_text(&desired) {
+            Ok(guard) => guard,
+            Err(error) => {
                 trace.attempts.push(TextEditAttempt {
                     strategy: TextEditStrategy::NativeKeyboardReplace,
                     delivery: TextEditDelivery::Failed,
@@ -938,28 +1190,37 @@ impl NativeInputDelivery {
                     error.to_string(),
                 ));
             }
-            let verification =
-                wait_for_text_readback(backend, &targets.readback_target.locator, &desired)
-                    .await
-                    .map_err(|error| ActuationError::TextReadbackFailed {
-                        target,
-                        reason: error.to_string(),
-                    })?;
-            trace.attempts.push(TextEditAttempt {
-                strategy: TextEditStrategy::NativeKeyboardReplace,
-                delivery: TextEditDelivery::Accepted,
-                observed_characters: Some(verification.observed.chars().count()),
-                verified: verification.verified,
-                detail: None,
+        };
+        let verification = wait_for_text_readback(
+            &observed_backend,
+            &targets.readback_target.locator,
+            &desired,
+        )
+        .await
+        .map_err(|error| ActuationError::TextReadbackFailed {
+            target,
+            reason: error.to_string(),
+        })?;
+        trace.attempts.push(TextEditAttempt {
+            strategy: TextEditStrategy::NativeKeyboardReplace,
+            delivery: TextEditDelivery::Accepted,
+            observed_characters: Some(verification.observed.chars().count()),
+            verified: verification.verified,
+            detail: None,
+        });
+        if verification.verified {
+            authority()?;
+            trace.verified = true;
+            log_text_edit_trace(&trace);
+            return Ok(TextEditResult {
+                observed_text: verification.observed,
+                trace,
+                readback_evidence: observed_backend
+                    .evidence
+                    .lock()
+                    .expect("verified text evidence")
+                    .clone(),
             });
-            if verification.verified {
-                trace.verified = true;
-                log_text_edit_trace(&trace);
-                return Ok(TextEditResult {
-                    observed_text: verification.observed,
-                    trace,
-                });
-            }
         }
         log_text_edit_trace(&trace);
         Err(ActuationError::TextEditNotVerified(target))
@@ -1111,13 +1372,33 @@ impl NativeInputDelivery {
                 .await
                 .map_err(|reason| ActuationError::FocusRequestFailed { target, reason })?;
         }
-        let focused = self
-            .focus_manager
-            .is_focused(backend, &focus_node.backend_locator)
-            .await
-            .map_err(|_| ActuationError::FocusVerificationFailed(target))?;
-        if !focused {
-            return Err(ActuationError::FocusVerificationFailed(target));
+        // Component acceptance may precede publication of Focused. Observe the
+        // exact object without repeating grab_focus or assuming elapsed success.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            if self
+                .focus_manager
+                .is_focused(backend, &focus_node.backend_locator)
+                .await
+                .map_err(|_| ActuationError::FocusVerificationFailed(target))?
+            {
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(ActuationError::FocusVerificationFailed(target));
+            }
+            tokio::time::sleep(Duration::from_millis(10).min(remaining)).await;
+        }
+        if !self
+            .window_activator
+            .is_active(&native_window)
+            .map_err(|error| ActuationError::WindowActivationFailed {
+                target,
+                reason: error.to_string(),
+            })?
+        {
+            return Err(ActuationError::WindowActivationVerificationFailed(target));
         }
         Ok(PreparedNativeInput {
             window,
@@ -1391,7 +1672,7 @@ async fn wait_for_text_readback_with_policy<B: EditableTextBackend + ?Sized>(
     let deadline = Instant::now() + timeout;
     loop {
         let observed = backend.read_authoritative_text(target).await?;
-        if observed == desired {
+        if observed == desired && backend.readback_is_unambiguous(&observed) {
             return Ok(TextReadbackVerification {
                 observed,
                 verified: true,
@@ -1431,6 +1712,11 @@ fn is_focusable(states: &[SemanticState]) -> bool {
     })
 }
 
+fn native_text_payload_supported(text: &str, multiline: bool) -> bool {
+    text.chars()
+        .all(|character| !character.is_control() || (multiline && character == '\n'))
+}
+
 fn bound(node: &CachedSemanticNode) -> BoundTarget {
     BoundTarget {
         runtime_id: node.runtime_id,
@@ -1460,8 +1746,10 @@ fn has_interface(node: &CachedSemanticNode, name: &str) -> bool {
 
 fn is_plain_edit_target(node: &CachedSemanticNode) -> bool {
     node.text_input_kind == Some(TextInputKind::Plain)
-        && matches!(node.role, SemanticRole::TextInput | SemanticRole::ComboBox)
-        && node.capabilities.contains(&SemanticCapability::EditText)
+        && (node.capabilities.contains(&SemanticCapability::EditText)
+            || node
+                .capabilities
+                .contains(&SemanticCapability::EditComplexText))
         && node.states.contains(&SemanticState::Editable)
         && has_interface(node, "EditableText")
 }
@@ -1680,9 +1968,9 @@ mod tests {
     }
 
     impl NativeTextInputBackend for RecordingTextInput {
-        fn replace_text(&self, text: &str) -> Result<(), KeyboardBackendError> {
+        fn replace_text(&self, text: &str) -> Result<NativeTextInputGuard, KeyboardBackendError> {
             self.replacements.lock().unwrap().push(text.to_owned());
-            Ok(())
+            Ok(NativeTextInputGuard::default())
         }
     }
 
@@ -1994,11 +2282,75 @@ mod tests {
     }
 
     #[test]
-    fn x11_native_text_rejects_unicode_before_emitting_input() {
+    fn x11_native_text_rejects_control_sequences_before_emitting_input() {
         assert!(matches!(
-            X11KeyboardBackend.replace_text("搜索"),
+            X11KeyboardBackend.replace_text("\0"),
             Err(KeyboardBackendError::UnsupportedText)
         ));
+    }
+
+    #[test]
+    fn x11_literal_text_keysyms_preserve_full_unicode_scalars() {
+        assert_eq!(text_keysym('陈'), Some(0x0100_9648));
+        assert_eq!(text_keysym('🧪'), Some(0x0101_f9ea));
+        assert_eq!(text_keysym('\n'), Some(0xff0d));
+        assert_eq!(text_keysym('\t'), None);
+    }
+
+    #[test]
+    fn composed_text_preserves_unicode_and_requires_multiline_for_newlines() {
+        assert!(native_text_payload_supported("陈小明 🧪", false));
+        assert!(native_text_payload_supported("first\n第二行", true));
+        assert!(!native_text_payload_supported("first\nsecond", false));
+        assert!(!native_text_payload_supported("\t", true));
+        assert!(!native_text_payload_supported("\0", true));
+    }
+
+    #[test]
+    fn qualified_whole_text_target_can_use_verified_native_text_delivery() {
+        let mut control = test_node("/notes", SemanticRole::TextInput);
+        control.text_input_kind = Some(TextInputKind::Plain);
+        control.states.push(SemanticState::Editable);
+        control.capabilities = vec![SemanticCapability::EditComplexText];
+        control.debug.interfaces = vec!["Text".into(), "EditableText".into()];
+        let cache = SemanticCache::from_snapshot(control).unwrap();
+        assert!(is_plain_edit_target(cache.nodes().next().unwrap()));
+        let mut secret = test_node("/password", SemanticRole::TextInput);
+        secret.text_input_kind = Some(TextInputKind::Password);
+        secret.states.push(SemanticState::Editable);
+        secret.capabilities = vec![SemanticCapability::EditComplexText];
+        secret.debug.interfaces = vec!["Text".into(), "EditableText".into()];
+        let cache = SemanticCache::from_snapshot(secret).unwrap();
+        assert!(!is_plain_edit_target(cache.nodes().next().unwrap()));
+    }
+
+    #[test]
+    fn advertised_plain_editing_is_not_restricted_to_text_widget_roles() {
+        let mut control = test_node("/number", SemanticRole::Slider);
+        control.text_input_kind = Some(TextInputKind::Plain);
+        control.states.extend([
+            SemanticState::Editable,
+            SemanticState::Enabled,
+            SemanticState::Other("focusable".into()),
+        ]);
+        control.capabilities.push(SemanticCapability::EditText);
+        control.debug.interfaces = vec!["Text".into(), "EditableText".into()];
+        let cache = SemanticCache::from_snapshot(control).unwrap();
+        let target = cache
+            .runtime_id(&BackendLocator::new(":1.2", "/number"))
+            .unwrap();
+        let binding = SceneBinding {
+            runtime_id: target,
+            backend_locator: BackendLocator::new(":1.2", "/number"),
+            semantic_role: SemanticRole::Slider,
+            actions: vec![],
+            capability: crate::tui::action::InteractionCapability::EditText,
+            default_intent: crate::tui::action::UiIntent::BeginEdit,
+        };
+        let targets = resolve_text_targets(&cache, &binding).unwrap();
+        assert_eq!(targets.edit_target.locator, binding.backend_locator);
+        assert_eq!(targets.readback_target.locator, binding.backend_locator);
+        assert_eq!(targets.focus_target.locator, binding.backend_locator);
     }
 
     #[tokio::test]

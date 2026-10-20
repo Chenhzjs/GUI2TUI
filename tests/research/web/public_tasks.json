@@ -1,0 +1,22 @@
+[
+ {"id":"python-tutorial","url":"https://docs.python.org/3/","goal":"Open the Python Tutorial from the documentation home page.","expect":{"document":"The Python Tutorial"}},
+ {"id":"rust-book","url":"https://doc.rust-lang.org/book/","goal":"Open the Getting Started chapter in the Rust book.","expect":{"document":"Getting Started"}},
+ {"id":"cargo-guide","url":"https://doc.rust-lang.org/cargo/","goal":"Open the First Steps section of the Cargo Guide.","expect":{"document":"First Steps"}},
+ {"id":"wikipedia-search","url":"https://www.wikipedia.org/","goal":"Search Wikipedia for Accessibility and open the English article.","texts":["Accessibility"],"expect":{"document":"Accessibility"}},
+ {"id":"mdn-javascript","url":"https://developer.mozilla.org/en-US/","goal":"Open the JavaScript documentation from the MDN home page.","expect":{"document":"JavaScript"}},
+ {"id":"github-readme","url":"https://github.com/Chenhzjs/GUI2TUI","goal":"Open the docs directory in this GUI2TUI repository.","expect":{"text":"project-guide.md"}},
+ {"id":"toml-spec","url":"https://toml.io/en/","goal":"Open the TOML specification using the Spec link.","expect":{"document":"TOML"}},
+ {"id":"internet-add-remove","url":"https://the-internet.herokuapp.com/add_remove_elements/","goal":"Press Add Element once so one Delete button appears.","expect":{"name":"Delete","role":"push button"}},
+ {"id":"internet-delete","url":"https://the-internet.herokuapp.com/add_remove_elements/","goal":"Add one element and then delete that element so no Delete buttons remain.","expect":{"absent_name":"Delete","required_write":true}},
+ {"id":"internet-checkboxes","url":"https://the-internet.herokuapp.com/checkboxes","goal":"Check the first checkbox, leaving the second checkbox checked.","expect":{"checked_count":2}},
+ {"id":"internet-dropdown","url":"https://the-internet.herokuapp.com/dropdown","goal":"Choose Option 2 in the dropdown.","expect":{"selected_name":"Option 2"}},
+ {"id":"internet-remove-checkbox","url":"https://the-internet.herokuapp.com/dynamic_controls","goal":"Press Remove in the checkbox section and wait until the checkbox is gone.","expect":{"text":"It's gone!"}},
+ {"id":"internet-enable-input","url":"https://the-internet.herokuapp.com/dynamic_controls","goal":"Enable the disabled text input, then fill it with Ready to edit.","texts":["Ready to edit"],"expect":{"text":"Ready to edit"}},
+ {"id":"internet-slider","url":"https://the-internet.herokuapp.com/horizontal_slider","goal":"Set the horizontal slider to 3.5.","values":[3.5],"expect":{"slider_value":3.5}},
+ {"id":"internet-number","url":"https://the-internet.herokuapp.com/inputs","goal":"Set the Number input to 42.","texts":["42"],"values":[42],"expect":{"text":"42"}},
+ {"id":"internet-alert","url":"https://the-internet.herokuapp.com/javascript_alerts","goal":"Press Click for JS Alert and acknowledge the resulting alert using OK.","expect":{"text":"You successfully clicked an alert"}},
+ {"id":"internet-confirm","url":"https://the-internet.herokuapp.com/javascript_alerts","goal":"Press Click for JS Confirm and cancel the resulting confirmation.","expect":{"text":"You clicked: Cancel"}},
+ {"id":"internet-delayed","url":"https://the-internet.herokuapp.com/dynamic_loading/1","goal":"Press Start and wait for Hello World! to appear.","expect":{"text":"Hello World!"}},
+ {"id":"todo-add","url":"https://demo.playwright.dev/todomvc/","goal":"Add a todo called Review accessibility.","texts":["Review accessibility"],"expect":{"name":"Review accessibility","role":"label"}},
+ {"id":"example-iana","url":"https://example.org/","goal":"Follow Learn more to open the IANA explanation of example domains.","expect":{"document":"IANA"}}
+]
