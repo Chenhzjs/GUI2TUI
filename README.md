@@ -46,8 +46,11 @@ TUI projection. These source capabilities do not imply a new binary release.
 For the current shared document, Human TUI projection, exact batch operations,
 and AI-assisted development results, see the [project report (Chinese, 2026-10-28)](docs/project-report-20261028.zh-CN.md)
 and [validation summary](docs/validation/agent-tui-20261028/summary.json).
-The report distinguishes Rust source features from the locally validated,
-separately maintained Jev client. These changes do not create a new binary release.
+The report distinguishes Rust source features from the separately maintained
+Jev client. The optional [Jev client setup](docs/jev-client.md) explains the pinned
+`integrations/jev-anything` submodule, model configuration and shared-TUI runner.
+Ordinary Rust builds and Human TUI usage do not require that submodule.
+These changes do not create a new binary release.
 
 The v1.0 baseline remains supported. The v1.1 line adds a richer semantic
 Surface and keeps user-visible operations tied to fresh authoritative GUI

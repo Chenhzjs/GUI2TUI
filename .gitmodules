@@ -1,0 +1,3 @@
+[submodule "integrations/jev-anything"]
+	path = integrations/jev-anything
+	url = https://github.com/Chenhzjs/Jev-Anything.git
