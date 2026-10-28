@@ -31,7 +31,7 @@ use crate::{
         LayoutAnalysis, PresentationMode, RegionPresentationContext, RegionPresentationKind,
         SceneBinding, SceneElement, SceneElementId, SceneElementKind, SpatialEvidenceIndex,
         SpatialProbeBudget, SpatialRegion, SpatialRegionId, TuiScene, analyze_regions,
-        analyze_regions_with_graph, compile_legacy_scene, compile_scene, compress_content_scene,
+        compile_legacy_scene, compile_scene, compress_content_scene,
         infer_layout_with_presentations, refine_layout_demands_from_scene, region_focus_order,
     },
 };
@@ -70,6 +70,10 @@ use super::{
 
 #[path = "agent.rs"]
 mod agent;
+#[path = "agent_document.rs"]
+mod agent_document;
+#[path = "agent_navigation.rs"]
+mod agent_navigation;
 pub use agent::{AgentExecutionError, AgentObservation};
 
 pub struct TuiApplication {
@@ -104,6 +108,7 @@ pub struct TuiApplication {
     active_region: Option<SpatialRegionId>,
     inline_materialized_extent: usize,
     scene: TuiScene,
+    scene_cache_generation: u64,
     scopes: InteractionScopes,
     commands: CommandHierarchy,
     choices: ChoiceCatalog,
@@ -125,6 +130,8 @@ pub struct TuiApplication {
     command_palette: Option<CommandPalette>,
     choice_overlay: Option<ChoiceOverlay>,
     content: ContentRuntime,
+    document: crate::transcompile::document::TuiDocument,
+    decision_annotation_mode: crate::transcompile::document::annotations::AnnotationMode,
     content_view: Option<ContentViewState>,
     content_return: Option<ContentViewState>,
     reader_stale_fallbacks: u64,
@@ -976,13 +983,32 @@ impl TuiApplication {
         let arena_elapsed = started.elapsed();
         enrich_relational_cache(&backend, &mut cache, presentation_mode).await?;
         let relations_elapsed = started.elapsed();
-        let mut content = ContentRuntime::new(&cache, ContentCacheBudget::default());
         // Qualify complete multiline editing before the bounded inline Surface
         // materialization probes the same Text interface.  A provider may
         // support the authoritative complete read while rejecting the
         // paragraph-oriented Reader probe; that reader result must not
         // quarantine an otherwise valid external-edit capability.
-        qualify_complex_text_capabilities(&backend, &mut cache, &content).await;
+        qualify_complete_text_capabilities(&backend, &mut cache).await;
+        let mut runtime = crate::runtime::RuntimeSession::default();
+        let generation = runtime.open_application(application_locator.clone());
+        let table_positions = collect_table_positions(
+            &backend,
+            &cache,
+            &crate::modality::CancellationToken::default(),
+        )
+        .await?;
+        let (document, scopes) = organize_current_document(
+            &cache,
+            document_identity(&runtime, cache.generation()),
+            &table_positions,
+        )?;
+        let mut content = ContentRuntime::from_shared(
+            &cache,
+            ContentCacheBudget::default(),
+            document.content.for_human(&cache),
+            &document.tables,
+            &document.virtual_collections,
+        );
         if spatial_layout {
             // The spatial main scene gets a small inline semantic viewport.
             // Reuse ContentRuntime's bounded reader substrate; this is not a
@@ -1008,8 +1034,13 @@ impl TuiApplication {
             }
         }
         let content_elapsed = started.elapsed();
-        let (mut scene, scopes, mut commands, choices) =
-            build_contextual_view(&cache, presentation_mode, content.catalog())?;
+        let (mut scene, scopes, mut commands, choices) = build_document_view(
+            &cache,
+            presentation_mode,
+            content.catalog(),
+            &document,
+            &scopes,
+        )?;
         tracing::debug!(
             bootstrap_ms = bootstrap_elapsed.as_secs_f64() * 1000.0,
             arena_ms = (arena_elapsed - bootstrap_elapsed).as_secs_f64() * 1000.0,
@@ -1026,15 +1057,13 @@ impl TuiApplication {
                 "semantic bootstrap used correctness fallback"
             );
         }
-        let mut runtime = crate::runtime::RuntimeSession::default();
-        let generation = runtime.open_application(application_locator.clone());
         let mut capability_graph =
             CapabilityGraph::new(runtime.id.clone(), generation, &cache, &scopes);
         apply_human_capability_projection(&mut scene, &mut commands, &mut capability_graph);
         let mut focus = FocusModel::default();
         focus.reconcile(&scene, None);
         let spatial = if spatial_layout {
-            build_spatial_layout(&backend, &cache, &content, runtime.generation()).await
+            build_spatial_layout(&backend, &cache, &content, runtime.generation(), &document).await
         } else {
             None
         };
@@ -1051,6 +1080,7 @@ impl TuiApplication {
         } else {
             0
         };
+        let scene_cache_generation = cache.generation();
         let mut application = Self {
             capture_task: None,
             capture_ticket: None,
@@ -1082,6 +1112,7 @@ impl TuiApplication {
             active_region,
             inline_materialized_extent,
             scene,
+            scene_cache_generation,
             scopes,
             commands,
             choices,
@@ -1106,6 +1137,8 @@ impl TuiApplication {
             command_palette: None,
             choice_overlay: None,
             content,
+            document,
+            decision_annotation_mode: Default::default(),
             content_view: None,
             content_return: None,
             reader_stale_fallbacks: 0,
@@ -1357,6 +1390,72 @@ impl TuiApplication {
         None
     }
 
+    pub fn configure_decision_annotations(
+        &mut self,
+        mode: crate::transcompile::document::annotations::AnnotationMode,
+    ) {
+        self.decision_annotation_mode = mode;
+        crate::transcompile::document::annotations::apply(&mut self.document, mode);
+    }
+
+    async fn rebuild_logical_document(&mut self) -> Result<(), BackendError> {
+        let table_positions =
+            collect_table_positions(&self.backend, &self.cache, &self.refresh_cancel).await?;
+        let (mut document, scopes) = organize_current_document(
+            &self.cache,
+            document_identity(&self.runtime, self.cache.generation()),
+            &table_positions,
+        )?;
+        crate::transcompile::document::annotations::apply(
+            &mut document,
+            self.decision_annotation_mode,
+        );
+        self.content.adopt_document(
+            &self.cache,
+            &document.content,
+            &document.tables,
+            &document.virtual_collections,
+        );
+        self.document = document;
+        self.scopes = scopes;
+        Ok(())
+    }
+
+    /// Materialize the Human terminal projection only when a Human consumer
+    /// asks for it. Agent-only observation never needs to build a fake window.
+    fn project_document_if_needed(&mut self) {
+        if self.scene_cache_generation == self.cache.generation() || !self.is_available() {
+            return;
+        }
+        let previous = self
+            .focus
+            .current()
+            .and_then(|id| self.scene.element(id))
+            .and_then(|e| e.binding.as_ref())
+            .map(|b| (b.runtime_id, b.backend_locator.clone()));
+        let Ok((mut scene, scopes, mut commands, choices)) = build_document_view(
+            &self.cache,
+            self.presentation_mode,
+            self.content.catalog(),
+            &self.document,
+            &self.scopes,
+        ) else {
+            return;
+        };
+        self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
+        self.scene = scene;
+        self.scene_cache_generation = self.cache.generation();
+        self.commands = commands;
+        self.choices = choices;
+        self.scopes = scopes;
+        self.focus.reconcile_identity(
+            &self.scene,
+            previous.as_ref().map(|p| p.0),
+            previous.as_ref().map(|p| &p.1),
+        );
+        self.replan_spatial_layout();
+    }
+
     fn replan_spatial_layout(&mut self) {
         if !self.spatial_layout {
             return;
@@ -1375,8 +1474,7 @@ impl TuiApplication {
             self.layout_analysis = None;
             return;
         };
-        let graph = crate::semantic::RelationalSemanticGraph::new(&self.cache);
-        let analysis = analyze_regions_with_graph(&tree, &graph);
+        let analysis = self.document.human_regions(&self.cache);
         let presentation = RegionPresentationContext::from_content_runtime(&self.content);
         let mut layout =
             infer_layout_with_presentations(&analysis, &tree, evidence, Some(&presentation));
@@ -1394,6 +1492,7 @@ impl TuiApplication {
             &self.cache,
             &self.content,
             self.runtime.generation(),
+            &self.document,
         )
         .await;
         if let Some((mut analysis, evidence)) = result {
@@ -1408,6 +1507,17 @@ impl TuiApplication {
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
+        self.project_document_if_needed();
+        let started = Instant::now();
+        self.render_current_frame(frame);
+        tracing::debug!(
+            target: "gui2tui::product",
+            human_render_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Human terminal rendering"
+        );
+    }
+
+    fn render_current_frame(&mut self, frame: &mut Frame<'_>) {
         if let Some(context) = self.help_visible {
             use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
             frame.render_widget(
@@ -1523,11 +1633,16 @@ impl TuiApplication {
                         " "
                     };
                     let selected = if cell.selected { "*" } else { " " };
-                    if table.completeness == crate::semantic::CollectionCompleteness::Complete {
+                    if let (Some(row), Some(column)) = (cell.row, cell.column)
+                        && (cell.position_source
+                            == crate::content::TablePositionSource::PublicTableCell
+                            || table.completeness
+                                == crate::semantic::CollectionCompleteness::Complete)
+                    {
                         lines.push(format!(
                             "{marker} {selected} r{} c{}  {}",
-                            cell.row + 1,
-                            cell.column + 1,
+                            row + 1,
+                            column + 1,
                             cell.label
                         ));
                     } else {
@@ -1588,6 +1703,7 @@ impl TuiApplication {
                     .unwrap_or_else(|| "Document".to_owned()),
                 mode: view.mode,
                 blocks: view.reader_blocks.clone(),
+                reader_scroll: view.reader_scroll,
                 outline,
                 outline_selected: view.outline_selected,
                 query: view.query.clone(),
@@ -1637,6 +1753,7 @@ impl TuiApplication {
     }
 
     pub async fn handle_intent(&mut self, intent: UiIntent) -> bool {
+        self.project_document_if_needed();
         if !self.application_available {
             return intent == UiIntent::Quit;
         }
@@ -1745,142 +1862,39 @@ impl TuiApplication {
         String,
         super::palette::PublicOperation,
     )> {
-        use crate::tui::palette::PublicOperation;
-        let mut actions = Vec::new();
-        for node in self
-            .cache
-            .nodes()
-            .filter(|n| self.scopes.allows_node(n.runtime_id))
-        {
-            if !crate::tui::action::is_public_action_target(&node.states) {
-                continue;
-            }
-            let mut ancestry = Vec::new();
-            let mut parent = node.parent;
-            for _ in 0..8 {
-                let Some(owner) = parent.and_then(|id| self.cache.node(id)) else {
-                    break;
-                };
-                if let Some(name) = owner.name.as_deref().filter(|name| !name.trim().is_empty()) {
-                    ancestry.push(name.to_owned());
-                }
-                parent = owner.parent;
-                if ancestry.len() == 2 {
-                    break;
-                }
-            }
-            ancestry.reverse();
-            let display_name = node
+        public_action_entries_for_document(&self.document)
+    }
+
+    /// One public-actions palette for Human F3 and experimental TUI tools.
+    fn public_action_palette(&self) -> CommandPalette {
+        let mut palette = CommandPalette::public_actions(
+            self.commands.clone(),
+            self.scopes.active(),
+            self.public_action_entries(),
+        );
+        palette.set_target_titles(|id| {
+            let node = self.cache.node(id)?;
+            let name = node
                 .name
                 .as_deref()
                 .filter(|name| !name.trim().is_empty())
                 .or_else(|| {
                     self.scene
-                        .scene_id_for_runtime(node.runtime_id)
+                        .scene_id_for_runtime(id)
                         .and_then(|id| self.scene.element(id))
                         .map(element_label)
-                        .filter(|label| !label.trim().is_empty())
                 })
                 .unwrap_or("Unnamed");
-            let label = format!(
-                "{} [{}] #{}{}",
-                display_name,
-                node.role,
-                node.runtime_id,
-                if ancestry.is_empty() {
-                    String::new()
-                } else {
-                    format!(" · {}", ancestry.join(" / "))
-                },
-            );
-            let multiline = node
-                .capabilities
-                .contains(&SemanticCapability::EditComplexText);
-            if multiline || node.capabilities.contains(&SemanticCapability::EditText) {
-                for (name, operation) in [
-                    (
-                        "Edit range (insert/delete/replace)",
-                        PublicOperation::EditRange,
-                    ),
-                    ("Read text selection", PublicOperation::ReadSelection),
-                ] {
-                    actions.push((
-                        node.runtime_id,
-                        node.backend_locator.clone(),
-                        format!("{label} › {name}"),
-                        operation,
-                    ));
-                }
-                actions.push((
-                    node.runtime_id,
-                    node.backend_locator.clone(),
-                    format!(
-                        "{label} › {}",
-                        if multiline {
-                            "Edit whole text"
-                        } else {
-                            "Edit text"
-                        }
-                    ),
-                    PublicOperation::EditText { multiline },
-                ));
-            }
-            for action in &node.actions {
-                if !action.name.is_empty() {
-                    actions.push((
-                        node.runtime_id,
-                        node.backend_locator.clone(),
-                        format!("{label} › Action: {}", action.name),
-                        PublicOperation::Action(action.name.clone()),
-                    ));
-                }
-            }
-            if let Some(parent) = node.parent.and_then(|id| self.cache.node(id)) {
-                if parent
-                    .capabilities
-                    .contains(&SemanticCapability::SelectChildren)
-                    && self.scopes.allows_node(parent.runtime_id)
-                {
-                    for selected in [true, false] {
-                        actions.push((
-                            node.runtime_id,
-                            node.backend_locator.clone(),
-                            format!(
-                                "{label} › {} selection",
-                                if selected { "Add to" } else { "Remove from" }
-                            ),
-                            PublicOperation::Selection {
-                                parent: parent.backend_locator.clone(),
-                                selected,
-                            },
-                        ));
-                    }
-                }
-            }
-            if node.capabilities.contains(&SemanticCapability::Value) {
-                actions.push((
-                    node.runtime_id,
-                    node.backend_locator.clone(),
-                    format!("{label} › Set value"),
-                    PublicOperation::SetValue,
-                ));
-                for increase in [true, false] {
-                    actions.push((
-                        node.runtime_id,
-                        node.backend_locator.clone(),
-                        format!(
-                            "{label} › Value {}",
-                            if increase { "increase" } else { "decrease" }
-                        ),
-                        PublicOperation::Value { increase },
-                    ));
-                }
-            }
-        }
-        actions
+            Some(format!("[{}] {name}", node.role))
+        });
+        palette.set_action_presentations(|id, operation| {
+            self.document.action_presentation(id, operation)
+        });
+        palette
     }
 
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        self.project_document_if_needed();
         use crossterm::event::{KeyCode, KeyEventKind};
         if key.kind == KeyEventKind::Release {
             return false;
@@ -2078,28 +2092,7 @@ impl TuiApplication {
             && self.edit_session.is_none()
             && self.command_palette.is_none()
         {
-            let actions = self.public_action_entries();
-            let mut palette = CommandPalette::public_actions(
-                self.commands.clone(),
-                self.scopes.active(),
-                actions,
-            );
-            palette.set_target_titles(|id| {
-                let node = self.cache.node(id)?;
-                let name = node
-                    .name
-                    .as_deref()
-                    .filter(|name| !name.trim().is_empty())
-                    .or_else(|| {
-                        self.scene
-                            .scene_id_for_runtime(id)
-                            .and_then(|id| self.scene.element(id))
-                            .map(element_label)
-                    })
-                    .unwrap_or("Unnamed");
-                Some(format!("[{}] {name}", node.role))
-            });
-            self.command_palette = Some(palette);
+            self.command_palette = Some(self.public_action_palette());
             self.status = if self.cache.nodes().any(|n| !n.truncations.is_empty()) {
                 "Public actions — partial tree; raise --max-nodes / --max-depth and refresh".into()
             } else {
@@ -2211,7 +2204,12 @@ impl TuiApplication {
                                         self.backend
                                             .set_child_selected(&parent, &locator, selected)
                                             .await
-                                            .map(|()| "Selection membership confirmed".to_owned())
+                                            .map(|outcome| match outcome {
+                                                crate::backend::SelectionMembershipOutcome::AlreadySatisfied =>
+                                                    "Selection already as requested; no write sent".to_owned(),
+                                                crate::backend::SelectionMembershipOutcome::AcceptedAndConfirmed =>
+                                                    "Selection membership confirmed".to_owned(),
+                                            })
                                     } else {
                                         self.status = current_command_unavailable_status().into();
                                         self.runtime.complete(&ticket).ok();
@@ -2421,6 +2419,7 @@ impl TuiApplication {
     }
 
     pub async fn handle_mouse(&mut self, intent: MouseIntent) {
+        self.project_document_if_needed();
         if !self.application_available
             || !self.backend_available
             || self.runtime_status_visible
@@ -2479,21 +2478,37 @@ impl TuiApplication {
             self.begin_current_table(scene_id, binding).await;
             return;
         }
+        self.begin_reader_root(root, Some(scene_id)).await;
+    }
+
+    /// One read-only Reader entry for Human focus and explicit TUI source queries.
+    async fn begin_reader_root(
+        &mut self,
+        root: RuntimeNodeId,
+        restore_scene: Option<SceneElementId>,
+    ) -> bool {
+        if !self.scopes.allows_node(root)
+            || crate::transcompile::document::secret_source(&self.cache, root)
+        {
+            self.status = "Reader source is outside the current public scope".into();
+            return false;
+        }
         let Some(model) = self.content.model(root) else {
             self.status = "Document content is no longer available".to_owned();
-            return;
+            return false;
         };
         let Some(position) = model.reading_order().first().copied() else {
             self.status = "Document exposes no readable semantic blocks".to_owned();
-            return;
+            return false;
         };
         self.content_view = Some(ContentViewState::new(
             root,
             position,
-            Some(scene_id),
+            restore_scene,
             Some(root),
         ));
         self.refresh_content_view().await;
+        true
     }
 
     async fn begin_current_table(&mut self, restore_scene: SceneElementId, binding: SceneBinding) {
@@ -2539,31 +2554,7 @@ impl TuiApplication {
             self.status = current_selection_unavailable_status().to_owned();
             return;
         }
-        let current_cells = current
-            .children
-            .iter()
-            .filter_map(|child| {
-                self.cache
-                    .node(*child)
-                    .filter(|node| node.role == SemanticRole::Cell)
-                    .map(|node| (*child, node.backend_locator.clone()))
-            })
-            .collect::<Vec<_>>();
-        let mut current_positions = HashMap::new();
-        for (runtime_id, cell_locator) in current_cells {
-            if let Ok(position) = self
-                .backend
-                .current_table_cell_position(&locator, &cell_locator)
-                .await
-            {
-                current_positions.insert(runtime_id, position);
-            }
-        }
-        let Some(table) = crate::content::SemanticTableModel::analyze_with_positions(
-            &self.cache,
-            current_root,
-            &current_positions,
-        ) else {
+        let Some(table) = self.content.table(current_root).cloned() else {
             self.status = "Current Table exposes no accessible rows".to_owned();
             return;
         };
@@ -2637,6 +2628,9 @@ impl TuiApplication {
                     "Reader closed; document focus restored".to_owned()
                 };
             }
+            ContentViewCommand::ScrollReader(delta) => {
+                self.scroll_reader_lines(delta).await;
+            }
             ContentViewCommand::MoveBlocks(delta) => {
                 let Some(view) = self.content_view.as_mut() else {
                     return;
@@ -2654,6 +2648,7 @@ impl TuiApplication {
                 let next = move_index(current, delta, order.len());
                 if let Some(id) = order.get(next) {
                     view.position = *id;
+                    view.reader_scroll = 0;
                 }
                 self.refresh_content_view().await;
             }
@@ -2676,6 +2671,7 @@ impl TuiApplication {
                     && let Some(id) = model.navigation.headings.get(view.outline_selected)
                 {
                     view.position = *id;
+                    view.reader_scroll = 0;
                     view.mode = ContentViewMode::Reader;
                 }
                 self.refresh_content_view().await;
@@ -2704,6 +2700,16 @@ impl TuiApplication {
                     view.mode = ContentViewMode::Reader;
                 }
                 self.refresh_content_view().await;
+                if let Some(view) = self.content_view.as_mut() {
+                    let query = view.query.trim().to_lowercase();
+                    view.reader_scroll = super::content_view::reader_lines(
+                        &view.reader_blocks,
+                        self.viewport_width.saturating_sub(2).max(1),
+                    )
+                    .iter()
+                    .position(|line| !query.is_empty() && line.to_lowercase().contains(&query))
+                    .unwrap_or(0);
+                }
             }
             ContentViewCommand::StartFullSearch => {
                 if let Some(view) = self.content_view.as_mut() {
@@ -3050,6 +3056,76 @@ impl TuiApplication {
                 );
             }
             view.full_search = Some(search);
+        }
+    }
+
+    /// Move within long individual blocks and across materialization windows.
+    async fn scroll_reader_lines(&mut self, delta: isize) {
+        let Some(view) = self.content_view.as_ref() else {
+            return;
+        };
+        if view.mode != ContentViewMode::Reader {
+            return;
+        }
+        let mut offset = view.reader_scroll as isize + delta;
+        let width = self.viewport_width.saturating_sub(2).max(1);
+        loop {
+            let Some(view) = self.content_view.as_ref() else {
+                return;
+            };
+            let Some(model) = self.content.model(view.root) else {
+                return;
+            };
+            let order = model.reading_order();
+            let index = order
+                .iter()
+                .position(|id| *id == view.position)
+                .unwrap_or(0);
+            let first_lines = super::content_view::reader_lines(
+                &view.reader_blocks[..view.reader_blocks.len().min(1)],
+                width,
+            )
+            .len()
+            .max(1);
+            let next = if offset < 0 && index > 0 {
+                Some((index - 1, true))
+            } else if offset >= first_lines as isize && index + 1 < order.len() {
+                offset -= first_lines as isize;
+                Some((index + 1, false))
+            } else {
+                None
+            };
+            if let Some((next, previous)) = next {
+                if let Some(view) = self.content_view.as_mut() {
+                    view.position = order[next];
+                }
+                self.refresh_content_view().await;
+                if previous {
+                    let lines = self
+                        .content_view
+                        .as_ref()
+                        .map(|view| {
+                            super::content_view::reader_lines(
+                                &view.reader_blocks[..view.reader_blocks.len().min(1)],
+                                width,
+                            )
+                            .len()
+                        })
+                        .unwrap_or(1);
+                    offset += lines.max(1) as isize;
+                }
+            } else {
+                let max = if index + 1 == order.len() {
+                    first_lines
+                        .saturating_sub(usize::from(self.viewport_height.saturating_sub(3).max(1)))
+                } else {
+                    first_lines.saturating_sub(1)
+                };
+                if let Some(view) = self.content_view.as_mut() {
+                    view.reader_scroll = (offset.max(0) as usize).min(max);
+                }
+                break;
+            }
         }
     }
 
@@ -4739,30 +4815,69 @@ impl TuiApplication {
                     return;
                 }
                 let snapshot_ms = started.elapsed().as_millis();
-                if let Err(error) = self.cache.full_refresh(bootstrap.root) {
+                // Stage the authoritative frame until its document and scopes
+                // validate. A cache generation change alone must not turn a
+                // failed refresh into successful execution revalidation.
+                let mut next_cache = self.cache.clone();
+                if let Err(error) = next_cache.full_refresh(bootstrap.root) {
                     self.status = format!("Full refresh fallback failed: {error}");
                     return;
                 }
                 if let Err(error) =
-                    enrich_relational_cache(&self.backend, &mut self.cache, self.presentation_mode)
+                    enrich_relational_cache(&self.backend, &mut next_cache, self.presentation_mode)
                         .await
                 {
                     self.status = format!("Relation enrichment failed: {error}");
                     return;
                 }
-                self.content.rebuild_semantics(&self.cache);
-                qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content)
-                    .await;
-                let Ok((mut scene, scopes, mut commands, choices)) = build_contextual_view(
+                qualify_complete_text_capabilities(&self.backend, &mut next_cache).await;
+                let table_positions =
+                    match collect_table_positions(&self.backend, &next_cache, &self.refresh_cancel)
+                        .await
+                    {
+                        Ok(positions) => positions,
+                        Err(error) => {
+                            self.status = format!("Table position collection failed: {error}");
+                            return;
+                        }
+                    };
+                let (document, scopes) = match organize_current_document(
+                    &next_cache,
+                    document_identity(&self.runtime, next_cache.generation()),
+                    &table_positions,
+                ) {
+                    Ok(frame) => frame,
+                    Err(error) => {
+                        self.status = format!("Logical document rebuild failed: {error}");
+                        return;
+                    }
+                };
+                self.cache = next_cache;
+                self.document = document;
+                crate::transcompile::document::annotations::apply(
+                    &mut self.document,
+                    self.decision_annotation_mode,
+                );
+                self.scopes = scopes;
+                self.content.adopt_document(
+                    &self.cache,
+                    &self.document.content,
+                    &self.document.tables,
+                    &self.document.virtual_collections,
+                );
+                let Ok((mut scene, scopes, mut commands, choices)) = build_document_view(
                     &self.cache,
                     self.presentation_mode,
                     self.content.catalog(),
+                    &self.document,
+                    &self.scopes,
                 ) else {
                     self.status = "Contextual scene rebuild failed".to_owned();
                     return;
                 };
                 self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
                 self.scene = scene;
+                self.scene_cache_generation = self.cache.generation();
                 self.scopes = scopes;
                 self.commands = commands;
                 self.choices = choices;
@@ -6069,12 +6184,17 @@ impl TuiApplication {
             self.status = format!("Relation enrichment failed: {error}");
             return;
         }
-        self.content.rebuild_semantics(&self.cache);
-        qualify_complex_text_capabilities(&self.backend, &mut self.cache, &self.content).await;
-        let (mut scene, scopes, mut commands, choices) = match build_contextual_view(
+        qualify_complete_text_capabilities(&self.backend, &mut self.cache).await;
+        if let Err(error) = self.rebuild_logical_document().await {
+            self.status = format!("Logical document rebuild failed: {error}");
+            return;
+        }
+        let (mut scene, scopes, mut commands, choices) = match build_document_view(
             &self.cache,
             self.presentation_mode,
             self.content.catalog(),
+            &self.document,
+            &self.scopes,
         ) {
             Ok(view) => view,
             Err(error) => {
@@ -6084,6 +6204,7 @@ impl TuiApplication {
         };
         self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
         self.scene = scene;
+        self.scene_cache_generation = self.cache.generation();
         self.scopes = scopes;
         self.commands = commands;
         self.choices = choices;
@@ -6239,14 +6360,21 @@ impl TuiApplication {
         if metrics.relations_found == 0 {
             return;
         }
-        self.content.rebuild_semantics(&self.cache);
-        let Ok((mut scene, scopes, mut commands, choices)) =
-            build_contextual_view(&self.cache, self.presentation_mode, self.content.catalog())
-        else {
+        if self.rebuild_logical_document().await.is_err() {
+            return;
+        }
+        let Ok((mut scene, scopes, mut commands, choices)) = build_document_view(
+            &self.cache,
+            self.presentation_mode,
+            self.content.catalog(),
+            &self.document,
+            &self.scopes,
+        ) else {
             return;
         };
         self.refresh_capability_projection(&mut scene, &mut commands, &scopes);
         self.scene = scene;
+        self.scene_cache_generation = self.cache.generation();
         self.scopes = scopes;
         self.commands = commands;
         self.choices = choices;
@@ -6720,6 +6848,10 @@ pub async fn qualify_complex_text_capabilities(
     cache: &mut SemanticCache,
     _content: &ContentRuntime,
 ) {
+    qualify_complete_text_capabilities(backend, cache).await;
+}
+
+async fn qualify_complete_text_capabilities(backend: &AtspiBackend, cache: &mut SemanticCache) {
     // Reader root selection is presentation policy: another independently
     // complete text object in the same window remains editable.
     let graph = crate::semantic::RelationalSemanticGraph::new(cache);
@@ -6727,7 +6859,10 @@ pub async fn qualify_complex_text_capabilities(
     let mut candidates =
         cache
             .nodes()
-            .filter(|node| scopes.allows_node(node.runtime_id))
+            .filter(|node| {
+                scopes.allows_node(node.runtime_id)
+                    && !crate::transcompile::document::secret_source(cache, node.runtime_id)
+            })
             .filter(|node| {
                 node.text_input_kind == Some(crate::semantic::TextInputKind::Plain)
                     && node.states.contains(&SemanticState::Editable)
@@ -6903,11 +7038,11 @@ async fn build_spatial_layout(
     cache: &crate::semantic::SemanticCache,
     content: &ContentRuntime,
     generation: Option<crate::runtime::ApplicationGenerationId>,
+    document: &crate::transcompile::document::TuiDocument,
 ) -> Option<(LayoutAnalysis, SpatialEvidenceIndex)> {
     let generation = generation?;
     let tree = cache.materialize_tree().ok()?;
-    let graph = crate::semantic::RelationalSemanticGraph::new(cache);
-    let analysis = analyze_regions_with_graph(&tree, &graph);
+    let analysis = document.human_regions(cache);
     let evidence = SpatialEvidenceIndex::from_backend(
         &tree,
         generation,
@@ -7051,23 +7186,237 @@ fn collect_cached_subtree_ids(
     }
 }
 
+fn document_identity(
+    runtime: &crate::runtime::RuntimeSession,
+    observation_id: u64,
+) -> crate::transcompile::document::DocumentObservation {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    crate::transcompile::document::DocumentObservation {
+        session: runtime.id.clone(),
+        generation: runtime.generation().expect("live runtime generation"),
+        observation_id,
+        started_at_ms: now,
+        finished_at_ms: now,
+    }
+}
+
+/// Human formatting over shared public facts. No scene-derived label source.
+fn public_action_entries_for_document(
+    document: &crate::transcompile::document::TuiDocument,
+) -> Vec<(
+    RuntimeNodeId,
+    BackendLocator,
+    String,
+    super::palette::PublicOperation,
+)> {
+    use crate::tui::palette::PublicOperation;
+    let mut actions = Vec::new();
+    for node in document.nodes.values() {
+        if !crate::tui::action::is_public_action_target(&node.states) {
+            continue;
+        }
+        let mut ancestry = Vec::new();
+        let mut parent = node.parent;
+        for _ in 0..8 {
+            let Some(owner) = parent.and_then(|id| document.nodes.get(&id)) else {
+                break;
+            };
+            if let Some(name) = owner.name.as_deref().filter(|name| !name.trim().is_empty()) {
+                ancestry.push(name.to_owned());
+            }
+            parent = owner.parent;
+            if ancestry.len() == 2 {
+                break;
+            }
+        }
+        ancestry.reverse();
+        let Some(shared_label) = document.operation_label(node.runtime_id) else {
+            continue;
+        };
+        let display_name = shared_label.display_label;
+        let mut label = format!(
+            "{} [{}] #{}{}",
+            display_name,
+            node.role,
+            node.runtime_id,
+            if ancestry.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", ancestry.join(" / "))
+            },
+        );
+        if let Some(hint) =
+            crate::transcompile::document::annotations::human_hint(document, node.runtime_id)
+        {
+            label.push_str(" · ");
+            label.push_str(&hint);
+        }
+        for descriptor in document
+            .operations
+            .iter()
+            .filter(|op| op.target == node.runtime_id)
+        {
+            let operation = descriptor.operation.clone();
+            let suffix = match &operation {
+                PublicOperation::EditRange => "Edit range (insert/delete/replace)".to_owned(),
+                PublicOperation::ReadSelection => "Read text selection".to_owned(),
+                PublicOperation::EditText { multiline } => if *multiline {
+                    "Edit whole text"
+                } else {
+                    "Edit text"
+                }
+                .to_owned(),
+                PublicOperation::Action(name) => document
+                    .action_presentation(node.runtime_id, &operation)
+                    .map(|presentation| presentation.display_label)
+                    .unwrap_or_else(|| format!("Action: {name}")),
+                PublicOperation::Selection { selected, .. } => format!(
+                    "{} selection",
+                    if *selected { "Add to" } else { "Remove from" }
+                ),
+                PublicOperation::SetValue => "Set value".to_owned(),
+                PublicOperation::Value { increase } => {
+                    format!("Value {}", if *increase { "increase" } else { "decrease" })
+                }
+            };
+            actions.push((
+                node.runtime_id,
+                node.backend_locator.clone(),
+                format!("{label} › {suffix}"),
+                operation,
+            ));
+        }
+    }
+    actions
+}
+
+async fn collect_table_positions(
+    backend: &AtspiBackend,
+    cache: &SemanticCache,
+    cancel: &crate::modality::CancellationToken,
+) -> Result<
+    std::collections::BTreeMap<RuntimeNodeId, crate::content::TablePositionRead>,
+    BackendError,
+> {
+    let scopes =
+        InteractionScopes::analyze(cache, &crate::semantic::RelationalSemanticGraph::new(cache));
+    let mut cells: Vec<_> = cache
+        .nodes()
+        .filter(|n| {
+            n.role == SemanticRole::Cell
+                && scopes.allows_node(n.runtime_id)
+                && !crate::transcompile::document::secret_source(cache, n.runtime_id)
+                && n.debug.interfaces.iter().any(|i| i == "TableCell")
+        })
+        .collect();
+    cells.sort_by_key(|n| n.runtime_id);
+    let mut positions = std::collections::BTreeMap::new();
+    for cell in cells {
+        if cancel.is_cancelled() {
+            return Err(BackendError::SemanticCache(
+                "Table position collection cancelled".into(),
+            ));
+        }
+        let mut parent = cell.parent;
+        let owner = loop {
+            let Some(node) = parent.and_then(|id| cache.node(id)) else {
+                break None;
+            };
+            if node.role == SemanticRole::Table {
+                break Some(node);
+            }
+            parent = node.parent;
+        };
+        let Some(owner) = owner.filter(|n| {
+            scopes.allows_node(n.runtime_id)
+                && !crate::transcompile::document::secret_source(cache, n.runtime_id)
+        }) else {
+            continue;
+        };
+        let read = match backend
+            .current_table_cell_structure(&owner.backend_locator, &cell.backend_locator)
+            .await
+        {
+            Ok((row, column, row_span, column_span)) => crate::content::TablePositionRead::Known {
+                row,
+                column,
+                row_span,
+                column_span,
+            },
+            Err(_) => crate::content::TablePositionRead::Unavailable,
+        };
+        positions.insert(cell.runtime_id, read);
+    }
+    if cancel.is_cancelled() {
+        return Err(BackendError::SemanticCache(
+            "Table position collection cancelled".into(),
+        ));
+    }
+    Ok(positions)
+}
+
+fn organize_current_document(
+    cache: &SemanticCache,
+    observation: crate::transcompile::document::DocumentObservation,
+    table_positions: &std::collections::BTreeMap<RuntimeNodeId, crate::content::TablePositionRead>,
+) -> Result<
+    (
+        crate::transcompile::document::TuiDocument,
+        InteractionScopes,
+    ),
+    BackendError,
+> {
+    use crate::transcompile::document::{DocumentInput, build_document, public_operations};
+    let scopes =
+        InteractionScopes::analyze(cache, &crate::semantic::RelationalSemanticGraph::new(cache));
+    let operations = public_operations(cache, &scopes, &Default::default());
+    let roots = crate::content::ContentCatalog::document_roots(cache);
+    let document = build_document(&DocumentInput {
+        observation,
+        cache,
+        scopes: &scopes,
+        redacted: &Default::default(),
+        text_reads: &Default::default(),
+        value_domains: &Default::default(),
+        metadata_reads: &Default::default(),
+        table_positions,
+        content_roots: &roots,
+        operations: &operations,
+    })
+    .map_err(|e| BackendError::SemanticCache(e.to_string()))?;
+    Ok((document, scopes))
+}
+
+#[cfg(test)]
 fn build_contextual_view(
     cache: &SemanticCache,
     mode: PresentationMode,
     content: &crate::content::ContentCatalog,
 ) -> Result<(TuiScene, InteractionScopes, CommandHierarchy, ChoiceCatalog), BackendError> {
-    let tree = cache
-        .materialize_tree()
-        .map_err(|error| BackendError::SemanticCache(error.to_string()))?;
-    let graph = crate::semantic::RelationalSemanticGraph::new(cache);
-    let scopes = InteractionScopes::analyze(cache, &graph);
-    let choices = ChoiceCatalog::discover(cache);
+    let mut runtime = crate::runtime::RuntimeSession::default();
+    runtime.open_application(cache.node(cache.root_id()).unwrap().backend_locator.clone());
+    let (document, scopes) =
+        organize_current_document(cache, document_identity(&runtime, 1), &Default::default())?;
+    build_document_view(cache, mode, content, &document, &scopes)
+}
+
+fn build_document_view(
+    cache: &SemanticCache,
+    mode: PresentationMode,
+    content: &crate::content::ContentCatalog,
+    document: &crate::transcompile::document::TuiDocument,
+    scopes: &InteractionScopes,
+) -> Result<(TuiScene, InteractionScopes, CommandHierarchy, ChoiceCatalog), BackendError> {
+    let human_started = Instant::now();
+    let tree = document.semantic_tree();
+    let scopes = scopes.clone();
+    let choices = document.choices.clone();
     let mut scene = match mode {
         PresentationMode::Legacy => compile_legacy_scene(&tree),
-        PresentationMode::Transcompiled => {
-            let analysis = analyze_regions_with_graph(&tree, &graph);
-            compile_scene(&tree, &analysis)
-        }
+        PresentationMode::Transcompiled => compile_scene(&tree, &document.human_regions(cache)),
     };
     let mut promoted_choice_options = std::collections::HashSet::new();
     for choice in choices.choices() {
@@ -7172,7 +7521,7 @@ fn build_contextual_view(
             default_intent: UiIntent::BeginEdit,
         });
     }
-    let commands = CommandHierarchy::build(cache, &scopes);
+    let commands = document.commands.clone();
     for element in &mut scene.elements {
         if let Some(binding) = &element.binding
             && (!scopes.allows_node(binding.runtime_id)
@@ -7198,6 +7547,11 @@ fn build_contextual_view(
         }
     }
     compress_content_scene(&mut scene, cache, content);
+    tracing::debug!(
+        target: "gui2tui::product",
+        human_scene_ms = human_started.elapsed().as_secs_f64() * 1000.0,
+        "Human scene projection from shared document"
+    );
     Ok((scene, scopes, commands, choices))
 }
 
@@ -7342,6 +7696,104 @@ mod tests {
             }),
             strategy: PresentationStrategy::DirectWidget,
         }
+    }
+
+    #[test]
+    fn public_action_labels_use_shared_document_sources_and_hide_boundary_payload() {
+        fn node(
+            id: u64,
+            role: SemanticRole,
+            name: Option<&str>,
+            children: Vec<SemanticNode>,
+        ) -> SemanticNode {
+            SemanticNode {
+                runtime_id: RuntimeNodeId::new(id),
+                backend_locator: BackendLocator::new(":1.80", format!("/n/{id}")),
+                index_in_parent: None,
+                role,
+                name: name.map(str::to_owned),
+                description: None,
+                value: None,
+                text_input_kind: None,
+                states: vec![SemanticState::Enabled],
+                actions: Vec::new(),
+                capabilities: Vec::new(),
+                children,
+                truncations: Vec::new(),
+                debug: Default::default(),
+            }
+        }
+        let mut named = node(3, SemanticRole::Button, Some("Public name"), Vec::new());
+        named.actions.push(SemanticAction {
+            index: 4,
+            name: "press".into(),
+            description: None,
+            keybinding: None,
+        });
+        let mut unnamed = node(4, SemanticRole::Button, None, Vec::new());
+        unnamed.actions = named.actions.clone();
+        let mut dialog = node(
+            2,
+            SemanticRole::Dialog,
+            Some("Current dialog"),
+            vec![named, unnamed],
+        );
+        dialog.states.extend([
+            SemanticState::Other("showing".into()),
+            SemanticState::Other("modal".into()),
+        ]);
+        let cache = SemanticCache::from_snapshot(node(
+            1,
+            SemanticRole::Window,
+            Some("OUTSIDE_BOUNDARY_LABEL"),
+            vec![dialog],
+        ))
+        .unwrap();
+        let mut runtime = crate::runtime::RuntimeSession::default();
+        runtime.open_application(cache.node(cache.root_id()).unwrap().backend_locator.clone());
+        let (document, _) =
+            organize_current_document(&cache, document_identity(&runtime, 1), &Default::default())
+                .unwrap();
+        let actions = public_action_entries_for_document(&document);
+        assert_eq!(actions.len(), document.operations.len());
+        assert!(!actions.is_empty());
+        assert!(!format!("{actions:?}").contains("OUTSIDE_BOUNDARY_LABEL"));
+        let wire = crate::transcompile::document::wire::to_agent_document(&document);
+        for operation in &document.operations {
+            let label = document.operation_label(operation.target).unwrap();
+            let human = actions
+                .iter()
+                .find(|(target, _, _, op)| {
+                    *target == operation.target && *op == operation.operation
+                })
+                .unwrap();
+            assert!(human.2.starts_with(&format!("{} [", label.display_label)));
+            let agent = wire["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|op| op["id"] == operation.id)
+                .unwrap();
+            assert_eq!(agent["label"], label.display_label);
+            assert!(
+                label
+                    .source_nodes
+                    .iter()
+                    .all(|id| document.nodes.contains_key(id))
+            );
+        }
+        assert!(
+            document
+                .operation_label(
+                    document
+                        .nodes
+                        .keys()
+                        .find(|id| document.boundary_nodes.contains(id))
+                        .copied()
+                        .unwrap()
+                )
+                .is_none()
+        );
     }
 
     #[test]

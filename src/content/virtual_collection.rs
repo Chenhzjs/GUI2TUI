@@ -1,20 +1,21 @@
+use std::ops::{Deref, DerefMut};
+
 use crate::semantic::{
     CollectionCompleteness, RuntimeNodeId, SemanticCache, SemanticRole, SemanticState,
     collection_completeness,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VirtualCollectionModel {
+pub struct VirtualCollectionStructure {
     pub owner: RuntimeNodeId,
     pub completeness: CollectionCompleteness,
     pub realized_items: Vec<RuntimeNodeId>,
     pub active_descendant: Option<RuntimeNodeId>,
     pub selected_items: Vec<RuntimeNodeId>,
     pub known_total: Option<usize>,
-    pub current: Option<RuntimeNodeId>,
 }
 
-impl VirtualCollectionModel {
+impl VirtualCollectionStructure {
     pub fn analyze(cache: &SemanticCache, owner: RuntimeNodeId) -> Option<Self> {
         let node = cache.node(owner)?;
         if !matches!(
@@ -34,18 +35,50 @@ impl VirtualCollectionModel {
             })
             .copied()
             .collect();
-        let current = active_or_selected(None, &selected_items, &realized_items);
         Some(Self {
             owner,
             completeness: collection_completeness(node),
             realized_items,
             active_descendant: None,
             selected_items,
-            // AT-SPI child count is a realized-object count for managed
-            // descendants and is not a generic logical-total contract.
+            // A managed child count may describe logical, unrealized objects.
+            // It is not a generic contract for the realized member count.
             known_total: None,
-            current,
         })
+    }
+}
+
+/// Human navigation over the same organized collection facts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VirtualCollectionModel {
+    pub structure: VirtualCollectionStructure,
+    pub current: Option<RuntimeNodeId>,
+}
+
+impl Deref for VirtualCollectionModel {
+    type Target = VirtualCollectionStructure;
+    fn deref(&self) -> &Self::Target {
+        &self.structure
+    }
+}
+impl DerefMut for VirtualCollectionModel {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.structure
+    }
+}
+
+impl VirtualCollectionModel {
+    pub fn from_structure(structure: VirtualCollectionStructure) -> Self {
+        let current = active_or_selected(
+            structure.active_descendant,
+            &structure.selected_items,
+            &structure.realized_items,
+        );
+        Self { structure, current }
+    }
+
+    pub fn analyze(cache: &SemanticCache, owner: RuntimeNodeId) -> Option<Self> {
+        VirtualCollectionStructure::analyze(cache, owner).map(Self::from_structure)
     }
 
     pub fn apply_active_descendant(&mut self, descendant: Option<RuntimeNodeId>) {

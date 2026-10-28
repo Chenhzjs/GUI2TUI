@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    content::{ContentBlockKind, ContentSearchResult, ReaderBlock, SearchProgress, SearchState},
+    content::{ContentSearchResult, ReaderBlock, SearchProgress, SearchState},
     semantic::SemanticCapability,
     transcompile::ChoiceOption,
     transcompile::{
@@ -134,6 +134,7 @@ pub struct ContentRender {
     pub title: String,
     pub mode: ContentViewMode,
     pub blocks: Vec<ReaderBlock>,
+    pub reader_scroll: usize,
     pub outline: Vec<(String, Option<u8>)>,
     pub outline_selected: usize,
     pub query: String,
@@ -327,28 +328,11 @@ fn element_supports_external_edit(scene: &TuiScene, element: &SceneElement) -> b
 fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
     frame.render_widget(Clear, area);
     let (title, lines, help) = match content.mode {
-        ContentViewMode::Reader => {
-            let lines = content
-                .blocks
-                .iter()
-                .flat_map(|block| {
-                    let prefix = match block.kind {
-                        ContentBlockKind::Heading { .. } => "# ",
-                        ContentBlockKind::Link => "[Link] ",
-                        ContentBlockKind::ListItem => "• ",
-                        ContentBlockKind::Quote => "> ",
-                        ContentBlockKind::OpaqueContent(_) => "[Media] ",
-                        _ => "",
-                    };
-                    vec![format!("{prefix}{}", block.text), String::new()]
-                })
-                .collect::<Vec<_>>();
-            (
-                format!(" Reader — {} ", content.title),
-                lines,
-                "j/k Move | PageUp/PageDown | o Outline | / Search | Esc Back",
-            )
-        }
+        ContentViewMode::Reader => (
+            format!(" Reader — {} ", content.title),
+            super::content_view::reader_lines(&content.blocks, area.width.saturating_sub(2).max(1)),
+            "j/k Scroll text | PageUp/PageDown | o Outline | / Search | Esc Back",
+        ),
         ContentViewMode::Outline => {
             let lines = if content.outline.is_empty() {
                 vec!["No semantic headings exposed.".to_owned()]
@@ -445,10 +429,45 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, content: ContentRender) {
         .borders(Borders::ALL);
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let selected = match content.mode {
+        ContentViewMode::Outline => Some(content.outline_selected),
+        ContentViewMode::Search if !content.results.is_empty() => {
+            Some(1 + usize::from(content.full_search.is_some()) + content.result_selected)
+        }
+        _ => None,
+    };
+    let selected_row = selected.map(|index| {
+        lines
+            .iter()
+            .take(index)
+            .map(|line| super::palette::detail_lines(line, inner.width).len())
+            .sum::<usize>()
+    });
+    let lines = if content.mode == ContentViewMode::Reader {
+        lines
+    } else {
+        lines
+            .iter()
+            .flat_map(|line| super::palette::detail_lines(line, inner.width))
+            .collect()
+    };
+    let height = usize::from(Block::default().title(help).inner(inner).height);
+    let offset = if content.mode == ContentViewMode::Reader {
+        content.reader_scroll
+    } else {
+        selected_row.unwrap_or(0).saturating_sub(height / 2)
+    };
+    let offset = offset.min(lines.len().saturating_sub(1));
     frame.render_widget(
-        Paragraph::new(lines.join("\n"))
-            .wrap(Wrap { trim: false })
-            .block(Block::default().title(help)),
+        Paragraph::new(
+            lines
+                .into_iter()
+                .skip(offset)
+                .take(height)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .block(Block::default().title(help)),
         inner,
     );
 }
@@ -1335,9 +1354,34 @@ fn render_spatial_leaf(
         } else {
             elements.len()
         };
-    let hidden = elements.len().saturating_sub(contextual_limit);
+    // An aggregate workspace can contain more rows than its allocated pane.
+    // Keep terminal focus visible without changing the shared scene or order.
+    let start = elements
+        .iter()
+        .position(|element| context.focused == Some(element.id))
+        .filter(|index| {
+            elements[..=*index]
+                .iter()
+                .map(|element| {
+                    element_lines_for_width(
+                        element,
+                        context.focused == Some(element.id),
+                        context.edit_session,
+                        inner.width,
+                        context.external_text_handler_available,
+                    )
+                    .len()
+                })
+                .sum::<usize>()
+                > usize::from(inner.height)
+        })
+        .unwrap_or(0);
+    let hidden = elements
+        .len()
+        .saturating_sub(start)
+        .saturating_sub(contextual_limit);
     let mut rendered = 0_u16;
-    for element in elements.into_iter().take(contextual_limit) {
+    for element in elements.into_iter().skip(start).take(contextual_limit) {
         if rendered >= inner.height {
             break;
         }
@@ -1424,11 +1468,18 @@ fn render_compact_surface(
                 .any(|source| region.presentation.source_nodes.contains(source))
                 && !matches!(
                     element.kind,
-                    SceneElementKind::Unsupported { .. } | SceneElementKind::CommandHeader { .. }
+                    SceneElementKind::Unsupported { .. }
+                        | SceneElementKind::CommandHeader { .. }
+                        | SceneElementKind::Group { .. }
                 )
         })
         .collect::<Vec<_>>();
-    elements.sort_by_key(|element| context.focused != Some(element.id));
+    elements.sort_by_key(|element| {
+        (
+            context.focused != Some(element.id),
+            element.capability() == InteractionCapability::None,
+        )
+    });
     if let Some(session) = context.edit_session
         && elements.iter().any(|element| {
             element
@@ -1463,13 +1514,20 @@ fn render_compact_surface(
             ),
             _ => format!("[{}{}]", if focused { "> " } else { "" }, element.label()),
         };
-        let width = Line::from(label.as_str())
-            .width()
-            .min(usize::from(u16::MAX)) as u16;
         let reserve = if shown + 1 < elements.len() { 9 } else { 0 };
-        if x.saturating_add(width).saturating_add(reserve) > area.right() {
+        let available = area.right().saturating_sub(x).saturating_sub(reserve);
+        if available < 4 {
             break;
         }
+        // A long field must not suppress every later button. Share the compact
+        // row, clip by terminal cells, and keep the exact full scene for navigation.
+        let share = if reserve > 0 {
+            (area.width / 3).max(16).min(available)
+        } else {
+            available
+        };
+        let label = clipped(&label, share);
+        let width = Line::from(label.as_str()).width() as u16;
         let style = if focused {
             selected_style()
         } else {
@@ -1754,6 +1812,19 @@ pub(crate) fn palette_areas(area: Rect) -> [Rect; 6] {
     [popup, rows[0], rows[1], panes[0], panes[1], rows[3]]
 }
 
+/// One viewport calculation for Human result rendering and Agent row bindings.
+pub(crate) fn palette_result_range(
+    results: Rect,
+    count: usize,
+    selected: usize,
+) -> std::ops::Range<usize> {
+    let visible = usize::from(Block::default().borders(Borders::TOP).inner(results).height);
+    let start = selected
+        .saturating_sub(visible / 2)
+        .min(count.saturating_sub(visible));
+    start..start.saturating_add(visible).min(count)
+}
+
 fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
     let [popup, search, scope, results, details, footer] = palette_areas(area);
     frame.render_widget(Clear, popup);
@@ -1805,12 +1876,15 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
         .border_style(Style::default().fg(Color::DarkGray));
     let list_area = result_block.inner(results);
     frame.render_widget(result_block, results);
-    let visible = usize::from(list_area.height);
-    let start = palette
-        .selected
-        .saturating_sub(visible / 2)
-        .min(palette.entries.len().saturating_sub(visible));
-    for (index, entry) in palette.entries.iter().enumerate().skip(start).take(visible) {
+    let range = palette_result_range(results, palette.entries.len(), palette.selected);
+    let start = range.start;
+    for (index, entry) in palette
+        .entries
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(range.len())
+    {
         let selected = index == palette.selected;
         let text = format!(
             "{} {}{}",
@@ -2334,6 +2408,57 @@ mod tests {
     }
 
     #[test]
+    fn reader_can_show_the_tail_of_one_large_accessibility_block() {
+        use crate::content::ContentBlockKind;
+        let text = (0..120)
+            .map(|i| format!("Public line {i}\n"))
+            .collect::<String>()
+            + "LONG-BLOCK-TAIL";
+        let draw = |offset| {
+            let mut terminal = Terminal::new(TestBackend::new(80, 18)).unwrap();
+            terminal
+                .draw(|frame| {
+                    render_content(
+                        frame,
+                        frame.area(),
+                        ContentRender {
+                            title: "Document".into(),
+                            mode: ContentViewMode::Reader,
+                            blocks: vec![ReaderBlock {
+                                id: crate::content::ContentBlockId::new(1),
+                                source: RuntimeNodeId::new(1),
+                                kind: ContentBlockKind::Paragraph,
+                                text: text.clone(),
+                            }],
+                            reader_scroll: offset,
+                            outline: vec![],
+                            outline_selected: 0,
+                            query: String::new(),
+                            results: vec![],
+                            result_selected: 0,
+                            partial: false,
+                            full_search: None,
+                            structure_lines: vec![],
+                            table_row_selection: false,
+                            table_cell_activation: false,
+                        },
+                    )
+                })
+                .unwrap();
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|c| c.symbol())
+                .collect::<String>()
+        };
+        assert!(!draw(0).contains("LONG-BLOCK-TAIL"));
+        assert!(draw(110).contains("LONG-BLOCK-TAIL"));
+        assert!(text.ends_with("LONG-BLOCK-TAIL"));
+    }
+
+    #[test]
     fn long_palette_labels_do_not_wrap_over_other_results() {
         use crate::transcompile::{CommandGroup, CommandHierarchy, InteractionScopeId};
         use crate::tui::palette::{CommandPalette, PublicOperation};
@@ -2397,6 +2522,203 @@ mod tests {
             assert!(rows[first + 1].contains("#3  Action: press"));
             assert!(rows.iter().any(|row| row.contains("Snapshot target: #2")));
         }
+    }
+
+    #[test]
+    fn palette_visible_rows_are_bounded_and_include_nonselected_results() {
+        for (height, count, selected, expected) in [
+            (5, 30, 0, 0..4),
+            (5, 30, 15, 13..17),
+            (5, 30, 29, 26..30),
+            (5, 2, 0, 0..2),
+            (0, 30, 0, 0..0),
+        ] {
+            let range = palette_result_range(Rect::new(0, 0, 60, height), count, selected);
+            assert_eq!(range, expected);
+            assert!(range.end <= count);
+        }
+    }
+
+    #[test]
+    fn spatial_workspace_keeps_a_clipped_focused_reader_visible() {
+        let mut root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(0),
+            backend_locator: BackendLocator::new(":1.2", "/root"),
+            index_in_parent: None,
+            role: SemanticRole::Window,
+            name: Some("Workspace".into()),
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![],
+            actions: vec![],
+            capabilities: vec![],
+            children: vec![],
+            truncations: vec![],
+            debug: Default::default(),
+        };
+        let mut elements = Vec::new();
+        for index in 1..=9 {
+            let mut control = element(SceneElementKind::Button {
+                label: format!("Control {index}"),
+            });
+            control.id = SceneElementId::new(index);
+            control.sources = vec![RuntimeNodeId::new(index)];
+            elements.push(control);
+        }
+        let reader = elements.last_mut().unwrap();
+        reader.kind = SceneElementKind::Button {
+            label: "Table".into(),
+        };
+        reader.binding.as_mut().unwrap().capability = InteractionCapability::BrowseContent;
+        reader.binding.as_mut().unwrap().default_intent = UiIntent::BeginRead;
+        root.children = vec![];
+        let scene = TuiScene::new("Workspace".into(), &root, elements);
+        let before = scene.elements.clone();
+        let mut region = spatial_region(
+            0,
+            "Workspace",
+            RegionPresentationKind::WorkspacePane,
+            crate::transcompile::LayoutDemand::Supporting,
+        );
+        region.presentation.source_nodes = (1..=9).map(RuntimeNodeId::new).collect();
+        let plan = TuiLayoutPlan {
+            root: LayoutNode::Leaf(region.id),
+            regions: vec![region],
+            topology: Default::default(),
+            generation: ApplicationGenerationId(1),
+            geometry_trust: GeometryTrust::Unavailable,
+            composition: CompositionKind::ContentDominant,
+        };
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        let mut hits = vec![];
+        terminal
+            .draw(|frame| {
+                render_spatial_node(
+                    frame,
+                    frame.area(),
+                    &RenderContext {
+                        scene: &scene,
+                        interaction_scope: None,
+                        focused: Some(SceneElementId::new(9)),
+                        scroll_offset: 0,
+                        status: "",
+                        application_available: true,
+                        external_text_handler_available: false,
+                        edit_session: None,
+                        palette: None,
+                        choice: None,
+                        content: None,
+                        spatial: Some(&plan),
+                        active_region: None,
+                        inline_content: None,
+                    },
+                    &plan,
+                    &plan.root,
+                    &mut hits,
+                );
+            })
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("Table"));
+        assert!(
+            hits.iter()
+                .any(|hit| hit.scene_id == SceneElementId::new(9))
+        );
+        assert_eq!(scene.elements, before);
+    }
+
+    #[test]
+    fn long_compact_field_keeps_later_action_visible_and_exactly_bound() {
+        let root = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/root"),
+            index_in_parent: None,
+            role: SemanticRole::Window,
+            name: None,
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: vec![],
+            actions: vec![],
+            capabilities: vec![],
+            children: vec![],
+            truncations: vec![],
+            debug: Default::default(),
+        };
+        let field = element(SceneElementKind::Field {
+            label: "Query".into(),
+            display: "long public value ".repeat(30),
+            input_kind: crate::semantic::TextInputKind::Plain,
+        });
+        let mut button = element(SceneElementKind::Button {
+            label: "Apply".into(),
+        });
+        button.id = SceneElementId::new(10);
+        let mut heading = element(SceneElementKind::Group {
+            label: "Navigation heading".into(),
+        });
+        heading.binding = None;
+        let mut unavailable = element(SceneElementKind::Button {
+            label: "Unavailable control".into(),
+        });
+        unavailable.binding = None;
+        let scene = TuiScene::new(
+            "Window".into(),
+            &root,
+            vec![heading, unavailable, field, button],
+        );
+        let before = scene.elements.clone();
+        let region = spatial_region(
+            0,
+            "Controls",
+            RegionPresentationKind::InputSurface,
+            crate::transcompile::LayoutDemand::Compact,
+        );
+        let context = RenderContext {
+            scene: &scene,
+            interaction_scope: None,
+            focused: Some(SceneElementId::new(9)),
+            scroll_offset: 0,
+            status: "",
+            application_available: true,
+            external_text_handler_available: false,
+            edit_session: None,
+            palette: None,
+            choice: None,
+            content: None,
+            spatial: None,
+            active_region: None,
+            inline_content: None,
+        };
+        let mut terminal = Terminal::new(TestBackend::new(80, 1)).unwrap();
+        let mut hits = vec![];
+        terminal
+            .draw(|frame| render_compact_surface(frame, frame.area(), &context, &region, &mut hits))
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("Query"));
+        assert!(text.contains("Apply"));
+        assert!(!text.contains("Navigation heading"));
+        for id in [9, 10] {
+            assert!(
+                hits.iter()
+                    .any(|hit| hit.scene_id == SceneElementId::new(id))
+            );
+        }
+        assert_eq!(scene.elements, before);
     }
 
     #[test]

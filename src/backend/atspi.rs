@@ -66,6 +66,13 @@ pub struct ValueMutation {
     pub normalized: bool,
 }
 
+/// A state-setting request can be satisfied by fresh public readback alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectionMembershipOutcome {
+    AlreadySatisfied,
+    AcceptedAndConfirmed,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CurrentSelectionAddress {
     DirectChild(usize),
@@ -308,6 +315,7 @@ pub enum BackendError {
 
 #[derive(Clone)]
 pub struct AtspiBackend {
+    tree_read_concurrency: usize,
     connection: AccessibilityConnection,
     operation_timeout: Duration,
     application_peers: Arc<std::sync::Mutex<HashMap<String, zbus::Connection>>>,
@@ -414,6 +422,7 @@ pub struct TableProbe {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DocumentProbe {
+    pub unavailable_fields: Vec<&'static str>,
     pub locator: Option<BackendLocator>,
     pub document_interface: bool,
     pub text_interface: bool,
@@ -551,7 +560,15 @@ impl Drop for EventSubscription {
     }
 }
 
+pub const DEFAULT_TREE_READ_CONCURRENCY: usize = 4;
+
 impl AtspiBackend {
+    /// Bound independent sibling metadata reads, never the output node set.
+    pub fn with_tree_read_concurrency(mut self, concurrency: usize) -> Self {
+        self.tree_read_concurrency = concurrency.max(1);
+        self
+    }
+
     pub fn operation_timeout(&self) -> Duration {
         self.operation_timeout
     }
@@ -580,6 +597,7 @@ impl AtspiBackend {
                 source,
             })?;
         Ok(Self {
+            tree_read_concurrency: DEFAULT_TREE_READ_CONCURRENCY,
             connection,
             operation_timeout,
             application_peers: Arc::default(),
@@ -1031,10 +1049,13 @@ impl AtspiBackend {
                 Err(error) if strategy == BootstrapStrategy::Cache => return Err(error),
                 Err(error) => {
                     let reason = error.to_string();
-                    let root = self.inspect_application(application, options).await?;
+                    let (root, walk) = self
+                        .inspect_application_profiled(application, options)
+                        .await?;
                     return Ok(BootstrapResult {
                         metrics: BootstrapMetrics {
                             strategy: BootstrapUsed::Walk,
+                            walk: Some(walk),
                             node_count: semantic_node_count(&root),
                             cache_format: None,
                             cache_items: 0,
@@ -1052,10 +1073,13 @@ impl AtspiBackend {
             }
         }
 
-        let root = self.inspect_application(application, options).await?;
+        let (root, walk) = self
+            .inspect_application_profiled(application, options)
+            .await?;
         Ok(BootstrapResult {
             metrics: BootstrapMetrics {
                 strategy: BootstrapUsed::Walk,
+                walk: Some(walk),
                 node_count: semantic_node_count(&root),
                 cache_format: None,
                 cache_items: 0,
@@ -1126,6 +1150,7 @@ impl AtspiBackend {
         Ok(BootstrapResult {
             metrics: BootstrapMetrics {
                 strategy: BootstrapUsed::Cache,
+                walk: None,
                 node_count: semantic_node_count(&root),
                 cache_format: Some(cache_format),
                 cache_items,
@@ -1197,14 +1222,31 @@ impl AtspiBackend {
         application: &ApplicationRef,
         options: InspectOptions,
     ) -> Result<SemanticNode, BackendError> {
+        self.inspect_application_profiled(application, options)
+            .await
+            .map(|(root, _)| root)
+    }
+
+    async fn inspect_application_profiled(
+        &self,
+        application: &ApplicationRef,
+        options: InspectOptions,
+    ) -> Result<(SemanticNode, super::bootstrap::WalkMetrics), BackendError> {
+        let started = Instant::now();
         let mut context = TraversalContext {
             options,
             visited: HashSet::new(),
             nodes: 0,
             runtime_ids: RuntimeIdAllocator::default(),
+            timing: Default::default(),
         };
-        self.build_node(application.object.clone(), 0, None, &mut context)
-            .await
+        let root = self
+            .build_node(application.object.clone(), 0, None, &mut context)
+            .await?;
+        context.timing.nodes = context.nodes;
+        context.timing.walk_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+        context.timing.read_groups_overlap = true;
+        Ok((root, context.timing))
     }
 
     pub async fn refresh_node(
@@ -1838,6 +1880,7 @@ impl AtspiBackend {
         }
         if interfaces.contains(Interface::Document) {
             let proxy = DocumentProxy::builder(self.connection.connection())
+                .cache_properties(zbus::proxy::CacheProperties::No)
                 .destination(locator.bus_name())
                 .and_then(|builder| builder.path(locator.object_path()))
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -1851,6 +1894,9 @@ impl AtspiBackend {
                 proxy.get_locale(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("locale");
+            })
             .ok()
             .and_then(nonempty);
             result.current_page = dbus_operation(
@@ -1860,6 +1906,9 @@ impl AtspiBackend {
                 proxy.current_page_number(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("current_page");
+            })
             .ok();
             result.page_count = dbus_operation(
                 self.operation_timeout,
@@ -1868,6 +1917,9 @@ impl AtspiBackend {
                 proxy.page_count(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("page_count");
+            })
             .ok();
             result.attributes = dbus_operation(
                 self.operation_timeout,
@@ -1876,10 +1928,14 @@ impl AtspiBackend {
                 proxy.get_attributes(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("attributes");
+            })
             .unwrap_or_default();
         }
         if interfaces.contains(Interface::Text) {
             let proxy = TextProxy::builder(self.connection.connection())
+                .cache_properties(zbus::proxy::CacheProperties::No)
                 .destination(locator.bus_name())
                 .and_then(|builder| builder.path(locator.object_path()))
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -1893,10 +1949,14 @@ impl AtspiBackend {
                 proxy.character_count(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("character_count");
+            })
             .ok();
         }
         if interfaces.contains(Interface::Hypertext) {
             let proxy = HypertextProxy::builder(self.connection.connection())
+                .cache_properties(zbus::proxy::CacheProperties::No)
                 .destination(locator.bus_name())
                 .and_then(|builder| builder.path(locator.object_path()))
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -1910,6 +1970,9 @@ impl AtspiBackend {
                 proxy.get_n_links(),
             )
             .await
+            .inspect_err(|_| {
+                result.unavailable_fields.push("hyperlink_count");
+            })
             .ok();
         }
         drop(object);
@@ -2084,6 +2147,7 @@ impl AtspiBackend {
 
         let document_attributes = if interfaces.contains(Interface::Document) {
             let proxy = DocumentProxy::builder(self.connection.connection())
+                .cache_properties(zbus::proxy::CacheProperties::No)
                 .destination(locator.bus_name())
                 .and_then(|builder| builder.path(locator.object_path()))
                 .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -2155,6 +2219,7 @@ impl AtspiBackend {
             return Err(BackendError::ContentTextUnsupported(encoded_id));
         }
         let proxy = TextProxy::builder(self.connection.connection())
+            .cache_properties(zbus::proxy::CacheProperties::No)
             .destination(locator.bus_name())
             .and_then(|builder| builder.path(locator.object_path()))
             .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -2197,6 +2262,7 @@ impl AtspiBackend {
             return Err(BackendError::ContentTextUnsupported(encoded_id));
         }
         let proxy = TextProxy::builder(self.connection.connection())
+            .cache_properties(zbus::proxy::CacheProperties::No)
             .destination(locator.bus_name())
             .and_then(|builder| builder.path(locator.object_path()))
             .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
@@ -2549,6 +2615,7 @@ impl AtspiBackend {
             visited: HashSet::new(),
             nodes: 0,
             runtime_ids: RuntimeIdAllocator::default(),
+            timing: Default::default(),
         };
         self.build_node(object, 0, None, &mut context).await
     }
@@ -2878,6 +2945,15 @@ impl AtspiBackend {
         &self,
         locator: &BackendLocator,
     ) -> Result<(f64, f64, f64), BackendError> {
+        let (current, minimum, maximum, _) = self.value_domain_parameters(locator).await?;
+        Ok((current, minimum, maximum))
+    }
+
+    /// Complete public Value domain for a current observation, including step.
+    pub async fn value_domain_parameters(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(f64, f64, f64, f64), BackendError> {
         let fresh = self.refresh_node(locator, false).await?;
         if !fresh.capabilities.contains(&SemanticCapability::Value) {
             return Err(BackendError::ValueUnsupported(locator.encode()));
@@ -2901,7 +2977,67 @@ impl AtspiBackend {
         )
         .await
         .ok_or_else(|| BackendError::ValueUnavailable(locator.encode()))?;
-        Ok((metadata.current, metadata.minimum, metadata.maximum))
+        Ok((
+            metadata.current,
+            metadata.minimum,
+            metadata.maximum,
+            metadata.increment,
+        ))
+    }
+
+    /// Read public Value facts without granting a mutation capability.
+    pub async fn read_public_value_domain(
+        &self,
+        locator: &BackendLocator,
+    ) -> Result<(f64, f64, f64, f64), BackendError> {
+        let object = object_ref_from_id(locator)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|e| BackendError::ObjectUnavailable(locator.encode(), e))?;
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create public Value proxies",
+            &locator.encode(),
+            proxy.proxies(),
+        )
+        .await?;
+        let value = atspi_operation(
+            self.operation_timeout,
+            "create public Value proxy",
+            &locator.encode(),
+            proxies.value(),
+        )
+        .await?;
+        let current = dbus_operation(
+            self.operation_timeout,
+            "read public Value current",
+            &locator.encode(),
+            value.current_value(),
+        )
+        .await?;
+        let minimum = dbus_operation(
+            self.operation_timeout,
+            "read public Value minimum",
+            &locator.encode(),
+            value.minimum_value(),
+        )
+        .await?;
+        let maximum = dbus_operation(
+            self.operation_timeout,
+            "read public Value maximum",
+            &locator.encode(),
+            value.maximum_value(),
+        )
+        .await?;
+        let increment = dbus_operation(
+            self.operation_timeout,
+            "read public Value increment",
+            &locator.encode(),
+            value.minimum_increment(),
+        )
+        .await?;
+        Ok((current, minimum, maximum, increment))
     }
 
     async fn mutate_value(
@@ -3056,12 +3192,15 @@ impl AtspiBackend {
 
     /// Select a direct accessible child through its parent's Selection interface.
     /// Change membership using a fresh direct-child address, including multiselect lists.
+    /// Single-selection public TableCell targets use the exact Table row API:
+    /// a table's Accessible child list may also contain column headers, whose
+    /// offsets are not necessarily Selection child addresses.
     pub async fn set_child_selected(
         &self,
         parent: &BackendLocator,
         child: &BackendLocator,
         selected: bool,
-    ) -> Result<(), BackendError> {
+    ) -> Result<SelectionMembershipOutcome, BackendError> {
         let object = object_ref_from_id(parent)?;
         let proxy = self
             .accessible_proxy(&object)
@@ -3086,6 +3225,63 @@ impl AtspiBackend {
                 target_id: child.encode(),
             });
         };
+        {
+            let interfaces = dbus_operation(
+                self.operation_timeout,
+                "read current selection owner interfaces",
+                &parent.encode(),
+                proxy.get_interfaces(),
+            )
+            .await?;
+            if interfaces.contains(Interface::Selection) && interfaces.contains(Interface::Table) {
+                let states = dbus_operation(
+                    self.operation_timeout,
+                    "read current selection owner states",
+                    &parent.encode(),
+                    proxy.get_state(),
+                )
+                .await?;
+                if !states.contains(State::ReadOnly) {
+                    let child_object = object_ref_from_id(child)?;
+                    let child_proxy = self
+                        .accessible_proxy(&child_object)
+                        .await
+                        .map_err(|e| BackendError::ObjectUnavailable(child.encode(), e))?;
+                    let child_interfaces = dbus_operation(
+                        self.operation_timeout,
+                        "read current selection target interfaces",
+                        &child.encode(),
+                        child_proxy.get_interfaces(),
+                    )
+                    .await?;
+                    let child_role = dbus_operation(
+                        self.operation_timeout,
+                        "read current selection target role",
+                        &child.encode(),
+                        child_proxy.get_role(),
+                    )
+                    .await?;
+                    if child_interfaces.contains(Interface::TableCell)
+                        && SemanticRole::from(child_role) == SemanticRole::Cell
+                    {
+                        // Choose this strategy before dispatch, never after an
+                        // unknown/rejected Selection write. The helper derives
+                        // the row from the exact live TableCell owner/position
+                        // and verifies get_accessible_at returns that locator.
+                        return self
+                            .set_current_table_row_selected(
+                                parent,
+                                child,
+                                selected,
+                                states.contains(State::Multiselectable),
+                                &children,
+                            )
+                            .await
+                            .map(|()| SelectionMembershipOutcome::AcceptedAndConfirmed);
+                    }
+                }
+            }
+        }
         let child_index =
             i32::try_from(*index).map_err(|_| BackendError::SelectionIndexOutOfRange {
                 node_id: parent.encode(),
@@ -3105,6 +3301,42 @@ impl AtspiBackend {
             proxies.selection(),
         )
         .await?;
+        // Do not ask a provider to deselect an already-unselected child (or
+        // reselect an already-selected one). Prove both exact membership and
+        // the requested state afresh; a snapshot flag alone is insufficient.
+        if let Ok(actual) = dbus_operation(
+            self.operation_timeout,
+            "read selection before setting",
+            &parent.encode(),
+            selection.is_child_selected(child_index),
+        )
+        .await
+        {
+            if actual == selected {
+                let current_children = dbus_operation(
+                    self.operation_timeout,
+                    "verify already-satisfied selection members",
+                    &parent.encode(),
+                    proxy.get_children(),
+                )
+                .await?;
+                if current_children != children {
+                    return Err(BackendError::SelectionReadbackAmbiguous(parent.encode()));
+                }
+                if let Ok(confirmed) = dbus_operation(
+                    self.operation_timeout,
+                    "confirm already-satisfied selection state",
+                    &parent.encode(),
+                    selection.is_child_selected(child_index),
+                )
+                .await
+                {
+                    if confirmed == selected {
+                        return Ok(SelectionMembershipOutcome::AlreadySatisfied);
+                    }
+                }
+            }
+        }
         let accepted = dbus_operation(
             self.operation_timeout,
             "change selection membership",
@@ -3153,7 +3385,9 @@ impl AtspiBackend {
             })
             .await;
             match readback {
-                Ok(Ok(actual)) if actual == selected => return Ok(()),
+                Ok(Ok(actual)) if actual == selected => {
+                    return Ok(SelectionMembershipOutcome::AcceptedAndConfirmed);
+                }
                 Ok(Ok(_)) => {}
                 Ok(Err(error)) => return Err(error),
                 Err(_) => return Err(BackendError::SelectionReadbackAmbiguous(parent.encode())),
@@ -3529,18 +3763,114 @@ impl AtspiBackend {
         table: &BackendLocator,
         target_cell: &BackendLocator,
     ) -> Result<SelectionMutation, BackendError> {
+        self.select_current_table_row_with_policy(table, target_cell, true)
+            .await
+    }
+
+    async fn select_current_table_row_with_policy(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+        skip_already_selected: bool,
+    ) -> Result<SelectionMutation, BackendError> {
         let row = self.current_table_row(table, target_cell).await?;
         let selected = self.selected_table_rows(table).await?;
         if selected.len() > 1 {
             return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
         }
-        if selected.as_slice() == [row] {
+        if skip_already_selected && selected.as_slice() == [row] {
             return Ok(SelectionMutation {
                 address: CurrentSelectionAddress::TableRow(row),
                 already_selected: true,
             });
         }
 
+        self.write_current_table_row_selection(table, row, true)
+            .await?;
+        Ok(SelectionMutation {
+            address: CurrentSelectionAddress::TableRow(row),
+            already_selected: false,
+        })
+    }
+
+    // This changes membership, unlike the exclusive Human row selection.
+    // Address only through current public TableCell evidence, and never retry
+    // through Selection after this write (even if its outcome is unknown).
+    async fn set_current_table_row_selected(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+        selected: bool,
+        multiple: bool,
+        children: &[ObjectRefOwned],
+    ) -> Result<(), BackendError> {
+        let row = self
+            .current_table_row_with_policy(table, target_cell, true)
+            .await?;
+        let mut expected = self.selected_table_rows(table).await?;
+        if expected.iter().any(|row| *row < 0) {
+            return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
+        }
+        expected.retain(|current| *current != row);
+        if selected {
+            expected.push(row);
+        }
+        expected.sort_unstable();
+        expected.dedup();
+        self.write_current_table_row_selection(table, row, selected)
+            .await?;
+        let object = object_ref_from_id(table)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|error| BackendError::ObjectUnavailable(table.encode(), error))?;
+        let deadline = Instant::now() + TEXT_WRITE_VERIFICATION_TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
+            }
+            let readback = tokio::time::timeout(remaining, async {
+                let current_children = dbus_operation(
+                    self.operation_timeout,
+                    "refresh Table selection children",
+                    &table.encode(),
+                    proxy.get_children(),
+                )
+                .await?;
+                if current_children != children
+                    || self
+                        .current_table_row_with_policy(table, target_cell, true)
+                        .await?
+                        != row
+                {
+                    return Err(BackendError::SelectionReadbackAmbiguous(table.encode()));
+                }
+                let mut actual = self.selected_table_rows(table).await?;
+                actual.sort_unstable();
+                // SelectChild/row membership can replace a single selection.
+                // Absence of Multiselectable does not prove exclusivity: some
+                // public tables omit that state while retaining multiple rows.
+                // Deselect must preserve the other members in either case.
+                Ok(actual == expected || (!multiple && selected && actual.as_slice() == [row]))
+            })
+            .await;
+            match readback {
+                Ok(Ok(true)) => return Ok(()),
+                Ok(Ok(false)) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(_) => return Err(BackendError::SelectionReadbackAmbiguous(table.encode())),
+            }
+            tokio::time::sleep(TEXT_WRITE_VERIFICATION_POLL.min(remaining)).await;
+        }
+    }
+
+    async fn write_current_table_row_selection(
+        &self,
+        table: &BackendLocator,
+        row: i32,
+        selected: bool,
+    ) -> Result<(), BackendError> {
         let table_id = table.encode();
         let object = object_ref_from_id(table)?;
         let proxy = self
@@ -3563,9 +3893,15 @@ impl AtspiBackend {
         .await?;
         let accepted = dbus_operation(
             self.operation_timeout,
-            "select exact current Table row",
+            "change exact current Table row membership",
             &table_id,
-            table_proxy.add_row_selection(row),
+            async {
+                if selected {
+                    table_proxy.add_row_selection(row).await
+                } else {
+                    table_proxy.remove_row_selection(row).await
+                }
+            },
         )
         .await?;
         if !accepted {
@@ -3574,10 +3910,7 @@ impl AtspiBackend {
                 index: usize::try_from(row).unwrap_or(usize::MAX),
             });
         }
-        Ok(SelectionMutation {
-            address: CurrentSelectionAddress::TableRow(row),
-            already_selected: false,
-        })
+        Ok(())
     }
 
     /// Freshly prove that the row containing the exact current cell is the
@@ -3621,6 +3954,68 @@ impl AtspiBackend {
                 target_id: target_cell.encode(),
             })?,
         ))
+    }
+
+    /// Observation-only metadata. Reuses exact owner/reverse-locator proof;
+    /// it does not authorize selection or change the operation execution path.
+    pub async fn current_table_cell_structure(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+    ) -> Result<(usize, usize, Option<usize>, Option<usize>), BackendError> {
+        let (row, column) = self.current_table_cell_position(table, target_cell).await?;
+        let proxy = TableCellProxy::builder(self.connection.connection())
+            .destination(target_cell.bus_name())
+            .and_then(|builder| builder.path(target_cell.object_path()))
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+            .map_err(|error| BackendError::CacheBootstrap(error.to_string()))?;
+        let span = dbus_operation(
+            self.operation_timeout,
+            "read observed TableCell span",
+            &target_cell.encode(),
+            proxy.inner().call_method("GetRowColumnSpan", &()),
+        )
+        .await
+        .ok()
+        .and_then(|reply| table_cell_span(&reply));
+        let (row_span, column_span) = match span {
+            Some((r, c, rs, cs)) if r as usize == row && c as usize == column => {
+                (Some(rs as usize), Some(cs as usize))
+            }
+            Some(_) => {
+                return Err(BackendError::TableRowTargetNotCurrent {
+                    table_id: table.encode(),
+                    target_id: target_cell.encode(),
+                });
+            }
+            None => {
+                let rs = dbus_operation(
+                    self.operation_timeout,
+                    "read observed TableCell row span",
+                    &target_cell.encode(),
+                    proxy.row_span(),
+                )
+                .await
+                .ok()
+                .filter(|v| *v > 0)
+                .map(|v| v as usize);
+                let cs = dbus_operation(
+                    self.operation_timeout,
+                    "read observed TableCell column span",
+                    &target_cell.encode(),
+                    proxy.column_span(),
+                )
+                .await
+                .ok()
+                .filter(|v| *v > 0)
+                .map(|v| v as usize);
+                (rs, cs)
+            }
+        };
+        Ok((row, column, row_span, column_span))
     }
 
     async fn current_selection_target(
@@ -3722,6 +4117,16 @@ impl AtspiBackend {
         table: &BackendLocator,
         target_cell: &BackendLocator,
     ) -> Result<i32, BackendError> {
+        self.current_table_row_with_policy(table, target_cell, false)
+            .await
+    }
+
+    async fn current_table_row_with_policy(
+        &self,
+        table: &BackendLocator,
+        target_cell: &BackendLocator,
+        allow_multiple: bool,
+    ) -> Result<i32, BackendError> {
         let table_id = table.encode();
         let target_id = target_cell.encode();
         let table_object = object_ref_from_id(table)?;
@@ -3744,7 +4149,7 @@ impl AtspiBackend {
         )
         .await?;
         if !interfaces.contains(Interface::Table)
-            || states.contains(State::Multiselectable)
+            || (!allow_multiple && states.contains(State::Multiselectable))
             || states.contains(State::ReadOnly)
             || !current_item_states_are_available(&states)
         {
@@ -3861,13 +4266,35 @@ impl AtspiBackend {
                 target_id,
             });
         }
-        let (row, column) = dbus_operation(
+        let position = dbus_operation(
             self.operation_timeout,
             "read current TableCell position",
             &target_id,
             table_cell.position(),
         )
-        .await?;
+        .await;
+        let (row, column) = match position {
+            Ok(position) => position,
+            Err(_) => {
+                // Some public cells expose the method but cannot serve the
+                // Position property. This is alternative read evidence before
+                // any write, not a retry of an unknown selection operation.
+                let reply = dbus_operation(
+                    self.operation_timeout,
+                    "read current TableCell row and column span",
+                    &target_id,
+                    table_cell.inner().call_method("GetRowColumnSpan", &()),
+                )
+                .await?;
+                let Some(position) = table_cell_span_position(&reply) else {
+                    return Err(BackendError::TableRowTargetNotCurrent {
+                        table_id,
+                        target_id,
+                    });
+                };
+                position
+            }
+        };
         if row < 0 || column < 0 {
             return Err(BackendError::TableRowTargetNotCurrent {
                 table_id,
@@ -3934,80 +4361,342 @@ impl AtspiBackend {
         .await
     }
 
-    fn build_node<'a>(
-        &'a self,
+    /// Discover already-public managed members without instantiating every
+    /// logical descendant. Cache membership is only a hint: parent and index
+    /// are re-read from each exact public object before attaching it.
+    async fn managed_child_refs(
+        &self,
+        parent: &BackendLocator,
+        max_nodes: usize,
+    ) -> (Vec<(Option<usize>, ObjectRefOwned)>, Vec<TreeTruncation>) {
+        let mut candidates = Vec::new();
+        let mut failures = Vec::new();
+        match tokio::time::timeout(
+            self.operation_timeout,
+            fetch_cache(self.connection.connection(), parent.bus_name()),
+        )
+        .await
+        {
+            Ok(Ok(cache)) => candidates.extend(
+                cache
+                    .records
+                    .into_iter()
+                    .filter(|row| row.parent.as_ref() == Some(parent))
+                    .map(|row| row.locator),
+            ),
+            _ => failures.push(TreeTruncation::ReadFailure {
+                operation: "read managed member cache",
+                node_id: parent.encode(),
+            }),
+        }
+        let selection = async {
+            let object = object_ref_from_id(parent)?;
+            let proxy = self
+                .accessible_proxy(&object)
+                .await
+                .map_err(|e| BackendError::ObjectUnavailable(parent.encode(), e))?;
+            let interfaces = dbus_operation(
+                self.operation_timeout,
+                "read managed interfaces",
+                &parent.encode(),
+                proxy.get_interfaces(),
+            )
+            .await?;
+            if !interfaces.contains(Interface::Selection) {
+                return Ok::<_, BackendError>(false);
+            }
+            let proxies = atspi_operation(
+                self.operation_timeout,
+                "create managed proxies",
+                &parent.encode(),
+                proxy.proxies(),
+            )
+            .await?;
+            let selection = atspi_operation(
+                self.operation_timeout,
+                "create managed Selection proxy",
+                &parent.encode(),
+                proxies.selection(),
+            )
+            .await?;
+            let count = dbus_operation(
+                self.operation_timeout,
+                "read managed selected count",
+                &parent.encode(),
+                selection.n_selected_children(),
+            )
+            .await?;
+            let count = usize::try_from(count).map_err(|_| {
+                BackendError::SemanticCache("negative managed selected count".into())
+            })?;
+            for index in 0..count.min(max_nodes) {
+                match dbus_operation(
+                    self.operation_timeout,
+                    "read managed selected member",
+                    &parent.encode(),
+                    selection.get_selected_child(index as i32),
+                )
+                .await
+                {
+                    Ok(object) => {
+                        if let Some(locator) = node_id_from_ref(&object) {
+                            candidates.push(locator);
+                        }
+                    }
+                    Err(_) => {
+                        failures.push(TreeTruncation::ReadFailure {
+                            operation: "read managed selected member",
+                            node_id: parent.encode(),
+                        });
+                        break;
+                    }
+                }
+            }
+            Ok(count > max_nodes)
+        }
+        .await;
+        match selection {
+            Ok(limited) => {
+                if limited {
+                    failures.push(TreeTruncation::MaxNodes { limit: max_nodes });
+                }
+            }
+            Err(_) => failures.push(TreeTruncation::ReadFailure {
+                operation: "read managed selection",
+                node_id: parent.encode(),
+            }),
+        }
+        let mut seen = HashSet::new();
+        let mut children = Vec::new();
+        for locator in candidates {
+            if locator.bus_name() != parent.bus_name() || !seen.insert(locator.clone()) {
+                continue;
+            }
+            let member = async {
+                let object = object_ref_from_id(&locator)?;
+                let proxy = self
+                    .accessible_proxy(&object)
+                    .await
+                    .map_err(|e| BackendError::ObjectUnavailable(locator.encode(), e))?;
+                let actual_parent = dbus_operation(
+                    self.operation_timeout,
+                    "verify managed parent",
+                    &locator.encode(),
+                    proxy.parent(),
+                )
+                .await?;
+                if node_id_from_ref(&actual_parent).as_ref() != Some(parent) {
+                    return Ok::<_, BackendError>(None);
+                }
+                let index = match dbus_operation(
+                    self.operation_timeout,
+                    "read managed member index",
+                    &locator.encode(),
+                    proxy.get_index_in_parent(),
+                )
+                .await
+                {
+                    Ok(index) => usize::try_from(index).ok(),
+                    Err(_) => {
+                        failures.push(TreeTruncation::ReadFailure {
+                            operation: "read managed member index",
+                            node_id: locator.encode(),
+                        });
+                        None
+                    }
+                };
+                Ok(Some((index, object)))
+            }
+            .await;
+            match member {
+                Ok(Some(member)) => children.push(member),
+                Ok(None) => failures.push(TreeTruncation::ReadFailure {
+                    operation: "managed member parent changed",
+                    node_id: locator.encode(),
+                }),
+                Err(_) => failures.push(TreeTruncation::ReadFailure {
+                    operation: "read managed member",
+                    node_id: locator.encode(),
+                }),
+            }
+        }
+        // Stable public order; a sparse subset never acquires invented indices.
+        children.sort_by(|a, b| a.0.unwrap_or(usize::MAX).cmp(&b.0.unwrap_or(usize::MAX)));
+        (children, failures)
+    }
+
+    /// Read public node facts without allocating a traversal identity or
+    /// mutating traversal state. Workers never publish a semantic frame.
+    async fn read_node_facts(
+        &self,
         object: ObjectRefOwned,
         depth: usize,
-        index_in_parent: Option<usize>,
-        context: &'a mut TraversalContext,
-    ) -> Pin<Box<dyn Future<Output = Result<SemanticNode, BackendError>> + Send + 'a>> {
-        Box::pin(async move {
-            context.nodes += 1;
-            let runtime_id = context.runtime_ids.allocate();
-
+        options: InspectOptions,
+    ) -> (
+        Result<NodeFacts, BackendError>,
+        super::bootstrap::WalkMetrics,
+    ) {
+        let mut timing = super::bootstrap::WalkMetrics {
+            metadata_nodes_read: 1,
+            ..Default::default()
+        };
+        let result = async {
             let id = node_id_from_ref(&object).ok_or_else(|| {
                 BackendError::ObjectUnavailable(
-                    "<null>".to_owned(),
+                    "<null>".into(),
                     atspi::AtspiError::NullRef("tree contains a null object reference"),
                 )
             })?;
             let encoded_id = id.encode();
-            context.visited.insert(encoded_id.clone());
-
+            let proxy_started = Instant::now();
             let proxy = self
                 .accessible_proxy(&object)
                 .await
                 .map_err(|error| BackendError::ObjectUnavailable(encoded_id.clone(), error))?;
+            timing.proxy_discovery_ms += proxy_started.elapsed().as_secs_f64() * 1000.0;
             // These public metadata reads are independent. Keep the walk's
             // deterministic child order, identity allocation and node/depth
             // accounting, while overlapping D-Bus round trips within a node.
-            let (role, name, description, states, interfaces, child_refs) = tokio::join!(
-                dbus_operation(
+            let (
+                (role, role_t),
+                (name, name_t),
+                (description, description_t),
+                (states, states_t),
+                (interfaces, interfaces_t),
+            ) = tokio::join!(
+                timed_read(dbus_operation(
                     self.operation_timeout,
                     "read role",
                     &encoded_id,
                     proxy.get_role(),
-                ),
-                dbus_operation(
+                )),
+                timed_read(dbus_operation(
                     self.operation_timeout,
                     "read name",
                     &encoded_id,
                     proxy.name(),
-                ),
-                dbus_operation(
+                )),
+                timed_read(dbus_operation(
                     self.operation_timeout,
                     "read description",
                     &encoded_id,
                     proxy.description(),
-                ),
-                dbus_operation(
+                )),
+                timed_read(dbus_operation(
                     self.operation_timeout,
                     "read states",
                     &encoded_id,
                     proxy.get_state(),
-                ),
-                dbus_operation(
+                )),
+                timed_read(dbus_operation(
                     self.operation_timeout,
                     "read interfaces",
                     &encoded_id,
                     proxy.get_interfaces(),
-                ),
-                async {
-                    if depth < context.options.max_depth {
-                        Some(
-                            dbus_operation(
-                                self.operation_timeout,
-                                "read children",
-                                &encoded_id,
-                                proxy.get_children(),
-                            )
-                            .await,
-                        )
-                    } else {
-                        None
-                    }
-                },
+                )),
             );
+            let metadata_times = [role_t, name_t, description_t, states_t, interfaces_t];
+            timing.metadata_requests += 5;
+            timing.metadata_rpc_sum_ms += metadata_times
+                .iter()
+                .map(|d| d.as_secs_f64() * 1000.0)
+                .sum::<f64>();
+            timing.metadata_batch_wall_sum_ms +=
+                metadata_times.iter().max().unwrap().as_secs_f64() * 1000.0;
+            let mut truncations = Vec::new();
+            // MANAGES_DESCENDANTS exposes a logical collection, not an eager
+            // GetChildren contract (a spreadsheet may report billions of cells).
+            // State must be known before choosing the public discovery method.
+            let managed = states
+                .as_ref()
+                .is_ok_and(|s| s.contains(State::ManagesDescendants));
+            let started = Instant::now();
+            let child_refs = if depth >= options.max_depth {
+                None
+            } else if managed {
+                let count = dbus_operation(
+                    self.operation_timeout,
+                    "read managed child count",
+                    &encoded_id,
+                    proxy.child_count(),
+                )
+                .await;
+                if count.as_ref().is_ok_and(|count| {
+                    usize::try_from(*count).is_ok_and(|count| count <= options.max_nodes)
+                }) {
+                    // Small managed documents still expose real paragraphs;
+                    // preserve their complete public enumeration within the
+                    // caller's existing traversal budget.
+                    Some(
+                        dbus_operation(
+                            self.operation_timeout,
+                            "read children",
+                            &encoded_id,
+                            proxy.get_children(),
+                        )
+                        .await
+                        .map(|children| {
+                            children
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, child)| (Some(index), child))
+                                .collect()
+                        }),
+                    )
+                } else {
+                    truncations.push(TreeTruncation::ManagedDescendants);
+                    if count.is_err() {
+                        truncations.push(TreeTruncation::ReadFailure {
+                            operation: "read managed child count",
+                            node_id: encoded_id.clone(),
+                        });
+                    }
+                    let (children, failures) =
+                        self.managed_child_refs(&id, options.max_nodes).await;
+                    truncations.extend(failures);
+                    Some(Ok(children))
+                }
+            } else if states.is_err() {
+                // Unknown state cannot justify an unbounded logical enumeration.
+                Some(Err(BackendError::SemanticCache(
+                    "child discovery requires public state".into(),
+                )))
+            } else {
+                Some(
+                    dbus_operation(
+                        self.operation_timeout,
+                        "read children",
+                        &encoded_id,
+                        proxy.get_children(),
+                    )
+                    .await
+                    .map(|children| {
+                        children
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, child)| (Some(index), child))
+                            .collect()
+                    }),
+                )
+            };
+            if child_refs.is_some() {
+                timing.children_requests += 1;
+                timing.children_rpc_sum_ms += started.elapsed().as_secs_f64() * 1000.0;
+            }
+            let auxiliary_started = Instant::now();
+            for (operation, failed) in [
+                ("read name", name.is_err()),
+                ("read description", description.is_err()),
+                ("read states", states.is_err()),
+                ("read interfaces", interfaces.is_err()),
+            ] {
+                if failed {
+                    truncations.push(TreeTruncation::ReadFailure {
+                        operation,
+                        node_id: encoded_id.clone(),
+                    });
+                }
+            }
             let role = role?;
             let name = name.map(nonempty).unwrap_or_else(|error| {
                 warn!(node_id = %encoded_id, %error, "could not read AT-SPI name");
@@ -4037,6 +4726,10 @@ impl AtspiBackend {
             .await
             .map_err(|error| {
                 warn!(node_id = %encoded_id, %error, "could not create interface proxies");
+                truncations.push(TreeTruncation::ReadFailure {
+                    operation: "create interface proxies",
+                    node_id: encoded_id.clone(),
+                });
                 error
             })
             .ok();
@@ -4060,10 +4753,18 @@ impl AtspiBackend {
                         .map(map_actions)
                         .unwrap_or_else(|error| {
                             warn!(node_id = %encoded_id, %error, "could not read AT-SPI actions");
+                            truncations.push(TreeTruncation::ReadFailure {
+                                operation: "read actions",
+                                node_id: encoded_id.clone(),
+                            });
                             Vec::new()
                         }),
                         Err(error) => {
                             warn!(node_id = %encoded_id, %error, "could not create Action proxy");
+                            truncations.push(TreeTruncation::ReadFailure {
+                                operation: "create Action proxy",
+                                node_id: encoded_id.clone(),
+                            });
                             Vec::new()
                         }
                     }
@@ -4096,7 +4797,7 @@ impl AtspiBackend {
             } else {
                 false
             };
-            let geometry = if context.options.verbose && interfaces.contains(Interface::Component) {
+            let geometry = if options.verbose && interfaces.contains(Interface::Component) {
                 read_geometry(self.operation_timeout, &encoded_id, &proxy).await
             } else {
                 None
@@ -4112,72 +4813,24 @@ impl AtspiBackend {
                 geometry,
             };
 
-            let mut children = Vec::new();
-            let mut truncations = Vec::new();
-            if let Some(child_refs) = child_refs {
-                match child_refs {
-                    Ok(child_refs) => {
-                        for (child_index, child) in child_refs.into_iter().enumerate() {
-                            if context.nodes >= context.options.max_nodes {
-                                truncations.push(TreeTruncation::MaxNodes {
-                                    limit: context.options.max_nodes,
-                                });
-                                break;
-                            }
-                            let Some(child_id) = node_id_from_ref(&child) else {
-                                continue;
-                            };
-                            if context.visited.contains(&child_id.encode()) {
-                                warn!(node_id = %child_id, "skipping AT-SPI cycle or duplicate object");
-                                continue;
-                            }
-                            match self
-                                .build_node(child, depth + 1, Some(child_index), context)
-                                .await
-                            {
-                                Ok(child) => children.push(child),
-                                Err(BackendError::ObjectUnavailable(node_id, error)) => {
-                                    warn!(%node_id, %error, "skipping stale AT-SPI child object");
-                                }
-                                Err(BackendError::OperationTimeout {
-                                    operation, node_id, ..
-                                }) => {
-                                    warn!(%node_id, %operation, "skipping timed-out AT-SPI child object");
-                                    truncations.push(TreeTruncation::OperationTimeout {
-                                        operation,
-                                        node_id,
-                                    });
-                                }
-                                Err(error) => return Err(error),
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        warn!(node_id = %encoded_id, %error, "could not read AT-SPI children");
-                    }
-                }
-            } else {
-                match dbus_operation(
+            timing.auxiliary_attributes_wall_sum_ms +=
+                auxiliary_started.elapsed().as_secs_f64() * 1000.0;
+
+            let child_count = if child_refs.is_none() {
+                let started = Instant::now();
+                let result = dbus_operation(
                     self.operation_timeout,
                     "read child count",
                     &encoded_id,
                     proxy.child_count(),
                 )
-                .await
-                {
-                    Ok(count) if count > 0 => truncations.push(TreeTruncation::MaxDepth {
-                        limit: context.options.max_depth,
-                    }),
-                    Ok(_) => {}
-                    Err(BackendError::OperationTimeout {
-                        operation, node_id, ..
-                    }) => truncations.push(TreeTruncation::OperationTimeout { operation, node_id }),
-                    Err(error) => {
-                        warn!(node_id = %encoded_id, %error, "could not determine max-depth truncation");
-                    }
-                }
-            }
-
+                .await;
+                timing.children_requests += 1;
+                timing.children_rpc_sum_ms += started.elapsed().as_secs_f64() * 1000.0;
+                Some(result)
+            } else {
+                None
+            };
             let (semantic_role, text_input_kind) = semantic_role_and_input_kind(role, interfaces);
             let capabilities = semantic_capabilities(
                 interfaces,
@@ -4188,10 +4841,10 @@ impl AtspiBackend {
                 adjustable_value,
             );
 
-            Ok(SemanticNode {
-                runtime_id,
+            let node = SemanticNode {
+                runtime_id: RuntimeNodeId::new(0),
                 backend_locator: id,
-                index_in_parent,
+                index_in_parent: None,
                 role: semantic_role,
                 name,
                 description,
@@ -4200,10 +4853,219 @@ impl AtspiBackend {
                 states,
                 actions,
                 capabilities,
-                children,
+                children: Vec::new(),
                 truncations,
                 debug,
+            };
+            Ok(NodeFacts {
+                node,
+                child_refs,
+                child_count,
             })
+        }
+        .await;
+        (result, timing)
+    }
+
+    fn build_node<'a>(
+        &'a self,
+        object: ObjectRefOwned,
+        depth: usize,
+        index_in_parent: Option<usize>,
+        context: &'a mut TraversalContext,
+    ) -> Pin<Box<dyn Future<Output = Result<SemanticNode, BackendError>> + Send + 'a>> {
+        self.build_prepared_node(object, depth, index_in_parent, None, context)
+    }
+
+    fn build_prepared_node<'a>(
+        &'a self,
+        object: ObjectRefOwned,
+        depth: usize,
+        index_in_parent: Option<usize>,
+        prepared: Option<Result<NodeFacts, BackendError>>,
+        context: &'a mut TraversalContext,
+    ) -> Pin<Box<dyn Future<Output = Result<SemanticNode, BackendError>> + Send + 'a>> {
+        Box::pin(async move {
+            // Only this ordered owner allocates IDs and consumes node budget.
+            context.nodes += 1;
+            let runtime_id = context.runtime_ids.allocate();
+            let id = node_id_from_ref(&object).ok_or_else(|| {
+                BackendError::ObjectUnavailable(
+                    "<null>".into(),
+                    atspi::AtspiError::NullRef("tree contains a null object reference"),
+                )
+            })?;
+            let encoded_id = id.encode();
+            context.visited.insert(encoded_id.clone());
+            let facts = match prepared {
+                Some(facts) => facts?,
+                None => {
+                    context.timing.node_read_batches += 1;
+                    context.timing.node_read_peak = context.timing.node_read_peak.max(1);
+                    let (facts, timing) =
+                        self.read_node_facts(object, depth, context.options).await;
+                    context.timing.include_read(&timing);
+                    facts?
+                }
+            };
+            let NodeFacts {
+                mut node,
+                child_refs,
+                child_count,
+            } = facts;
+            if node.backend_locator != id {
+                return Err(BackendError::SemanticCache(
+                    "prefetched node identity mismatch".into(),
+                ));
+            }
+            node.runtime_id = runtime_id;
+            node.index_in_parent = index_in_parent;
+            if let Some(child_refs) = child_refs {
+                match child_refs {
+                    Ok(child_refs) => {
+                        let mut pending = child_refs.into_iter().peekable();
+                        while pending.peek().is_some() {
+                            if context.nodes >= context.options.max_nodes {
+                                if !node
+                                    .truncations
+                                    .iter()
+                                    .any(|t| matches!(t, TreeTruncation::MaxNodes { .. }))
+                                {
+                                    node.truncations.push(TreeTruncation::MaxNodes {
+                                        limit: context.options.max_nodes,
+                                    });
+                                }
+                                break;
+                            }
+                            let capacity = self
+                                .tree_read_concurrency
+                                .min(context.options.max_nodes.saturating_sub(context.nodes));
+                            let mut plans = Vec::new();
+                            let mut batch_ids = HashSet::new();
+                            while plans.len() < capacity {
+                                let Some((index, child)) = pending.next() else {
+                                    break;
+                                };
+                                let Some(child_id) = node_id_from_ref(&child) else {
+                                    continue;
+                                };
+                                if context.visited.contains(&child_id.encode())
+                                    || !batch_ids.insert(child_id.encode())
+                                {
+                                    warn!(node_id=%child_id,"skipping AT-SPI cycle or duplicate object");
+                                    continue;
+                                }
+                                plans.push((index, child));
+                            }
+                            if plans.is_empty() {
+                                continue;
+                            }
+                            if plans.len() == 1 {
+                                let (index, child) = plans.pop().unwrap();
+                                let result =
+                                    self.build_node(child, depth + 1, index, context).await;
+                                append_child_result(&mut node, result)?;
+                                continue;
+                            }
+                            // Complete one bounded metadata batch before descending;
+                            // recursive levels never multiply the in-flight bound.
+                            context.timing.node_read_batches += 1;
+                            context.timing.node_read_peak =
+                                context.timing.node_read_peak.max(plans.len());
+                            let mut reads = tokio::task::JoinSet::new();
+                            let mut ordered: Vec<
+                                Option<(
+                                    Result<NodeFacts, BackendError>,
+                                    super::bootstrap::WalkMetrics,
+                                )>,
+                            > = (0..plans.len()).map(|_| None).collect();
+                            for (position, (_, child)) in plans.iter().enumerate() {
+                                let backend = self.clone();
+                                let child = child.clone();
+                                let options = context.options;
+                                reads.spawn(async move {
+                                    (
+                                        position,
+                                        backend.read_node_facts(child, depth + 1, options).await,
+                                    )
+                                });
+                            }
+                            while let Some(read) = reads.join_next().await {
+                                let (position, result) = read.map_err(|_| {
+                                    BackendError::SemanticCache("AX metadata worker failed".into())
+                                })?;
+                                ordered[position] = Some(result);
+                            }
+                            for timing in ordered.iter().flatten().map(|(_, timing)| timing) {
+                                context.timing.include_read(timing);
+                            }
+                            for ((index, child), read) in plans.into_iter().zip(ordered) {
+                                if context.nodes >= context.options.max_nodes {
+                                    // Remaining prepared results are discarded explicitly,
+                                    // with no source or authority publication.
+                                    context.timing.metadata_discarded += 1;
+                                    if !node
+                                        .truncations
+                                        .iter()
+                                        .any(|t| matches!(t, TreeTruncation::MaxNodes { .. }))
+                                    {
+                                        node.truncations.push(TreeTruncation::MaxNodes {
+                                            limit: context.options.max_nodes,
+                                        });
+                                    }
+                                    continue;
+                                }
+                                let child_id =
+                                    node_id_from_ref(&child).expect("validated child reference");
+                                if context.visited.contains(&child_id.encode()) {
+                                    context.timing.metadata_discarded += 1;
+                                    continue;
+                                }
+                                let (facts, _) = read.ok_or_else(|| {
+                                    BackendError::SemanticCache("AX metadata result missing".into())
+                                })?;
+                                let result = self
+                                    .build_prepared_node(
+                                        child,
+                                        depth + 1,
+                                        index,
+                                        Some(facts),
+                                        context,
+                                    )
+                                    .await;
+                                append_child_result(&mut node, result)?;
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        warn!(node_id=%encoded_id,%error,"could not read AT-SPI children");
+                        node.truncations.push(TreeTruncation::ReadFailure {
+                            operation: "read children",
+                            node_id: encoded_id.clone(),
+                        });
+                    }
+                }
+            } else if let Some(child_count) = child_count {
+                match child_count {
+                    Ok(count) if count > 0 => node.truncations.push(TreeTruncation::MaxDepth {
+                        limit: context.options.max_depth,
+                    }),
+                    Ok(_) => {}
+                    Err(BackendError::OperationTimeout {
+                        operation, node_id, ..
+                    }) => node
+                        .truncations
+                        .push(TreeTruncation::OperationTimeout { operation, node_id }),
+                    Err(error) => {
+                        warn!(node_id=%encoded_id,%error,"could not determine max-depth truncation");
+                        node.truncations.push(TreeTruncation::ReadFailure {
+                            operation: "read child count",
+                            node_id: encoded_id,
+                        });
+                    }
+                }
+            }
+            Ok(node)
         })
     }
 }
@@ -4391,7 +5253,48 @@ fn repair_root_relationships(
     }
 }
 
+type IndexedChildReferences = Vec<(Option<usize>, ObjectRefOwned)>;
+
+struct NodeFacts {
+    node: SemanticNode,
+    child_refs: Option<Result<IndexedChildReferences, BackendError>>,
+    child_count: Option<Result<i32, BackendError>>,
+}
+
+fn append_child_result(
+    parent: &mut SemanticNode,
+    result: Result<SemanticNode, BackendError>,
+) -> Result<(), BackendError> {
+    match result {
+        Ok(child) => parent.children.push(child),
+        Err(BackendError::ObjectUnavailable(node_id, error)) => {
+            warn!(%node_id,%error,"skipping stale AT-SPI child object");
+            parent.truncations.push(TreeTruncation::ReadFailure {
+                operation: "read child object",
+                node_id,
+            });
+        }
+        Err(BackendError::OperationTimeout {
+            operation, node_id, ..
+        }) => {
+            warn!(%node_id,%operation,"skipping timed-out AT-SPI child object");
+            parent
+                .truncations
+                .push(TreeTruncation::OperationTimeout { operation, node_id });
+        }
+        Err(error) => return Err(error),
+    }
+    Ok(())
+}
+
+async fn timed_read<F: Future>(future: F) -> (F::Output, Duration) {
+    let started = Instant::now();
+    let output = future.await;
+    (output, started.elapsed())
+}
+
 struct TraversalContext {
+    timing: super::bootstrap::WalkMetrics,
     options: InspectOptions,
     visited: HashSet<String>,
     nodes: usize,
@@ -4426,6 +5329,33 @@ fn selected_row_matches_target(
     current_row_target: Option<BackendLocator>,
 ) -> bool {
     selected_rows == [current_row] && current_row_target.as_ref() == Some(expected)
+}
+
+fn table_cell_span_position(reply: &zbus::Message) -> Option<(i32, i32)> {
+    table_cell_span(reply).map(|(row, column, _, _)| (row, column))
+}
+
+fn table_cell_span(reply: &zbus::Message) -> Option<(i32, i32, i32, i32)> {
+    // The current public IDL includes a success boolean. Some deployed public
+    // providers return only the four integers. Interpret the reply shape, not
+    // application/toolkit identity, and still require reverse locator proof.
+    let (row, column, row_span, column_span) =
+        if let Ok((known, row, column, row_span, column_span)) =
+            reply.body().deserialize::<(bool, i32, i32, i32, i32)>()
+        {
+            if !known {
+                return None;
+            }
+            (row, column, row_span, column_span)
+        } else {
+            reply.body().deserialize::<(i32, i32, i32, i32)>().ok()?
+        };
+    (row >= 0 && column >= 0 && row_span > 0 && column_span > 0).then_some((
+        row,
+        column,
+        row_span,
+        column_span,
+    ))
 }
 
 fn node_id_from_ref(object: &ObjectRefOwned) -> Option<BackendLocator> {
@@ -4771,6 +5701,7 @@ fn semantic_capabilities(
     if input_kind == Some(TextInputKind::Plain)
         && interfaces.contains(Interface::EditableText)
         && states.contains(&SemanticState::Editable)
+        && !states.contains(&SemanticState::ReadOnly)
         // Atomic single-line editing must not replace an entire document buffer.
         && !states.contains(&SemanticState::Other("multi-line".to_owned()))
     {
@@ -4864,6 +5795,48 @@ async fn read_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_failure_remains_partial_without_a_fabricated_child() {
+        let mut parent = SemanticNode {
+            runtime_id: RuntimeNodeId::new(1),
+            backend_locator: BackendLocator::new(":1.2", "/parent"),
+            index_in_parent: None,
+            role: SemanticRole::Container,
+            name: None,
+            description: None,
+            value: None,
+            text_input_kind: None,
+            states: Vec::new(),
+            actions: Vec::new(),
+            capabilities: Vec::new(),
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: Default::default(),
+        };
+        let mut child = parent.clone();
+        child.runtime_id = RuntimeNodeId::new(2);
+        child.backend_locator = BackendLocator::new(":1.2", "/child");
+        child.index_in_parent = Some(3);
+        append_child_result(&mut parent, Ok(child.clone())).unwrap();
+        append_child_result(
+            &mut parent,
+            Err(BackendError::OperationTimeout {
+                operation: "read role",
+                node_id: "missing-child".into(),
+                timeout_ms: 1,
+            }),
+        )
+        .unwrap();
+        assert_eq!(parent.children, vec![child]);
+        assert!(matches!(
+            &parent.truncations[..],
+            [TreeTruncation::OperationTimeout {
+                operation: "read role",
+                ..
+            }]
+        ));
+    }
 
     #[test]
     fn session_environment_summary_redacts_connection_values() {
@@ -5150,6 +6123,39 @@ mod tests {
     }
 
     #[test]
+    fn public_table_cell_span_reply_shapes_preserve_unknown_and_invalid_evidence() {
+        let call = zbus::Message::method_call("/cell", "GetRowColumnSpan")
+            .unwrap()
+            .build(&())
+            .unwrap();
+        let legacy = zbus::Message::method_return(&call.header())
+            .unwrap()
+            .build(&(3i32, 0i32, 1i32, 1i32))
+            .unwrap();
+        let current = zbus::Message::method_return(&call.header())
+            .unwrap()
+            .build(&(true, 3i32, 0i32, 1i32, 1i32))
+            .unwrap();
+        let unknown = zbus::Message::method_return(&call.header())
+            .unwrap()
+            .build(&(false, 3i32, 0i32, 1i32, 1i32))
+            .unwrap();
+        let invalid = zbus::Message::method_return(&call.header())
+            .unwrap()
+            .build(&(-1i32, 0i32, 0i32, 1i32))
+            .unwrap();
+        let malformed = zbus::Message::method_return(&call.header())
+            .unwrap()
+            .build(&(3i32, 0i32, 1i32))
+            .unwrap();
+        assert_eq!(table_cell_span_position(&legacy), Some((3, 0)));
+        assert_eq!(table_cell_span_position(&current), Some((3, 0)));
+        for reply in [unknown, invalid, malformed] {
+            assert_eq!(table_cell_span_position(&reply), None);
+        }
+    }
+
+    #[test]
     fn editable_capability_requires_plain_text_interface_and_editable_state() {
         let mut interfaces = atspi::InterfaceSet::new(Interface::EditableText);
         interfaces.insert(Interface::Text);
@@ -5163,6 +6169,17 @@ mod tests {
                 false,
             ),
             vec![SemanticCapability::EditText]
+        );
+        assert!(
+            semantic_capabilities(
+                interfaces,
+                &[SemanticState::Editable, SemanticState::ReadOnly],
+                SemanticRole::TextInput,
+                Some(TextInputKind::Plain),
+                Role::Entry,
+                false,
+            )
+            .is_empty()
         );
         assert!(
             semantic_capabilities(

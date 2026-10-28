@@ -101,6 +101,7 @@ struct Analyzer {
     metrics: RegionMetrics,
     relations: RelationHints,
     collapsible_wrappers: HashSet<RuntimeNodeId>,
+    include_noncurrent: bool,
 }
 
 pub fn analyze_regions(root: &SemanticNode) -> RegionAnalysis {
@@ -114,6 +115,19 @@ pub fn analyze_regions_with_graph(
 ) -> RegionAnalysis {
     let mut analyzer = Analyzer {
         relations: RelationHints::from_graph(root, graph),
+        ..Default::default()
+    };
+    analyzer.run(root)
+}
+
+/// The same field/region rules, without Human surface visibility filtering.
+pub(crate) fn analyze_document_regions(
+    root: &SemanticNode,
+    graph: &RelationalSemanticGraph<'_>,
+) -> RegionAnalysis {
+    let mut analyzer = Analyzer {
+        relations: RelationHints::from_graph(root, graph),
+        include_noncurrent: true,
         ..Default::default()
     };
     analyzer.run(root)
@@ -371,7 +385,7 @@ impl Analyzer {
         let mut index = 0;
         while index < node.children.len() {
             let child = &node.children[index];
-            if is_explicitly_noncurrent(child) {
+            if !self.include_noncurrent && is_explicitly_noncurrent(child) {
                 index += 1;
                 continue;
             }
@@ -905,8 +919,11 @@ fn page_tab_list_is_interactive(node: &SemanticNode) -> bool {
 }
 
 fn is_explicitly_noncurrent(node: &SemanticNode) -> bool {
-    if node
-        .states
+    is_noncurrent_surface(&node.states)
+}
+
+pub(crate) fn is_noncurrent_surface(states: &[SemanticState]) -> bool {
+    if states
         .iter()
         .any(|state| matches!(state, SemanticState::Other(value) if value == "hidden" || value == "defunct"))
     {
@@ -918,11 +935,11 @@ fn is_explicitly_noncurrent(node: &SemanticNode) -> bool {
     // visibility state, so that absence must remain unknown rather than being
     // converted into Hidden.
     let has_widget_state = ["sensitive", "focusable"].into_iter().all(|expected| {
-        node.states
+        states
             .iter()
             .any(|state| matches!(state, SemanticState::Other(value) if value == expected))
     });
-    let current_visible = node.states.iter().any(
+    let current_visible = states.iter().any(
         |state| matches!(state, SemanticState::Other(value) if value == "showing" || value == "visible"),
     );
     has_widget_state && !current_visible

@@ -1,0 +1,286 @@
+{
+  "schema": "gui2tui.public-validation-summary.v1",
+  "date": "2026-10-28",
+  "scope": "development regressions, not a benchmark success-rate estimate",
+  "publication": {
+    "repository": "Chenhzjs/GUI2TUI",
+    "branch": "main",
+    "Jev_client_changes_in_this_push": false,
+    "raw_requests_and_private_profiles_in_this_push": false
+  },
+  "controls": [
+    "Fresh HOME/DBus/Xvfb/app per task",
+    "Independent read-only public AX oracle, separate from model done",
+    "No oracle in model prompt or automatic task repair",
+    "Distinct versions and budgets are not pooled",
+    "No coordinates, DOM/CDP/UNO, screenshot semantics or backing-file writes"
+  ],
+  "model_trials": [
+    {
+      "condition": "initial-v5",
+      "task": "featherpad-lines",
+      "provider_calls": 2,
+      "input_tokens": 9458,
+      "cache_hit_tokens": 4352,
+      "cache_miss_tokens": 5106,
+      "model_done": false,
+      "independent_goal": false,
+      "status": "budget_limit"
+    },
+    {
+      "condition": "initial-v5",
+      "task": "l3afpad-text",
+      "provider_calls": 2,
+      "input_tokens": 6418,
+      "cache_hit_tokens": 3072,
+      "cache_miss_tokens": 3346,
+      "model_done": true,
+      "independent_goal": true,
+      "status": "model_completed"
+    },
+    {
+      "condition": "initial-v5",
+      "task": "two-fields",
+      "provider_calls": 2,
+      "input_tokens": 7984,
+      "cache_hit_tokens": 2816,
+      "cache_miss_tokens": 5168,
+      "model_done": true,
+      "independent_goal": true,
+      "status": "model_completed"
+    },
+    {
+      "condition": "view-delta-v6",
+      "task": "featherpad-lines",
+      "provider_calls": 3,
+      "input_tokens": 29237,
+      "cache_hit_tokens": 16000,
+      "cache_miss_tokens": 13237,
+      "model_done": false,
+      "independent_goal": true,
+      "status": "budget_limit"
+    },
+    {
+      "condition": "readback-v7",
+      "task": "featherpad-lines",
+      "provider_calls": 4,
+      "input_tokens": 20652,
+      "cache_hit_tokens": 12928,
+      "cache_miss_tokens": 7724,
+      "model_done": true,
+      "independent_goal": true,
+      "status": "model_completed"
+    }
+  ],
+  "all_model_usage": {
+    "calls": 13,
+    "prompt_tokens": 73749,
+    "completion_tokens": 283,
+    "prompt_cache_hit_tokens": 39168,
+    "prompt_cache_miss_tokens": 34581
+  },
+  "exact_message_prefix_checks": 8,
+  "zero_model_controls": [
+    "Two original public fields edited in one batch",
+    "Same-name replacement refused before later write",
+    "Unknown first action stops remainder",
+    "Malformed later parameter rejects whole batch before first write",
+    "Consumed original observation rejected",
+    "Same-name targets stay ambiguous",
+    "Protected payload absent",
+    "Real calculator exact public-name query",
+    "Real editor open_actions query filtering without GUI mutation"
+  ],
+  "tests": {
+    "Jev_local_only": {
+      "passed": 155,
+      "included_in_this_repository_push": false
+    },
+    "Rust_prior_targeted": {
+      "agent_and_navigation": 8,
+      "palette": 5
+    },
+    "Rust_publication_checks": {
+      "environment": "Linux arm64, Rust 1.88.0, offline locked dependencies",
+      "format": "passed",
+      "check_all_targets": "passed",
+      "test_all_targets": {
+        "passed": 440,
+        "failed": 0,
+        "ignored": 0
+      },
+      "clippy_all_targets_deny_warnings": "passed",
+      "headless_shell_and_help": "passed",
+      "documentation_links": "passed",
+      "intermittent_existing_test": {
+        "name": "runtime::artifacts::tests::continuing_handler_artifact_is_bounded_and_deferred_until_expiry",
+        "failed_runs": 1,
+        "targeted_recheck": "passed",
+        "subsequent_full_suite": "passed",
+        "source_modified": false,
+        "root_cause": "unconfirmed"
+      }
+    }
+  },
+  "limits": [
+    "No universal independent task oracle",
+    "No final-version pooled 3/3 claim",
+    "No established Contrast advantage over full relations",
+    "No human-efficiency or lower-model-capability claim"
+  ],
+  "working_tree_source_digests": {
+    "src/backend/atspi.rs": "7a9b676434c1401cdd27aad5857ae33083fa8c9c6552e49baa9ee3b08139fb49",
+    "src/backend/bootstrap.rs": "43d46bc77aba667dbce321229d3ad15a7208afc2349c3bb8efaa320f7d4cb117",
+    "src/backend/mod.rs": "71adec9ec596b6a103f6ae93aeaa86e604b0492f561fc0e78291b3272e9a36fe",
+    "src/backend/protocol_compat.rs": "09dde19c3438f2d532c5c107b17fdf9a5fbd2dea3b2ad1e2ee7a6d0b50afb865",
+    "src/backend/static_visual.rs": "2799c1735fd530b8d340a841136f60596bd658648f8d2b927c679c88c83849c0",
+    "src/backend/text_evidence.rs": "12af5cb7748ca95a5a81f9b67ce97062c7c535052555a5ae1c27f79eb7d338d7",
+    "src/bin/gui2tui-agent.rs": "edede26475a08f4487aea6adf8324ac5242c83ec25a0b930207184f7978d8655",
+    "src/bin/gui2tui-local.rs": "d26687b02814533781afed3134b72380607e71b432bdfe1b15d122998090f22f",
+    "src/bin/gui2tui.rs": "8b05b706a913a5404dd6b37ac453441043ff8eb37decbfe26ff6f27778c83981",
+    "src/capability/grounding.rs": "57d5716f413f288d88305d6fd50af38cc0f3eb4292a5cef1000e7f7da795a383",
+    "src/capability/self_description.rs": "b8d3d4ef6637c4d1433ba91589aa49f6b3fbab8bd54bd9d70a2ce0e74e474f0d",
+    "src/capability.rs": "4474a3efcd2432778d37c1923fc07ff98fae1e5b20f1af50db11befc0112c849",
+    "src/content/cache.rs": "5e253d781f0c9784c3b06962e2df62f27e8d34df9349d8fd6dccad6d224fd4b1",
+    "src/content/materialize.rs": "968deb43fa16dadb8c7f50e5593a95ae27d7114da749f7c815e7bc4748fb9799",
+    "src/content/mod.rs": "2fb3b481dffeef509139952ba214d9fb4743dc6336516f729a986b7bac7a2c84",
+    "src/content/model.rs": "b6f13af39f019329f3f3c32cef073f74e77a16f055ba98ef8392f895822f0b6e",
+    "src/content/runtime.rs": "99c9409142af6c1ae7d97634169a9e7a6d090aaacd6f2b69b4ea3535dce602b0",
+    "src/content/search.rs": "5b220a172210f3d495f0c283f6618661d93b7546aa56227390face0a05ded890",
+    "src/content/table.rs": "76203b129b8cfb036166c85aac07381a89b0b63a684ef5093dced6dbee9c7447",
+    "src/content/virtual_collection.rs": "bbe8a1a117d5a47ddc345da3915d0863cd8a85185389d8e29d2c7c8d9b191b7d",
+    "src/events.rs": "728076bbdb2feb45d3b04109b1e60ca3a887f2ec7ce2bd18a803c56eee63402f",
+    "src/inspect.rs": "9b6adb2b9104839ac088983a2960e4a34e3157dea86cdd4de3f978b822bfc709",
+    "src/lib.rs": "05c1146273c945f096bde1138a28912efd00af91ab816b2ebef8bc2c46f8b25e",
+    "src/main.rs": "b813c2e41d76550d60e663dacfef54701cb9d5c6499df425e035623c4465f989",
+    "src/modality/acquisition.rs": "f098fbc0d3d5f56e2b383e7b5634eae953759a933fb23e2d2d60395c4e76dcbb",
+    "src/modality/broker.rs": "6c24ac080d128dbf395bd0254c2eeebfed1bd1dcb9618d1fa40d97d49dc8ee53",
+    "src/modality/file.rs": "0fa7b135b06cded697ff891dfcb3649d53eb0984d979fe029d8ff5ebfc2ab180",
+    "src/modality/materialize.rs": "e10e950e6ab237d98757effc754b8b53fcd5f30d3852326a7af7890f3b290895",
+    "src/modality/mod.rs": "d6d38ed41aeebc586e3c863dbc7cf27e1b40716351096117e5ba53bd76a2641f",
+    "src/modality/model.rs": "d1784a5688c33eb077a3f10b35f17162626ba53d58f0ec5589f1eefd1885b5f7",
+    "src/modality/resolver.rs": "f94787a0457ef5211e9f6bd49ac354770ddd810e768013af01b27556a9e9ac4c",
+    "src/modality/runtime.rs": "a1995658ceeb67da15453f992ec018acd3f2d847d3d394e7ff4972e42dbe5a12",
+    "src/modality/transport.rs": "b9d2d2a02c1d205f62749572e6c970ad86839ff1a3825dc1d665b41e8629d938",
+    "src/modality/wire.rs": "55d2304e58712322335ca34b6f455c8187970dfb08db12d677c69940169aa31c",
+    "src/product/config.rs": "a9c4fe3c014cfdb0b1000efa0eb4f81b46439f267c7f22f097115118a4040ee6",
+    "src/product/doctor.rs": "f66e8e534ddf0f66cc357b67b231621934dd89ce653ad588c68243aa72729329",
+    "src/product/headless.rs": "1665465b63aef268a6cbde26cf213dac9d545e5a0f34b318a0832d48a2fb3bf7",
+    "src/product/launcher.rs": "2887eae2cc826d36fa62d44782610a390b55e5c500a6fe45df6f4ae076d75649",
+    "src/product/mod.rs": "7dcbd4606b99107ba5685bccad7d2f8365173ace203a1c03afaaf8433c3d0106",
+    "src/product/paths.rs": "2c8c7eb986e07e1de7f3d11bb5511af548cfa10cc12b0106786574f7fbdd1977",
+    "src/runtime/artifacts.rs": "d70f2d131546c546c80843115fb9eb9ed2a224858d22e99915d85fce8ad339a5",
+    "src/runtime/mod.rs": "0bb7cd51a760bd4c1fe9a326d9dc62e3344a3f53e69f3d6fdd5900b9e2f3c0d4",
+    "src/runtime/signals.rs": "0c696189f67b8ab57e7ed63ca87bbae40a51ab9f91c88607487f2b192d80c27d",
+    "src/semantic/cache.rs": "c6c45ff33571f2b7b9924b0489b29a9e505cac21ed04e4de71297c47b1e72908",
+    "src/semantic/graph.rs": "76c8b1904b3074a3b3a2435ba5c8873ee7d6adac45d07f43925ba3663c38976d",
+    "src/semantic/mod.rs": "57eba15b90ea2677f1b20e90ffa4d42dd02f39bf2fc26b942db5f85ec9bee72e",
+    "src/semantic/node.rs": "c56f639d27ac6c1106a76a6a104dd70fe5912e30934321f0f0eafd7b5989178b",
+    "src/semantic/relation.rs": "6d583b093c2ebc99d70b56af4914ee6b8939129c42e89a601d1b56be5f2364ff",
+    "src/semantic/snapshot.rs": "6c6fcf83e640d8fb5c62c5910d0859dba65050c5808ef5bdd5ad5a288e9050d2",
+    "src/transcompile/analyze.rs": "4f0c1c0ecdc68e94a64e5aba83c5aa78ca1c73eb46e5928c0d11e341ee02c98b",
+    "src/transcompile/choice.rs": "01989dc849e2a9d661948176653b2fd9e64dfaf41034394612ebb213cef59127",
+    "src/transcompile/command.rs": "4faa56ee991c0df9c845641e71db1bc88a220b61622edcf520abef5ab7fabf55",
+    "src/transcompile/content.rs": "d19f6a596e821ff8715bb74b7efbf3f9c986b2ab60798458c0e4db35ccc19062",
+    "src/transcompile/document/annotations.rs": "14f5d248144efc257b0a1947e8570d4f5d06781d83ffc5133de22d884abd0484",
+    "src/transcompile/document/tests.rs": "62fbef1379434e30b840769d3d90bc179ca08e4270ad11a04401ed177d991a6d",
+    "src/transcompile/document/wire.rs": "34d2f928473729979faed97d310388900850febd7618923a8aedb1ae9c190168",
+    "src/transcompile/document.rs": "80bc33306dfe7168510e9dc48fd5ee64e70b9e8f381bb4db05ac1da1cc59a882",
+    "src/transcompile/mod.rs": "5ae0fa4ebf2d3c340c90d05e6846d68bf4c420380dcb3773a115272db2f12d46",
+    "src/transcompile/presentation.rs": "de558421dd682f68fbbdfc0e7d4376591db36de63397b1a3e5d1e9ac3d05ec6a",
+    "src/transcompile/region.rs": "660c40e0f0b72a7a249ea08c119bad049bd429d49cb923b68c419745d64ecbd3",
+    "src/transcompile/scene.rs": "cbea0776c02d1814d99ba734fcd03a5010ba86c4c65f161c59a6ac40d7b672c7",
+    "src/transcompile/scope.rs": "d127d385fdf3e2fc2045e67e38d5d149a632f75bf064f165a27c4b2f824556f5",
+    "src/transcompile/spatial.rs": "521206d88abd3147a4a14c3723a5a3616e73950fc77ecc5122cd0cf4b2f4fcf0",
+    "src/tui/action.rs": "570c489e36d178d51709c2faf3128fefa50584352b8edc7308c7b60718676a16",
+    "src/tui/actuation.rs": "fb09bc44f09f315f3c36226afd4a4bc194da944d62b03f7245ba28e292110fee",
+    "src/tui/agent.rs": "e686e772dff1855245505d778bf5d9ea427d8c9424e21e08ddbbf22eb1561588",
+    "src/tui/agent_document.rs": "b5ecbb6ca52aa5588ab0048ebced6d1971e0f17b78cc58241463914365174b96",
+    "src/tui/agent_navigation.rs": "1f8dbb27a168b36b9fe14552057bd7bd6fa06060eb8920e4e347f155bc617f1e",
+    "src/tui/app.rs": "2b151fc7721367791864c9a033ce40db80ce6e6c20aae986bb97bca73f025116",
+    "src/tui/choice_overlay.rs": "dc4726b214f44b31cccc97884bbf9dd86f238414182abc98bbd54ab63a1485c7",
+    "src/tui/content_view.rs": "876563060094852a7ee90fa119eadc2d3036e7c6e9e89d80bd860fab1b0f3ad6",
+    "src/tui/edit.rs": "4a3af6f6ef85705725ba0b0d9be4c20ac1a97db99d635d850d303e871a72a23a",
+    "src/tui/external_text.rs": "f4c553ff3b0f7108a03c254dbeae800a01f731eef9b4f0930d50dcba8a35200b",
+    "src/tui/focus.rs": "80519edb736bef660eaeccd20107d8f6a69f8e8c09d99cb2e5fa62b2e80debd9",
+    "src/tui/help.rs": "69affe3543cfb025eb3d350312f1ffb8200885470a0337345be17317153a71fa",
+    "src/tui/hit_test.rs": "b74d37276245ddec83e5ea9ea3f64479dece98c563b2e5db2dcddf1dc1f454fc",
+    "src/tui/input.rs": "f839f35973e412b51b4cca6c3d839e2dd93a3b9db5e0175f90bc3cdf496cdac3",
+    "src/tui/mod.rs": "fd06c394c1864d660e708e2df2d2debde5866ce55059b143ad7c8f84ee68c4fa",
+    "src/tui/modality_view.rs": "06564a976411c3e4b9873bc678a3f71ba0bbb21fabb11f358050e7e8ae8da753",
+    "src/tui/observation.rs": "7b54a57ed3d065257af14e8dfbcfb47f3cac3d44abaa13d60aa6ee6ff74750f6",
+    "src/tui/operation.rs": "08153fe505f077a6d62c6e746dd08ddecdf7a948c5a8ba3b79015b5eed634429",
+    "src/tui/palette.rs": "53d2e944d4fb961e61fb7caf1c77790b57c226df4897ce2c551549d19111a712",
+    "src/tui/region_navigation.rs": "e4ef9275aab5766c2fe82194caaf6996dcf76db3a7663acd462b6e07f185b3a5",
+    "src/tui/renderer.rs": "f8445a5cd9ab61efccd62f9a8e5f4fa03eee7c47d00e3ecd75fe905da04beb15",
+    "src/tui/selector.rs": "5a47932c52b262880ac8f2502f1a6afad73673debf0e22597392eb48233a320e",
+    "src/tui/transition.rs": "df6dd5f69316defbd3413abf22680b03df199ebfe94be92c1c65f83460a7932f",
+    "src/tui/view_model.rs": "cd49ece53f1bb75a18674c5b8b2c3cd9781b5d68ace20bf8e0a9c2b7730ce6de"
+  },
+  "conditions": {
+    "initial-v5": {
+      "parameters": {
+        "prompt_mode": "incremental",
+        "input_encoding": "plain",
+        "max_calls": 4,
+        "max_actions": 4,
+        "max_prompt_tokens": 16000,
+        "max_input_tokens_per_task": 16000,
+        "combined_input_cap": 30000,
+        "max_output_tokens": 768,
+        "HTTP_retries": 0,
+        "human_handler": false,
+        "TUI": [
+          100,
+          30
+        ],
+        "repetitions": 1
+      },
+      "single_repetition": true,
+      "purpose": "engineering regression, not a fair method comparison"
+    },
+    "view-delta-v6": {
+      "parameters": {
+        "prompt_mode": "incremental",
+        "input_encoding": "plain",
+        "max_calls": 6,
+        "max_actions": 4,
+        "max_prompt_tokens": 16000,
+        "max_input_tokens_per_task": 40000,
+        "combined_input_cap": 40000,
+        "max_output_tokens": 768,
+        "HTTP_retries": 0,
+        "human_handler": false,
+        "TUI": [
+          100,
+          30
+        ],
+        "repetitions": 1
+      },
+      "single_repetition": true,
+      "purpose": "engineering regression, not a fair method comparison"
+    },
+    "readback-v7": {
+      "parameters": {
+        "prompt_mode": "incremental",
+        "input_encoding": "plain",
+        "max_calls": 5,
+        "max_actions": 4,
+        "max_prompt_tokens": 20000,
+        "max_input_tokens_per_task": 30000,
+        "combined_input_cap": 30000,
+        "max_output_tokens": 768,
+        "HTTP_retries": 0,
+        "human_handler": false,
+        "TUI": [
+          100,
+          30
+        ],
+        "repetitions": 1
+      },
+      "single_repetition": true,
+      "purpose": "engineering regression, not a fair method comparison"
+    }
+  },
+  "publication_source_adjustments": "Rustfmt and behavior-preserving lint cleanup only; no change to model-task goals or operation authority"
+}

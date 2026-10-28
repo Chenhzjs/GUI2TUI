@@ -39,10 +39,15 @@ session D-Bus or qualified Wayland compositor on the same host.
 
 ## What you can do
 
-For the current main-branch changes, capability boundaries and validation
-status, see [Current source status (2026-10-20)](docs/current-status-20261020.md).
-This includes the development JSONL Agent interface; it is separate from the
-human TUI and does not imply a new binary release.
+For earlier source status and capability boundaries, see [Current source status (2026-10-20)](docs/current-status-20261020.md).
+The development JSONL Agent interface now also offers an explicit shared Human
+TUI projection. These source capabilities do not imply a new binary release.
+
+For the current shared document, Human TUI projection, exact batch operations,
+and AI-assisted development results, see the [project report (Chinese, 2026-10-28)](docs/project-report-20261028.zh-CN.md)
+and [validation summary](docs/validation/agent-tui-20261028/summary.json).
+The report distinguishes Rust source features from the locally validated,
+separately maintained Jev client. These changes do not create a new binary release.
 
 The v1.0 baseline remains supported. The v1.1 line adds a richer semantic
 Surface and keeps user-visible operations tied to fresh authoritative GUI

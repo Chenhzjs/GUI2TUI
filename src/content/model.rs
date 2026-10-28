@@ -292,11 +292,45 @@ pub struct ContentCatalog {
 }
 
 impl ContentCatalog {
+    /// All public content roots, including non-showing and same-window roots.
+    /// Uses the existing model builder; primary selection remains a Human policy.
+    pub(crate) fn analyze_document(cache: &SemanticCache, roots: &[RuntimeNodeId]) -> Self {
+        let mut roots = roots.to_vec();
+        roots.sort();
+        let mut catalog = Self::default();
+        for root in roots {
+            let model = analyze_model(cache, root, ContentScopeClass::BackgroundSecondary);
+            for source in model.source_nodes() {
+                catalog.owning_root.entry(source).or_insert(root);
+            }
+            catalog.owning_root.insert(root, root);
+            catalog.by_root.insert(root, catalog.models.len());
+            catalog.models.push(model);
+        }
+        catalog
+    }
+
     pub fn analyze(cache: &SemanticCache) -> Self {
-        let mut candidates: Vec<_> = cache
+        Self::analyze_document(cache, &Self::document_roots(cache)).for_human(cache)
+    }
+
+    /// Logical source enumeration has no visibility, viewport or primary policy.
+    pub fn document_roots(cache: &SemanticCache) -> Vec<RuntimeNodeId> {
+        let mut roots: Vec<_> = cache
             .nodes()
-            .filter(|node| is_content_root(node))
+            .filter(|node| has_content_semantics(node))
             .map(|node| node.runtime_id)
+            .collect();
+        roots.sort();
+        roots
+    }
+
+    /// Human root selection over already organized models; never rebuild blocks.
+    pub fn for_human(&self, cache: &SemanticCache) -> Self {
+        let mut candidates: Vec<_> = self
+            .models()
+            .filter(|model| cache.node(model.root).is_some_and(is_content_root))
+            .map(|model| model.root)
             .collect();
         candidates.sort();
         let all_candidates: std::collections::HashSet<_> = candidates.iter().copied().collect();
@@ -328,27 +362,37 @@ impl ContentCatalog {
             (active, descendant_count(cache, *candidate))
         });
 
+        // Primary/visible selection controls presentation only. Every model
+        // stays addressable so a secondary Document's Reader binding is valid.
+        let mut all_roots: Vec<_> = self.models().map(|model| model.root).collect();
+        all_roots.sort();
         let mut models = Vec::new();
         let mut by_root = HashMap::new();
         let mut owning_root = HashMap::new();
-        for root in candidates {
+        for root in all_roots {
             let scope = nearest_content_scope(cache, root).unwrap_or(root);
             let scope_class = if Some(root) == primary {
                 ContentScopeClass::Primary
-            } else if cache.node(scope).is_some_and(|node| {
-                node.role == SemanticRole::Dialog
-                    && (has_state(node, "active") || has_state(node, "focused"))
-            }) {
+            } else if selected.contains(&root)
+                && cache.node(scope).is_some_and(|node| {
+                    node.role == SemanticRole::Dialog
+                        && (has_state(node, "active") || has_state(node, "focused"))
+                })
+            {
                 ContentScopeClass::ActiveTransient
             } else {
                 ContentScopeClass::BackgroundSecondary
             };
-            let model = analyze_model(cache, root, scope_class);
+            let mut model = self
+                .get(root)
+                .expect("selected logical content root")
+                .clone();
+            model.scope_class = scope_class;
             let index = models.len();
             for source in model.source_nodes() {
                 owning_root.entry(source).or_insert(root);
             }
-            owning_root.insert(root, root);
+            owning_root.entry(root).or_insert(root);
             by_root.insert(root, index);
             models.push(model);
         }
@@ -413,15 +457,18 @@ fn descendant_count(cache: &SemanticCache, root: RuntimeNodeId) -> usize {
 
 fn is_content_root(node: &CachedSemanticNode) -> bool {
     let active_or_standalone = node.parent.is_none() || has_state(node, "showing");
-    active_or_standalone
-        && (node.role == SemanticRole::Document
-            || (matches!(node.role, SemanticRole::Text | SemanticRole::TextInput)
-                && node.text_input_kind != Some(TextInputKind::Password)
-                && has_interface(node, "Text")
-                && (node.role == SemanticRole::Text || has_state(node, "multi-line"))
-                && (is_readable_text(node)
-                    || node.children.is_empty()
-                    || node.name.as_deref().is_some_and(|name| name.len() > 80))))
+    active_or_standalone && has_content_semantics(node)
+}
+
+fn has_content_semantics(node: &CachedSemanticNode) -> bool {
+    node.role == SemanticRole::Document
+        || (matches!(node.role, SemanticRole::Text | SemanticRole::TextInput)
+            && node.text_input_kind != Some(TextInputKind::Password)
+            && has_interface(node, "Text")
+            && (node.role == SemanticRole::Text || has_state(node, "multi-line"))
+            && (is_readable_text(node)
+                || node.children.is_empty()
+                || node.name.as_deref().is_some_and(|name| name.len() > 80)))
 }
 
 fn ancestors(cache: &SemanticCache, id: RuntimeNodeId) -> impl Iterator<Item = RuntimeNodeId> + '_ {

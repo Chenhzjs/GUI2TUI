@@ -116,6 +116,50 @@ pub struct ContentRuntime {
 impl ContentRuntime {
     pub fn new(semantic: &SemanticCache, budget: ContentCacheBudget) -> Self {
         let catalog = ContentCatalog::analyze(semantic);
+        Self::from_catalog(semantic, budget, catalog)
+    }
+
+    pub fn from_catalog(
+        semantic: &SemanticCache,
+        budget: ContentCacheBudget,
+        catalog: ContentCatalog,
+    ) -> Self {
+        let tables = analyze_tables(semantic);
+        let collections = analyze_virtual_collections(semantic);
+        Self::from_models(semantic, budget, catalog, tables, collections)
+    }
+
+    pub fn from_shared(
+        semantic: &SemanticCache,
+        budget: ContentCacheBudget,
+        catalog: ContentCatalog,
+        tables: &[super::SemanticTableStructure],
+        collections: &[super::VirtualCollectionStructure],
+    ) -> Self {
+        Self::from_models(
+            semantic,
+            budget,
+            catalog,
+            tables
+                .iter()
+                .cloned()
+                .map(super::SemanticTableModel::from_structure)
+                .collect(),
+            collections
+                .iter()
+                .cloned()
+                .map(super::VirtualCollectionModel::from_structure)
+                .collect(),
+        )
+    }
+
+    fn from_models(
+        semantic: &SemanticCache,
+        budget: ContentCacheBudget,
+        catalog: ContentCatalog,
+        tables: Vec<super::SemanticTableModel>,
+        virtual_collections: Vec<super::VirtualCollectionModel>,
+    ) -> Self {
         let next_dynamic_block_id = catalog
             .models()
             .flat_map(|model| model.blocks.iter())
@@ -127,8 +171,8 @@ impl ContentRuntime {
             catalog,
             cache: ContentCache::new(budget),
             next_dynamic_block_id,
-            virtual_collections: analyze_virtual_collections(semantic),
-            tables: analyze_tables(semantic),
+            virtual_collections,
+            tables,
             text_capabilities: declared_text_capabilities(semantic),
             next_search_session_id: 1,
             patch_metrics: ContentPatchMetrics::default(),
@@ -226,12 +270,57 @@ impl ContentRuntime {
         }
         self.pending_sources.clear();
         self.structural_rebuild_required = false;
+        self.adopt_catalog(semantic, ContentCatalog::analyze(semantic));
+        self.virtual_collections = analyze_virtual_collections(semantic);
+        self.tables = analyze_tables(semantic);
+    }
+
+    /// Reuse the shared document's organized models while retaining Reader cache
+    /// invalidation and capability bookkeeping. Selection is a Human projection.
+    pub fn adopt_document(
+        &mut self,
+        semantic: &SemanticCache,
+        catalog: &ContentCatalog,
+        tables: &[super::SemanticTableStructure],
+        collections: &[super::VirtualCollectionStructure],
+    ) {
+        self.pending_sources.clear();
+        self.structural_rebuild_required = false;
+        // A newly collected complete document supersedes older Reader ranges.
+        // Unknown sources can still use the ordinary Human materialization cache.
+        let fresh: HashSet<_> = catalog
+            .models()
+            .flat_map(|model| model.blocks.iter())
+            .filter(|block| {
+                matches!(
+                    block.text,
+                    TextContentState::Loaded(_) | TextContentState::Unavailable
+                )
+            })
+            .map(|block| block.source)
+            .collect();
+        for source in fresh {
+            self.cache.invalidate_source(source);
+        }
+        self.adopt_catalog(semantic, catalog.for_human(semantic));
+        self.tables = tables
+            .iter()
+            .cloned()
+            .map(super::SemanticTableModel::from_structure)
+            .collect();
+        self.virtual_collections = collections
+            .iter()
+            .cloned()
+            .map(super::VirtualCollectionModel::from_structure)
+            .collect();
+    }
+
+    fn adopt_catalog(&mut self, semantic: &SemanticCache, replacement: ContentCatalog) {
         let previous_ids: std::collections::HashSet<_> = self
             .catalog
             .models()
             .flat_map(|model| model.blocks.ids())
             .collect();
-        let replacement = ContentCatalog::analyze(semantic);
         let live_sources: std::collections::HashSet<_> = replacement
             .models()
             .flat_map(SemanticContentModel::source_nodes)
@@ -246,8 +335,6 @@ impl ContentRuntime {
             self.cache.invalidate_source(source);
         }
         self.catalog = replacement;
-        self.virtual_collections = analyze_virtual_collections(semantic);
-        self.tables = analyze_tables(semantic);
         self.text_capabilities
             .retain(|source, _| semantic.node(*source).is_some());
         for (source, status) in declared_text_capabilities(semantic) {
@@ -646,6 +733,51 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn complete_document_text_supersedes_old_reader_cache_without_an_event() {
+        let mut document = node(1, SemanticRole::Document, "Doc");
+        document
+            .children
+            .push(node(2, SemanticRole::Paragraph, "Alpha"));
+        let semantic = SemanticCache::from_snapshot(document).unwrap();
+        let source = semantic
+            .nodes()
+            .find(|node| node.name.as_deref() == Some("Alpha"))
+            .unwrap()
+            .runtime_id;
+        let mut runtime = ContentRuntime::new(&semantic, ContentCacheBudget::default());
+        let root = runtime.catalog().models().next().unwrap().root;
+        let block = runtime
+            .model(root)
+            .unwrap()
+            .blocks
+            .blocks_for_source(source)[0];
+        runtime.cache.insert(LoadedContentRange {
+            block_id: block,
+            key: ContentRangeKey {
+                source,
+                start: 0,
+                end: 5,
+            },
+            text: "STALE".into(),
+        });
+        let mut fresh = runtime.catalog().clone();
+        let index = fresh.by_root_index(root).unwrap();
+        fresh
+            .model_mut(index)
+            .unwrap()
+            .blocks
+            .get_mut(block)
+            .unwrap()
+            .text = TextContentState::Loaded("FRESH".into());
+        runtime.adopt_document(&semantic, &fresh, &[], &[]);
+        assert_eq!(runtime.cache.metrics().ranges, 0);
+        assert_eq!(
+            runtime.displayed_block_text(root, block).as_deref(),
+            Some("FRESH")
+        );
     }
 
     #[test]

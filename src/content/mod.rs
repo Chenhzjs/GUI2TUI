@@ -1,4 +1,5 @@
 mod cache;
+pub mod materialize;
 mod model;
 mod runtime;
 mod search;
@@ -23,7 +24,11 @@ pub use search::{
     ContentSearchResult, ContentSearchSession, SearchBudget, SearchProgress, SearchSessionId,
     SearchState, search_indexed_content,
 };
-pub use table::{SemanticTableCell, SemanticTableModel, TablePosition};
+pub use table::{
+    SemanticTableCell, SemanticTableModel, SemanticTableStructure, TablePosition,
+    TablePositionRead, TablePositionSource,
+};
 pub use virtual_collection::{
-    VirtualCollectionModel, analyze_virtual_collections, format_virtual_collections,
+    VirtualCollectionModel, VirtualCollectionStructure, analyze_virtual_collections,
+    format_virtual_collections,
 };

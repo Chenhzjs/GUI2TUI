@@ -394,6 +394,8 @@ pub struct DebugInfo {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TreeTruncation {
+    /// Provider-managed logical descendants are not fully realized.
+    ManagedDescendants,
     MaxDepth {
         limit: usize,
     },
@@ -404,15 +406,25 @@ pub enum TreeTruncation {
         operation: &'static str,
         node_id: String,
     },
+    ReadFailure {
+        operation: &'static str,
+        node_id: String,
+    },
 }
 
 impl fmt::Display for TreeTruncation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ManagedDescendants => {
+                write!(f, "tree partial: provider manages unrealized descendants")
+            }
             Self::MaxDepth { limit } => write!(f, "tree truncated: max depth={limit}"),
             Self::MaxNodes { limit } => write!(f, "tree truncated: max nodes={limit}"),
             Self::OperationTimeout { operation, node_id } => {
                 write!(f, "tree incomplete: {operation} timed out on {node_id}")
+            }
+            Self::ReadFailure { operation, node_id } => {
+                write!(f, "tree incomplete: {operation} unavailable on {node_id}")
             }
         }
     }

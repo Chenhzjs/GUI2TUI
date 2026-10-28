@@ -1,5 +1,5 @@
 use crate::{
-    semantic::{BackendLocator, RuntimeNodeId},
+    semantic::{BackendLocator, RuntimeNodeId, SemanticState},
     transcompile::{SceneElement, SceneElementId, TuiScene},
 };
 
@@ -45,6 +45,19 @@ impl FocusModel {
         });
         self.current = exact_locator
             .or(presentation_runtime.flatten())
+            .or_else(|| {
+                focusable.iter().copied().find(|id| {
+                    scene
+                        .element(*id)
+                        .and_then(|e| e.binding.as_ref())
+                        .is_some_and(|b| {
+                            scene.node_metadata(b.runtime_id).is_some_and(|n| {
+                                n.backend_locator == b.backend_locator
+                                    && n.states.contains(&SemanticState::Focused)
+                            })
+                        })
+                })
+            })
             .or_else(|| focusable.first().copied());
     }
 
@@ -158,6 +171,27 @@ mod tests {
         assert_eq!(focus.current(), Some(button));
         focus.previous(&scene);
         assert_eq!(focus.current(), Some(checkbox));
+    }
+
+    #[test]
+    fn initial_focus_uses_public_focus_without_overriding_exact_tui_selection() {
+        let mut root = node(0, SemanticRole::Window);
+        let first = node(1, SemanticRole::Button);
+        let mut second = node(2, SemanticRole::Button);
+        second.states.push(SemanticState::Focused);
+        root.children = vec![first, second];
+        let scene = compile_legacy_scene(&root);
+        let mut focus = FocusModel::default();
+        focus.reconcile(&scene, None);
+        assert_eq!(
+            focus.current(),
+            scene.scene_id_for_runtime(RuntimeNodeId::new(2))
+        );
+        focus.reconcile(&scene, Some(&BackendLocator::new(":1.2", "/node/1")));
+        assert_eq!(
+            focus.current(),
+            scene.scene_id_for_runtime(RuntimeNodeId::new(1))
+        );
     }
 
     #[test]

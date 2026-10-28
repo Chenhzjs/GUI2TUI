@@ -476,7 +476,9 @@ impl SceneCompiler<'_> {
             }
         } else {
             match node.role {
-                SemanticRole::Button | SemanticRole::Link => SceneElementKind::Button { label },
+                SemanticRole::Button | SemanticRole::Link | SemanticRole::Table => {
+                    SceneElementKind::Button { label }
+                }
                 SemanticRole::ToggleButton => SceneElementKind::Toggle {
                     label,
                     pressed: node.states.contains(&SemanticState::Pressed)
@@ -699,6 +701,33 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn anonymous_public_table_keeps_a_visible_reader_entry_and_exact_binding() {
+        let mut root = node(0, SemanticRole::Window, "Workspace");
+        let mut table = node(1, SemanticRole::Table, "");
+        table.states = vec![
+            SemanticState::Enabled,
+            SemanticState::Other("showing".into()),
+        ];
+        let locator = table.backend_locator.clone();
+        root.children.push(table);
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        let entry = scene
+            .elements
+            .iter()
+            .find(|element| element.sources == [RuntimeNodeId::new(1)])
+            .unwrap();
+        assert!(matches!(entry.kind, SceneElementKind::Button { .. }));
+        assert_eq!(entry.label(), "Table");
+        assert!(entry.is_focusable());
+        let binding = entry.binding.as_ref().unwrap();
+        assert_eq!(binding.backend_locator, locator);
+        assert_eq!(binding.semantic_role, SemanticRole::Table);
+        assert_eq!(binding.capability, InteractionCapability::BrowseContent);
+        assert_eq!(binding.default_intent, UiIntent::BeginRead);
+        assert!(binding.actions.is_empty());
     }
 
     #[test]

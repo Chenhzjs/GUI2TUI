@@ -1,17 +1,41 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Deref;
 
 use crate::semantic::{
     CollectionCompleteness, RuntimeNodeId, SemanticCache, SemanticRole, collection_completeness,
 };
 
+/// Read evidence supplied by the observation owner, never by terminal layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TablePositionRead {
+    Known {
+        row: usize,
+        column: usize,
+        row_span: Option<usize>,
+        column_span: Option<usize>,
+    },
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TablePositionSource {
+    PublicTableCell,
+    SemanticRowOrder,
+    NotRequested,
+    Unavailable,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SemanticTableCell {
     pub source: RuntimeNodeId,
-    pub row: usize,
-    pub column: usize,
+    pub row: Option<usize>,
+    pub column: Option<usize>,
+    pub position_source: TablePositionSource,
     pub label: String,
-    pub row_span: usize,
-    pub column_span: usize,
+    pub label_source: Option<RuntimeNodeId>,
+    // Unknown extents remain None; a layout unit is not a public span.
+    pub row_span: Option<usize>,
+    pub column_span: Option<usize>,
     pub selected: bool,
 }
 
@@ -22,8 +46,9 @@ pub struct TablePosition {
     pub cell: Option<RuntimeNodeId>,
 }
 
+/// Shared logical structure. Human navigation state is deliberately absent.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SemanticTableModel {
+pub struct SemanticTableStructure {
     pub owner: RuntimeNodeId,
     pub rows: Option<usize>,
     pub columns: Option<usize>,
@@ -31,26 +56,13 @@ pub struct SemanticTableModel {
     pub column_headers: Vec<String>,
     pub completeness: CollectionCompleteness,
     pub row_selection: bool,
-    pub position: TablePosition,
 }
 
-impl SemanticTableModel {
-    pub fn analyze(cache: &SemanticCache, owner: RuntimeNodeId) -> Option<Self> {
-        Self::analyze_inner(cache, owner, None)
-    }
-
-    pub fn analyze_with_positions(
+impl SemanticTableStructure {
+    pub fn analyze(
         cache: &SemanticCache,
         owner: RuntimeNodeId,
-        current_positions: &HashMap<RuntimeNodeId, (usize, usize)>,
-    ) -> Option<Self> {
-        Self::analyze_inner(cache, owner, Some(current_positions))
-    }
-
-    fn analyze_inner(
-        cache: &SemanticCache,
-        owner: RuntimeNodeId,
-        current_positions: Option<&HashMap<RuntimeNodeId, (usize, usize)>>,
+        positions: &BTreeMap<RuntimeNodeId, TablePositionRead>,
     ) -> Option<Self> {
         let table = cache.node(owner)?;
         if table.role != SemanticRole::Table {
@@ -67,39 +79,43 @@ impl SemanticTableModel {
                 let row = realized_rows;
                 realized_rows += 1;
                 for (column, cell_id) in node.children.iter().enumerate() {
-                    append_cell(cache, *cell_id, row, column, &mut cells, &mut headers);
+                    append_cell(
+                        cache,
+                        *cell_id,
+                        Some((row, column)),
+                        positions,
+                        &mut cells,
+                        &mut headers,
+                    );
                 }
             } else if node.role == SemanticRole::Cell {
-                if let Some((row, column)) = current_positions
-                    .and_then(|positions| positions.get(child))
-                    .copied()
-                {
-                    realized_rows = realized_rows.max(row + 1);
-                    append_cell(cache, *child, row, column, &mut cells, &mut headers);
-                } else if current_positions.is_none() {
-                    let index = cells.len();
-                    append_cell(cache, *child, 0, index, &mut cells, &mut headers);
-                }
+                append_cell(cache, *child, None, positions, &mut cells, &mut headers);
             }
         }
-        let columns = cells
-            .iter()
-            .map(|cell| cell.column + 1)
-            .max()
-            .filter(|_| !cells.is_empty());
         let completeness = collection_completeness(table);
-        let row_selection = table
-            .capabilities
-            .contains(&crate::semantic::SemanticCapability::SelectCurrentTableRow);
-        let rows = (completeness == CollectionCompleteness::Complete)
-            .then_some(realized_rows.max(usize::from(!cells.is_empty())));
-        let position = cells
-            .first()
-            .map_or(TablePosition::default(), |cell| TablePosition {
-                row: cell.row,
-                column: cell.column,
-                cell: Some(cell.source),
-            });
+        // A realized extent is not a logical total for a partial collection.
+        let positioned = cells
+            .iter()
+            .all(|cell| cell.row.is_some() && cell.column.is_some());
+        let complete = completeness == CollectionCompleteness::Complete
+            && positioned
+            && cells
+                .iter()
+                .all(|c| c.row_span.is_some() && c.column_span.is_some());
+        let rows = complete.then(|| {
+            cells
+                .iter()
+                .filter_map(|c| c.row.zip(c.row_span).map(|(r, s)| r + s))
+                .max()
+                .unwrap_or(0)
+        });
+        let columns = complete.then(|| {
+            cells
+                .iter()
+                .filter_map(|c| c.column.zip(c.column_span).map(|(c, s)| c + s))
+                .max()
+                .unwrap_or(0)
+        });
         Some(Self {
             owner,
             rows,
@@ -107,17 +123,112 @@ impl SemanticTableModel {
             cells,
             column_headers: headers,
             completeness,
-            row_selection,
-            position,
+            row_selection: table
+                .capabilities
+                .contains(&crate::semantic::SemanticCapability::SelectCurrentTableRow),
         })
+    }
+}
+
+/// Human cursor over a copy of the shared structure; no second organizer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticTableModel {
+    pub structure: SemanticTableStructure,
+    pub position: TablePosition,
+}
+
+impl Deref for SemanticTableModel {
+    type Target = SemanticTableStructure;
+    fn deref(&self) -> &Self::Target {
+        &self.structure
+    }
+}
+
+impl SemanticTableModel {
+    pub fn from_structure(structure: SemanticTableStructure) -> Self {
+        let position = structure
+            .cells
+            .first()
+            .map_or(TablePosition::default(), |cell| TablePosition {
+                row: cell.row.unwrap_or(0),
+                column: cell.column.unwrap_or(0),
+                cell: Some(cell.source),
+            });
+        Self {
+            structure,
+            position,
+        }
+    }
+
+    pub fn analyze(cache: &SemanticCache, owner: RuntimeNodeId) -> Option<Self> {
+        SemanticTableStructure::analyze(cache, owner, &BTreeMap::new()).map(Self::from_structure)
+    }
+
+    pub fn analyze_with_positions(
+        cache: &SemanticCache,
+        owner: RuntimeNodeId,
+        current_positions: &HashMap<RuntimeNodeId, (usize, usize)>,
+    ) -> Option<Self> {
+        let positions = current_positions
+            .iter()
+            .map(|(id, (row, column))| {
+                (
+                    *id,
+                    TablePositionRead::Known {
+                        row: *row,
+                        column: *column,
+                        row_span: None,
+                        column_span: None,
+                    },
+                )
+            })
+            .collect();
+        SemanticTableStructure::analyze(cache, owner, &positions).map(Self::from_structure)
     }
 
     pub fn move_by(&mut self, row_delta: isize, column_delta: isize) {
         if self.cells.is_empty() {
             return;
         }
-        let max_row = self.cells.iter().map(|cell| cell.row).max().unwrap_or(0);
-        let max_column = self.cells.iter().map(|cell| cell.column).max().unwrap_or(0);
+        // Missing positions do not make exposed cells disappear. Navigate their
+        // stable structural order without asserting a GUI row or column.
+        if self
+            .cells
+            .iter()
+            .any(|cell| cell.row.is_none() || cell.column.is_none())
+        {
+            let current = self
+                .cells
+                .iter()
+                .position(|c| Some(c.source) == self.position.cell)
+                .unwrap_or(0);
+            let next = current
+                .saturating_add_signed(if row_delta != 0 {
+                    row_delta
+                } else {
+                    column_delta
+                })
+                .min(self.cells.len() - 1);
+            let cell = &self.cells[next];
+            self.position = TablePosition {
+                row: cell.row.unwrap_or(0),
+                column: cell.column.unwrap_or(0),
+                cell: Some(cell.source),
+            };
+            return;
+        }
+        let max_row = self
+            .cells
+            .iter()
+            .filter_map(|cell| cell.row)
+            .max()
+            .unwrap_or(0);
+        let max_column = self
+            .cells
+            .iter()
+            .filter_map(|cell| cell.column)
+            .max()
+            .unwrap_or(0);
         let row = self
             .position
             .row
@@ -131,13 +242,13 @@ impl SemanticTableModel {
         let cell = self
             .cells
             .iter()
-            .find(|cell| cell.row == row && cell.column == column)
-            .or_else(|| self.cells.iter().find(|cell| cell.row == row))
+            .find(|cell| cell.row == Some(row) && cell.column == Some(column))
+            .or_else(|| self.cells.iter().find(|cell| cell.row == Some(row)))
             .or_else(|| self.cells.first());
         if let Some(cell) = cell {
             self.position = TablePosition {
-                row: cell.row,
-                column: cell.column,
+                row: cell.row.unwrap_or(0),
+                column: cell.column.unwrap_or(0),
                 cell: Some(cell.source),
             };
         }
@@ -147,8 +258,8 @@ impl SemanticTableModel {
 fn append_cell(
     cache: &SemanticCache,
     id: RuntimeNodeId,
-    row: usize,
-    column: usize,
+    semantic_position: Option<(usize, usize)>,
+    positions: &BTreeMap<RuntimeNodeId, TablePositionRead>,
     cells: &mut Vec<SemanticTableCell>,
     headers: &mut Vec<String>,
 ) {
@@ -156,30 +267,62 @@ fn append_cell(
     if node.role != SemanticRole::Cell {
         return;
     }
-    let label = cell_label(cache, id).unwrap_or_else(|| "[empty]".to_owned());
+    let (position, position_source) = match positions.get(&id) {
+        Some(TablePositionRead::Known { row, column, .. }) => {
+            (Some((*row, *column)), TablePositionSource::PublicTableCell)
+        }
+        Some(TablePositionRead::Unavailable) => (
+            semantic_position,
+            if semantic_position.is_some() {
+                TablePositionSource::SemanticRowOrder
+            } else {
+                TablePositionSource::Unavailable
+            },
+        ),
+        None => (
+            semantic_position,
+            if semantic_position.is_some() {
+                TablePositionSource::SemanticRowOrder
+            } else {
+                TablePositionSource::NotRequested
+            },
+        ),
+    };
+    let label = cell_label(cache, id);
+    let label_source = label.as_ref().map(|(id, _)| *id);
+    let label = label.map_or_else(|| "[empty]".to_owned(), |(_, label)| label);
     if node.debug.atspi_role.contains("header") {
         headers.push(label.clone());
     }
     cells.push(SemanticTableCell {
         source: id,
-        row,
-        column,
+        row: position.map(|p| p.0),
+        column: position.map(|p| p.1),
+        position_source,
         label,
-        row_span: 1,
-        column_span: 1,
+        label_source,
+        row_span: match positions.get(&id) {
+            Some(TablePositionRead::Known { row_span, .. }) => *row_span,
+            _ => None,
+        },
+        column_span: match positions.get(&id) {
+            Some(TablePositionRead::Known { column_span, .. }) => *column_span,
+            _ => None,
+        },
         selected: node
             .states
             .contains(&crate::semantic::SemanticState::Selected),
     });
 }
 
-fn cell_label(cache: &SemanticCache, id: RuntimeNodeId) -> Option<String> {
+fn cell_label(cache: &SemanticCache, id: RuntimeNodeId) -> Option<(RuntimeNodeId, String)> {
     let node = cache.node(id)?;
     node.name
         .clone()
         .filter(|label| !label.trim().is_empty())
         .or_else(|| node.value.clone())
         .filter(|label| !label.trim().is_empty())
+        .map(|label| (id, label))
         .or_else(|| {
             node.children
                 .iter()
@@ -222,7 +365,7 @@ mod tests {
         let cache = SemanticCache::from_snapshot(table).unwrap();
         let mut model = SemanticTableModel::analyze(&cache, cache.root_id()).unwrap();
         assert_eq!(model.rows, None);
-        assert_eq!(model.columns, Some(2));
+        assert_eq!(model.columns, None);
         model.move_by(0, 1);
         assert_eq!(
             model.position.cell,
@@ -271,7 +414,10 @@ mod tests {
 
         assert_eq!(model.cells.len(), 3);
         assert_eq!(model.cells[0].label, "alpha.txt");
-        assert_eq!((model.cells[2].row, model.cells[2].column), (1, 0));
+        assert_eq!(
+            (model.cells[2].row, model.cells[2].column),
+            (Some(1), Some(0))
+        );
         assert_eq!(model.cells[2].label, "beta.txt");
     }
 }

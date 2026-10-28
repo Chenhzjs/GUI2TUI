@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{
     content::{
-        ContentBlockId, ContentSearchResult, ContentSearchSession, ReaderBlock, SearchState,
-        SemanticTableModel, VirtualCollectionModel,
+        ContentBlockId, ContentBlockKind, ContentSearchResult, ContentSearchSession, ReaderBlock,
+        SearchState, SemanticTableModel, VirtualCollectionModel,
     },
     semantic::RuntimeNodeId,
     transcompile::SceneElementId,
@@ -24,6 +24,7 @@ pub struct ContentViewState {
     pub position: ContentBlockId,
     pub mode: ContentViewMode,
     pub reader_blocks: Vec<ReaderBlock>,
+    pub reader_scroll: usize,
     pub outline_selected: usize,
     pub query: String,
     pub results: Vec<ContentSearchResult>,
@@ -41,6 +42,7 @@ pub enum ContentViewCommand {
     Continue,
     Close,
     MoveBlocks(isize),
+    ScrollReader(isize),
     OpenOutline,
     OpenSearch,
     OutlineMove(isize),
@@ -68,6 +70,7 @@ impl ContentViewState {
             position,
             mode: ContentViewMode::Reader,
             reader_blocks: Vec::new(),
+            reader_scroll: 0,
             outline_selected: 0,
             query: String::new(),
             results: Vec::new(),
@@ -91,6 +94,7 @@ impl ContentViewState {
             position: ContentBlockId::new(0),
             mode: ContentViewMode::Table,
             reader_blocks: Vec::new(),
+            reader_scroll: 0,
             outline_selected: 0,
             query: String::new(),
             results: Vec::new(),
@@ -111,10 +115,10 @@ impl ContentViewState {
         match self.mode {
             ContentViewMode::Reader => match event.code {
                 KeyCode::Esc => ContentViewCommand::Close,
-                KeyCode::Up | KeyCode::Char('k') => ContentViewCommand::MoveBlocks(-1),
-                KeyCode::Down | KeyCode::Char('j') => ContentViewCommand::MoveBlocks(1),
-                KeyCode::PageUp => ContentViewCommand::MoveBlocks(-10),
-                KeyCode::PageDown => ContentViewCommand::MoveBlocks(10),
+                KeyCode::Up | KeyCode::Char('k') => ContentViewCommand::ScrollReader(-1),
+                KeyCode::Down | KeyCode::Char('j') => ContentViewCommand::ScrollReader(1),
+                KeyCode::PageUp => ContentViewCommand::ScrollReader(-10),
+                KeyCode::PageDown => ContentViewCommand::ScrollReader(10),
                 KeyCode::Char('o') => ContentViewCommand::OpenOutline,
                 KeyCode::Char('/') => ContentViewCommand::OpenSearch,
                 KeyCode::Enter => ContentViewCommand::OpenStructure,
@@ -209,6 +213,26 @@ impl ContentViewState {
     }
 }
 
+/// Exact terminal-cell wrapping shared by Reader scrolling and Human rendering.
+pub(crate) fn reader_lines(blocks: &[ReaderBlock], width: u16) -> Vec<String> {
+    blocks
+        .iter()
+        .flat_map(|block| {
+            let prefix = match block.kind {
+                ContentBlockKind::Heading { .. } => "# ",
+                ContentBlockKind::Link => "[Link] ",
+                ContentBlockKind::ListItem => "• ",
+                ContentBlockKind::Quote => "> ",
+                ContentBlockKind::OpaqueContent(_) => "[Media] ",
+                _ => "",
+            };
+            let mut lines = super::palette::detail_lines(&format!("{prefix}{}", block.text), width);
+            lines.push(String::new());
+            lines
+        })
+        .collect()
+}
+
 pub fn move_index(current: usize, delta: isize, len: usize) -> usize {
     if len == 0 {
         return 0;
@@ -238,6 +262,10 @@ mod tests {
             ContentViewCommand::Continue
         );
         assert_eq!(state.mode, ContentViewMode::Reader);
+        assert_eq!(
+            state.handle_key(key(KeyCode::PageDown)),
+            ContentViewCommand::ScrollReader(10)
+        );
         state.mode = ContentViewMode::Search;
         assert_eq!(
             state.handle_key(key(KeyCode::Char('界'))),
@@ -290,13 +318,15 @@ mod tests {
             ContentViewState::new(RuntimeNodeId::new(1), ContentBlockId::new(1), None, None);
         state.mode = ContentViewMode::Table;
         state.table = Some(SemanticTableModel {
-            owner: RuntimeNodeId::new(1),
-            rows: Some(1),
-            columns: Some(1),
-            cells: Vec::new(),
-            column_headers: Vec::new(),
-            completeness: crate::semantic::CollectionCompleteness::Complete,
-            row_selection: true,
+            structure: crate::content::SemanticTableStructure {
+                owner: RuntimeNodeId::new(1),
+                rows: Some(1),
+                columns: Some(1),
+                cells: Vec::new(),
+                column_headers: Vec::new(),
+                completeness: crate::semantic::CollectionCompleteness::Complete,
+                row_selection: true,
+            },
             position: Default::default(),
         });
         assert_eq!(

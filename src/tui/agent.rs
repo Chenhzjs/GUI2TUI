@@ -1,7 +1,9 @@
 //! Native observation/dispatch boundary for external decision clients.
 //! Model output is an observation-local operation ID, never an AT-SPI command.
 use super::*;
-use crate::semantic::{CachedSemanticNode, TextInputKind};
+use crate::semantic::CachedSemanticNode;
+#[cfg(test)]
+use crate::semantic::TextInputKind;
 use crate::tui::palette::PublicOperation;
 use serde_json::{Value, json};
 
@@ -37,7 +39,9 @@ pub struct AgentObservation {
     created: Instant,
 }
 
+#[derive(Clone)]
 struct AgentCandidate {
+    id: String,
     target: RuntimeNodeId,
     locator: BackendLocator,
     operation: PublicOperation,
@@ -45,16 +49,30 @@ struct AgentCandidate {
     precondition: Value,
 }
 
-fn secret_node(cache: &SemanticCache, node: &CachedSemanticNode) -> bool {
-    let mut current = Some(node.runtime_id);
-    while let Some(id) = current {
-        let Some(node) = cache.node(id) else { break };
-        if node.text_input_kind == Some(TextInputKind::Password) {
-            return true;
-        }
-        current = node.parent;
+fn validate_batch_requests(
+    published: &[(String, PublicOperation)],
+    requests: &[(String, Option<Value>)],
+) -> Result<(), String> {
+    if !(1..=4).contains(&requests.len()) {
+        return Err("Batch requires 1..4 already-published operations".into());
     }
-    false
+    let mut seen = std::collections::HashSet::new();
+    for (id, parameter) in requests {
+        if !seen.insert(id) {
+            return Err("Duplicate batch operation ID".into());
+        }
+        let operation = published
+            .iter()
+            .find(|(key, _)| key == id)
+            .map(|(_, operation)| operation)
+            .ok_or("Batch operation was not published in this observation")?;
+        validate_parameter(operation, parameter.as_ref()).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn secret_node(cache: &SemanticCache, node: &CachedSemanticNode) -> bool {
+    crate::transcompile::document::secret_source(cache, node.runtime_id)
 }
 
 fn node_data(cache: &SemanticCache, node: &CachedSemanticNode) -> Value {
@@ -70,6 +88,40 @@ fn node_data(cache: &SemanticCache, node: &CachedSemanticNode) -> Value {
         "states": node.states.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>(),
         "partial": !node.truncations.is_empty(),
     })
+}
+
+/// Category-only diagnostics: never include source labels, text or secrets.
+fn changed_precondition_fields(before: &Value, after: &Value) -> Vec<String> {
+    let mut changed = Vec::new();
+    if let (Some(left), Some(right)) = (before.as_object(), after.as_object()) {
+        for key in left
+            .keys()
+            .chain(right.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            if left.get(key) == right.get(key) {
+                continue;
+            }
+            if key == "node" && left[key].is_object() && right[key].is_object() {
+                let a = left[key].as_object().unwrap();
+                let b = right[key].as_object().unwrap();
+                for field in a
+                    .keys()
+                    .chain(b.keys())
+                    .collect::<std::collections::BTreeSet<_>>()
+                {
+                    if a.get(field) != b.get(field) {
+                        changed.push(format!("node.{field}"));
+                    }
+                }
+            } else {
+                changed.push(key.clone());
+            }
+        }
+    } else {
+        changed.push("target_presence".into());
+    }
+    changed
 }
 
 fn public_text_data(mut data: Value, text: Result<String, String>) -> Value {
@@ -91,6 +143,22 @@ fn public_text_data(mut data: Value, text: Result<String, String>) -> Value {
         }
     }
     data
+}
+
+fn receipt_timings(
+    mut receipt: Value,
+    profile: bool,
+    fresh_ms: f64,
+    delivery_and_readback_ms: f64,
+) -> Value {
+    if profile {
+        receipt["timings"] = json!({"fresh_validation_ms":fresh_ms,"delivery_and_readback_ms":delivery_and_readback_ms});
+    }
+    receipt
+}
+
+fn data_id_for_candidate(index: usize) -> String {
+    format!("op-{index}")
 }
 
 fn operation_data(operation: &PublicOperation) -> Option<Value> {
@@ -218,6 +286,7 @@ impl TuiApplication {
             data["label_partial"] = json!(partial);
             operations.push(data);
             candidates.push(AgentCandidate {
+                id: data_id_for_candidate(candidates.len()),
                 target,
                 locator,
                 operation,
@@ -232,40 +301,21 @@ impl TuiApplication {
             .collect();
         nodes.sort_by_key(|n| n.runtime_id);
         let mut exported: Vec<_> = nodes.iter().map(|n| node_data(&self.cache, n)).collect();
-        let mut pending = nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, node)| {
-                !secret_node(&self.cache, node)
-                    && node.debug.interfaces.iter().any(|name| name == "Text")
-            })
-            .map(|(index, node)| (index, node.backend_locator.clone()));
-        let mut reads = tokio::task::JoinSet::new();
-        loop {
-            // Schedule every public Text node; concurrency does not limit coverage.
-            while reads.len() < 32 {
-                let Some((index, locator)) = pending.next() else {
-                    break;
+        let (reads, _) = crate::content::materialize::read_public_texts(
+            &self.backend,
+            &self.cache,
+            &self.scopes,
+            &self.refresh_cancel,
+        )
+        .await?;
+        for (index, node) in nodes.iter().enumerate() {
+            if let Some(read) = reads.get(&node.runtime_id) {
+                let result = match read {
+                    crate::transcompile::document::TextRead::Complete(text) => Ok(text.clone()),
+                    _ => Err("Public text unavailable".to_owned()),
                 };
-                let backend = self.backend.clone();
-                reads.spawn(
-                    async move { (index, backend.read_semantic_text_block(&locator).await) },
-                );
+                exported[index] = public_text_data(exported[index].take(), result);
             }
-            let Some(read) = reads.join_next().await else {
-                break;
-            };
-            let (index, result) =
-                read.map_err(|error| format!("Public text read failed: {error}"))?;
-            if matches!(result, Err(BackendError::SecretContentDisabled(_))) {
-                return Err("Text target became sensitive; observe again".into());
-            }
-            exported[index] = public_text_data(
-                exported[index].take(),
-                result
-                    .map(|range| range.text)
-                    .map_err(|error| error.to_string()),
-            );
         }
         let data = json!({
             "version": "gui2tui.agent.v1", "observation_id": observation_id,
@@ -283,6 +333,40 @@ impl TuiApplication {
         })
     }
 
+    pub(super) fn document_agent_observation(
+        &self,
+        data: Value,
+    ) -> Result<AgentObservation, String> {
+        let mut candidates = Vec::new();
+        for op in &self.document.operations {
+            if !crate::transcompile::document::wire::agent_supports(&op.operation) {
+                continue;
+            }
+            let authority = OperationAuthority::capture(
+                &self.runtime,
+                &self.application_locator,
+                op.target,
+                &op.locator,
+                &self.cache,
+                &self.scopes,
+            )
+            .map_err(|_| "Current operation authority changed; observe again".to_owned())?;
+            candidates.push(AgentCandidate {
+                id: op.id.clone(),
+                target: op.target,
+                locator: op.locator.clone(),
+                operation: op.operation.clone(),
+                authority,
+                precondition: self.agent_target_precondition(op.target),
+            });
+        }
+        Ok(AgentObservation {
+            data,
+            candidates,
+            created: Instant::now(),
+        })
+    }
+
     /// Consume an exact candidate after refreshing the authoritative tree. The
     /// caller consumes the observation even on failure; uncertain writes are never replayed.
     pub async fn agent_execute(
@@ -291,21 +375,150 @@ impl TuiApplication {
         operation_id: &str,
         parameter: Option<Value>,
     ) -> Result<Value, AgentExecutionError> {
+        let profile =
+            observation.data["version"] == crate::transcompile::document::wire::DOCUMENT_VERSION;
+        let started = Instant::now();
+        let result = self
+            .agent_execute_inner(observation, operation_id, parameter)
+            .await;
+        result.map(|mut receipt| {
+            if profile {
+                receipt["timings"]["execute_wall_ms"] =
+                    json!(started.elapsed().as_secs_f64() * 1000.0);
+            }
+            receipt
+        })
+    }
+
+    /// One consumed publication owns this bounded list. Each original binding
+    /// independently traverses the ordinary fresh authority/readback chain.
+    /// No new target, locator rebinding, write retry or atomicity is introduced.
+    pub async fn agent_execute_batch_v1(
+        &mut self,
+        observation: AgentObservation,
+        requests: Vec<(String, Option<Value>)>,
+        serial: &mut u64,
+        width: u16,
+        height: u16,
+    ) -> Result<(Value, Option<AgentObservation>), String> {
+        self.agent_render_tui_text(&observation, width, height)?;
+        let published = observation
+            .candidates
+            .iter()
+            .map(|candidate| (candidate.id.clone(), candidate.operation.clone()))
+            .collect::<Vec<_>>();
+        // Validate the whole request before the first possible GUI write.
+        validate_batch_requests(&published, &requests)?;
+        let mut items = Vec::new();
+        let mut status = "completed";
+        let mut reason: Option<String> = None;
+        let mut latest = None;
+        let mut view = Value::Null;
+        for (operation_id, parameter) in &requests {
+            self.agent_tui_prepare_execution();
+            let candidate = observation
+                .candidates
+                .iter()
+                .find(|candidate| candidate.id == *operation_id)
+                .expect("whole batch preflight checked this original candidate")
+                .clone();
+            let step_observation = AgentObservation {
+                data: observation.data.clone(),
+                candidates: vec![candidate],
+                created: observation.created,
+            };
+            let result = self
+                .agent_execute(step_observation, operation_id, parameter.clone())
+                .await;
+            let mut item = json!({"operation_id":operation_id});
+            match result {
+                Ok(receipt) => {
+                    let already = receipt["effect"] == "already_satisfied";
+                    if !already && receipt["accepted"] != true {
+                        status = "unknown";
+                        reason = Some("Backend acceptance not established; remaining operations not attempted".into());
+                    } else if receipt["effect"] != "confirmed" && !already {
+                        status = "interrupted";
+                        reason = Some(
+                            "Primitive effect unknown; remaining operations not attempted".into(),
+                        );
+                    }
+                    item["receipt"] = receipt;
+                }
+                Err(error) => {
+                    status = if error.delivery() == "not_attempted" {
+                        "interrupted"
+                    } else {
+                        "unknown"
+                    };
+                    reason = Some(error.to_string());
+                    item["error"] = json!({"delivery":error.delivery(),"error":error.to_string()});
+                }
+            }
+            *serial += 1;
+            match self.agent_observe_document(*serial).await {
+                Ok(fresh) => match self.agent_render_tui_text(&fresh, width, height) {
+                    Ok(fresh_view) => {
+                        item["observation_id"] = fresh.data["observation_id"].clone();
+                        view = fresh_view;
+                        latest = Some(fresh);
+                    }
+                    Err(error) => {
+                        status = "unknown";
+                        reason = Some(error);
+                        latest = None;
+                        view = Value::Null;
+                    }
+                },
+                Err(error) => {
+                    status = "unknown";
+                    reason = Some(error);
+                    latest = None;
+                    view = Value::Null;
+                }
+            }
+            items.push(item);
+            if status != "completed" {
+                break;
+            }
+        }
+        let batch = json!({"version":"gui2tui.agent.batch.v1","status":status,
+            "items":items,"requested":requests.len(),"reason":reason,"atomic":false,
+            "authority":"original publication, exact frozen bindings; fresh validation per operation"});
+        let response = json!({"batch":batch,"tui_view":view,
+            "observation":latest.as_ref().map(|fresh| &fresh.data)});
+        Ok((response, latest))
+    }
+
+    async fn agent_execute_inner(
+        &mut self,
+        observation: AgentObservation,
+        operation_id: &str,
+        parameter: Option<Value>,
+    ) -> Result<Value, AgentExecutionError> {
         if observation.created.elapsed() > Duration::from_secs(120) {
             return Err("Observation expired; observe again".into());
         }
-        let index = observation.data["operations"]
-            .as_array()
-            .and_then(|ops| {
-                ops.iter()
-                    .position(|op| op["id"].as_str() == Some(operation_id))
-            })
-            .ok_or("Unknown observation-local operation ID")?;
-        let candidate = &observation.candidates[index];
+        let candidate = observation
+            .candidates
+            .iter()
+            .find(|candidate| candidate.id == operation_id)
+            .ok_or("Unknown or non-invocable observation-local operation ID")?;
         validate_parameter(&candidate.operation, parameter.as_ref())?;
+        let profile =
+            observation.data["version"] == crate::transcompile::document::wire::DOCUMENT_VERSION;
+        let fresh_started = Instant::now();
         self.refresh_surface_snapshot().await?;
-        if self.agent_target_precondition(candidate.target) != candidate.precondition {
-            return Err("Target changed while deciding; observe again".into());
+        let fresh_ms = fresh_started.elapsed().as_secs_f64() * 1000.0;
+        let delivery_started = Instant::now();
+        let fresh_precondition = self.agent_target_precondition(candidate.target);
+        if fresh_precondition != candidate.precondition {
+            let changed = changed_precondition_fields(&candidate.precondition, &fresh_precondition);
+            return Err(format!(
+                "Target changed while deciding ({}); observe again",
+                changed.join(", ")
+            )
+            .into());
         }
         candidate
             .authority
@@ -337,10 +550,13 @@ impl TuiApplication {
                     name.clone(),
                 )
                 .await;
-            return Ok(
+            return Ok(receipt_timings(
                 json!({"accepted": if accepted { Some(true) } else { None }, "effect": "unknown", "message": self.status,
                 "operation_id": operation_id, "observation_id": observation.data["observation_id"]}),
-            );
+                profile,
+                fresh_ms,
+                delivery_started.elapsed().as_secs_f64() * 1000.0,
+            ));
         }
         let ticket = self
             .runtime
@@ -355,11 +571,25 @@ impl TuiApplication {
             .map_err(|e| AgentExecutionError::Unknown(e.to_string()))?;
         let effect = result.map_err(AgentExecutionError::Unknown)?;
         let confirmed = readback_confirms_request(&effect);
-        Ok(
-            json!({"accepted": if confirmed { Some(true) } else { None },
+        let already_satisfied = effect["selection_outcome_version"]
+            == "gui2tui.selection-outcome.v1"
+            && effect["already_satisfied"] == true
+            && effect["write_invoked"] == false;
+        let mut receipt = json!({"accepted": if confirmed { Some(true) } else { None },
             "effect": if confirmed { "confirmed" } else { "unknown" }, "readback": effect,
-            "operation_id": operation_id, "observation_id": observation.data["observation_id"]}),
-        )
+            "operation_id": operation_id, "observation_id": observation.data["observation_id"]});
+        if already_satisfied {
+            // Confirmed current state is not a delivered or accepted write.
+            receipt["accepted"] = Value::Null;
+            receipt["delivery"] = json!("not_attempted");
+            receipt["effect"] = json!("already_satisfied");
+        }
+        Ok(receipt_timings(
+            receipt,
+            profile,
+            fresh_ms,
+            delivery_started.elapsed().as_secs_f64() * 1000.0,
+        ))
     }
 
     async fn agent_deliver(
@@ -487,11 +717,18 @@ impl TuiApplication {
                 {
                     return Err("Selection owner outside scope".into());
                 }
-                self.backend
+                let outcome = self
+                    .backend
                     .set_child_selected(parent, locator, *selected)
                     .await
                     .map_err(|e| e.to_string())?;
-                Ok(json!({"selected": selected}))
+                let already_satisfied =
+                    outcome == crate::backend::SelectionMembershipOutcome::AlreadySatisfied;
+                Ok(
+                    json!({"selection_outcome_version":"gui2tui.selection-outcome.v1",
+                    "selected": selected, "already_satisfied": already_satisfied,
+                    "write_invoked": !already_satisfied}),
+                )
             }
             PublicOperation::Value { increase } => {
                 if parameter.is_some() {
@@ -609,5 +846,58 @@ mod tests {
         assert_eq!(data["partial"], true);
         assert_eq!(data["value_complete"], false);
         assert!(!data.to_string().contains("old preview"));
+    }
+}
+
+#[cfg(test)]
+mod precondition_diagnostics_tests {
+    use super::*;
+    #[test]
+    fn rejected_precondition_reports_categories_without_source_values() {
+        let before = json!({"node":{"value":"SECRET-BEFORE","states":["Enabled"]},"ancestors":["PRIVATE-TITLE"]});
+        let after = json!({"node":{"value":"SECRET-AFTER","states":["Enabled"]},"ancestors":["PRIVATE-OTHER"]});
+        let changed = changed_precondition_fields(&before, &after);
+        assert_eq!(changed, vec!["ancestors", "node.value"]);
+        assert!(!format!("{changed:?}").contains("SECRET"));
+        assert!(changed_precondition_fields(&before, &before).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    #[test]
+    fn batch_preflight_rejects_bad_later_parameters_new_ids_and_duplicates() {
+        let published = vec![
+            (
+                "edit".into(),
+                PublicOperation::EditText { multiline: false },
+            ),
+            ("number".into(), PublicOperation::SetValue),
+        ];
+        assert!(
+            validate_batch_requests(
+                &published,
+                &[
+                    ("edit".into(), Some(json!("公开文本"))),
+                    ("number".into(), Some(json!(42)))
+                ]
+            )
+            .is_ok()
+        );
+        for requests in [
+            vec![
+                ("edit".into(), Some(json!("ok"))),
+                ("number".into(), Some(json!("bad"))),
+            ],
+            vec![("unpublished".into(), None)],
+            vec![
+                ("edit".into(), Some(json!("a"))),
+                ("edit".into(), Some(json!("b"))),
+            ],
+        ] {
+            assert!(validate_batch_requests(&published, &requests).is_err());
+        }
+        assert!(validate_batch_requests(&published, &[]).is_err());
     }
 }

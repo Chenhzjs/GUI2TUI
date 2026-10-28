@@ -2,6 +2,7 @@ pub mod analyze;
 pub mod choice;
 pub mod command;
 pub mod content;
+pub mod document;
 pub mod presentation;
 pub mod region;
 pub mod scene;

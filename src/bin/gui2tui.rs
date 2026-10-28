@@ -84,6 +84,9 @@ struct Cli {
     /// Maximum accessibility objects per snapshot.
     #[arg(long, default_value_t = 10_000)]
     max_nodes: usize,
+    /// Optional shared research annotations in public actions; default off.
+    #[arg(long, value_enum, default_value = "off")]
+    decision_annotations: gui2tui::transcompile::document::annotations::AnnotationMode,
 
     /// Maximum bytes exported for whole-text editing; increase for larger documents.
     #[arg(long, default_value_t = 256 * 1024, value_parser = parse_edit_limit)]
@@ -751,6 +754,7 @@ async fn run(
         }
     };
 
+    app.configure_decision_annotations(cli.decision_annotations);
     app.configure_modality_client(cli.modality_socket.or(config.resources.socket.clone()));
     app.configure_modality_remote(cli.modality_remote || config.resources.remote);
 

@@ -38,6 +38,7 @@ impl std::fmt::Display for BootstrapUsed {
 
 #[derive(Clone, Debug)]
 pub struct BootstrapMetrics {
+    pub walk: Option<WalkMetrics>,
     pub strategy: BootstrapUsed,
     pub node_count: usize,
     pub cache_format: Option<CacheWireFormat>,
@@ -49,6 +50,39 @@ pub struct BootstrapMetrics {
     pub total: Duration,
     pub orphans_ignored: usize,
     pub fallback_reason: Option<String>,
+}
+
+/// Per-walk read groups. Metadata and children overlap within a node; their
+/// accumulated request durations must never be summed into end-to-end latency.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct WalkMetrics {
+    pub metadata_nodes_read: usize,
+    pub metadata_discarded: usize,
+    pub node_read_batches: usize,
+    pub node_read_peak: usize,
+    pub nodes: usize,
+    pub metadata_requests: usize,
+    pub children_requests: usize,
+    pub metadata_rpc_sum_ms: f64,
+    pub metadata_batch_wall_sum_ms: f64,
+    pub auxiliary_attributes_wall_sum_ms: f64,
+    pub children_rpc_sum_ms: f64,
+    pub proxy_discovery_ms: f64,
+    pub walk_wall_ms: f64,
+    pub read_groups_overlap: bool,
+}
+
+impl WalkMetrics {
+    pub(crate) fn include_read(&mut self, read: &Self) {
+        self.metadata_nodes_read += read.metadata_nodes_read;
+        self.metadata_requests += read.metadata_requests;
+        self.children_requests += read.children_requests;
+        self.metadata_rpc_sum_ms += read.metadata_rpc_sum_ms;
+        self.metadata_batch_wall_sum_ms += read.metadata_batch_wall_sum_ms;
+        self.auxiliary_attributes_wall_sum_ms += read.auxiliary_attributes_wall_sum_ms;
+        self.children_rpc_sum_ms += read.children_rpc_sum_ms;
+        self.proxy_discovery_ms += read.proxy_discovery_ms;
+    }
 }
 
 #[derive(Clone, Debug)]

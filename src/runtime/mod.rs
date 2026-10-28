@@ -33,6 +33,36 @@ impl Default for RuntimeSessionId {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct ApplicationGenerationId(pub u64);
+
+/// Read-only provenance, never an operation ticket or a callable locator.
+/// Tokens contain no locator, label, text, or digest of those values.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct SourceLocatorRef {
+    session: RuntimeSessionId,
+    generation: ApplicationGenerationId,
+    locator: BackendLocator,
+    token: String,
+}
+impl std::fmt::Debug for SourceLocatorRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SourceLocatorRef")
+            .field(&self.token)
+            .finish()
+    }
+}
+impl SourceLocatorRef {
+    pub(crate) fn token(&self) -> &str {
+        &self.token
+    }
+    pub(crate) fn matches_source(
+        &self,
+        session: &RuntimeSessionId,
+        generation: ApplicationGenerationId,
+        locator: &BackendLocator,
+    ) -> bool {
+        &self.session == session && self.generation == generation && &self.locator == locator
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct OperationId(pub u64);
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -166,6 +196,7 @@ pub struct RuntimeSession {
     application: Option<BackendLocator>,
     operations: HashMap<OperationId, Operation>,
     next_operation: u64,
+    source_locator_refs: HashMap<BackendLocator, SourceLocatorRef>,
 }
 impl Default for RuntimeSession {
     fn default() -> Self {
@@ -181,6 +212,7 @@ impl Default for RuntimeSession {
             application: None,
             operations: HashMap::new(),
             next_operation: 1,
+            source_locator_refs: HashMap::new(),
         }
     }
 }
@@ -198,6 +230,28 @@ impl RuntimeSession {
     }
     pub fn generation(&self) -> Option<ApplicationGenerationId> {
         self.generation
+    }
+    /// Called by the owner only for the privacy-checked public document.
+    /// Exact address continuity does not establish logical item lifetime.
+    pub(crate) fn source_locator_ref(
+        &mut self,
+        locator: &BackendLocator,
+    ) -> Option<SourceLocatorRef> {
+        let generation = self.generation?;
+        let serial = self.source_locator_refs.len().checked_add(1)?;
+        let session = self.id.clone();
+        let source = locator.clone();
+        Some(
+            self.source_locator_refs
+                .entry(locator.clone())
+                .or_insert_with(|| SourceLocatorRef {
+                    session,
+                    generation,
+                    locator: source,
+                    token: format!("locator-{}-{serial}", generation.0),
+                })
+                .clone(),
+        )
     }
     pub fn validates_application(&self, locator: &BackendLocator) -> bool {
         self.application.as_ref() == Some(locator)
@@ -220,6 +274,7 @@ impl RuntimeSession {
         }
         self.generation = None;
         self.application = None;
+        self.source_locator_refs.clear();
         self.state = SessionState::Degraded;
     }
     pub fn begin(
@@ -340,6 +395,31 @@ mod tests {
     use super::*;
     fn app() -> BackendLocator {
         BackendLocator::new(":1.2", "/app")
+    }
+    #[test]
+    fn source_locator_refs_are_private_address_bound_and_generation_scoped() {
+        let mut session = RuntimeSession::default();
+        let source = BackendLocator::new(":1.2", "/SECRET_LOCATOR_FRAGMENT");
+        assert!(session.source_locator_ref(&source).is_none());
+        let first_generation = session.open_application(app());
+        let reference = session.source_locator_ref(&source).unwrap();
+        assert_eq!(reference, session.source_locator_ref(&source).unwrap());
+        assert!(reference.matches_source(&session.id, first_generation, &source));
+        assert_ne!(
+            reference,
+            session
+                .source_locator_ref(&BackendLocator::new(":1.2", "/other"))
+                .unwrap()
+        );
+        assert!(!reference.token().contains("SECRET_"));
+        assert!(!format!("{reference:?}").contains("SECRET_"));
+        assert!(!session.status().to_string().contains("SECRET_"));
+        session.invalidate_application();
+        assert!(session.source_locator_ref(&source).is_none());
+        let next = session.open_application(app());
+        let fresh = session.source_locator_ref(&source).unwrap();
+        assert_ne!(reference, fresh);
+        assert!(!reference.matches_source(&session.id, next, &source));
     }
     #[test]
     fn independent_sessions_and_twenty_generations_reject_late_results() {

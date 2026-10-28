@@ -153,6 +153,55 @@ impl SemanticCache {
         self.nodes.values()
     }
 
+    /// Read-only organization input. Preserve exact IDs and structural ancestors,
+    /// but strip boundary payloads before any label or relationship derivation.
+    /// This view carries no operation authority and never replaces the live cache.
+    pub(crate) fn organization_view(
+        &self,
+        public: &HashSet<RuntimeNodeId>,
+        scope_boundaries: &HashSet<RuntimeNodeId>,
+    ) -> Self {
+        let mut retained = public.clone();
+        retained.extend(scope_boundaries.iter().copied());
+        retained.insert(self.root);
+        for id in retained.clone() {
+            let mut parent = self.node(id).and_then(|node| node.parent);
+            while let Some(id) = parent {
+                retained.insert(id);
+                parent = self.node(id).and_then(|node| node.parent);
+            }
+        }
+        let mut view = self.clone();
+        view.nodes.retain(|id, _| retained.contains(id));
+        view.by_locator.retain(|_, id| retained.contains(id));
+        view.relations.retain(|id, _| retained.contains(id));
+        for node in view.nodes.values_mut() {
+            node.children.retain(|id| retained.contains(id));
+            if !public.contains(&node.runtime_id) {
+                node.name = None;
+                node.description = None;
+                node.value = None;
+                node.states.clear();
+                node.actions.clear();
+                node.capabilities.clear();
+                node.truncations.clear();
+                node.debug = DebugInfo::default();
+                view.relations
+                    .insert(node.runtime_id, RelationState::Unknown);
+            }
+        }
+        for state in view.relations.values_mut() {
+            if let RelationState::Known(relations) = state {
+                for relation in relations {
+                    relation
+                        .targets
+                        .retain(|target| target.runtime_id.is_some_and(|id| public.contains(&id)));
+                }
+            }
+        }
+        view
+    }
+
     pub fn relation_state(&self, id: RuntimeNodeId) -> Option<&RelationState> {
         self.relations.get(&id)
     }

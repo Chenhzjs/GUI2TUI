@@ -37,40 +37,54 @@ pub struct PaletteEntry {
     target: Option<(RuntimeNodeId, BackendLocator, UiIntent)>,
     group_index: Option<usize>,
     action: Option<PublicOperation>,
+    action_presentation: Option<crate::transcompile::document::ActionPresentation>,
 }
 
 impl PaletteEntry {
+    pub(crate) fn runtime_target(&self) -> Option<(RuntimeNodeId, &BackendLocator)> {
+        self.target.as_ref().map(|(id, locator, _)| (*id, locator))
+    }
+
     pub fn short_label(&self) -> String {
         let Some(action) = &self.action else {
             return self.title.clone();
         };
-        let operation = match action {
-            PublicOperation::SetValue => "Set value".into(),
-            PublicOperation::EditRange => "Edit range".into(),
-            PublicOperation::ReadSelection => "Read text selection".into(),
-            PublicOperation::Action(name) => format!("Action: {name}"),
-            PublicOperation::EditText { multiline: true } => "Edit whole text".into(),
-            PublicOperation::EditText { multiline: false } => "Edit text".into(),
-            PublicOperation::Selection { selected: true, .. } => "Add to selection".into(),
-            PublicOperation::Selection {
-                selected: false, ..
-            } => "Remove from selection".into(),
-            PublicOperation::Value { increase: true } => "Increase value".into(),
-            PublicOperation::Value { increase: false } => "Decrease value".into(),
-        };
+        let operation = self
+            .action_presentation
+            .as_ref()
+            .map(|p| p.display_label.clone())
+            .unwrap_or_else(|| match action {
+                PublicOperation::SetValue => "Set value".into(),
+                PublicOperation::EditRange => "Edit range".into(),
+                PublicOperation::ReadSelection => "Read text selection".into(),
+                PublicOperation::Action(name) => format!("Action: {name}"),
+                PublicOperation::EditText { multiline: true } => "Edit whole text".into(),
+                PublicOperation::EditText { multiline: false } => "Edit text".into(),
+                PublicOperation::Selection { selected: true, .. } => "Add to selection".into(),
+                PublicOperation::Selection {
+                    selected: false, ..
+                } => "Remove from selection".into(),
+                PublicOperation::Value { increase: true } => "Increase value".into(),
+                PublicOperation::Value { increase: false } => "Decrease value".into(),
+            });
         let id = self.target.as_ref().map(|target| target.0).unwrap();
         format!("#{id}  {operation} · {}", self.title)
     }
 
     pub fn detail_text(&self) -> String {
-        match &self.target {
+        let mut text = match &self.target {
             Some((id, locator, _)) => format!(
                 "Snapshot target: #{id}\n{}\n\nLocator: {}",
                 self.label,
                 locator.encode()
             ),
             None => self.label.clone(),
+        };
+        if let Some(presentation) = &self.action_presentation {
+            text.push_str("\n\n");
+            text.push_str(&presentation.detail_text());
         }
+        text
     }
 }
 
@@ -159,6 +173,85 @@ impl CommandPalette {
         &self.entries
     }
 
+    pub(crate) fn is_public_actions(&self) -> bool {
+        self.public_actions.is_some()
+    }
+
+    pub(crate) fn restore_query_and_exact_selection(&mut self, previous: &Self) {
+        self.set_query(previous.query.clone());
+        if let Some(old) = previous.entries.get(previous.selected) {
+            self.selected = self
+                .entries
+                .iter()
+                .position(|entry| entry.target == old.target && entry.action == old.action)
+                .unwrap_or(0);
+        }
+    }
+
+    /// The same local query used by Human typing, without GUI key delivery.
+    pub fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.detail_scroll = 0;
+        self.rebuild();
+    }
+
+    pub(crate) fn refresh_commands(
+        &mut self,
+        hierarchy: CommandHierarchy,
+        scope: InteractionScopeId,
+    ) {
+        if self.public_actions.is_some() {
+            return;
+        }
+        let previous = self
+            .entries
+            .get(self.selected)
+            .and_then(|entry| entry.runtime_target())
+            .map(|(id, locator)| (id, locator.clone()));
+        if self.active_scope != scope {
+            self.group_path.clear();
+        }
+        self.hierarchy = hierarchy;
+        self.active_scope = scope;
+        self.rebuild();
+        if let Some((id, locator)) = previous {
+            self.selected = self
+                .entries
+                .iter()
+                .position(|entry| {
+                    entry
+                        .runtime_target()
+                        .is_some_and(|target| target.0 == id && *target.1 == locator)
+                })
+                .unwrap_or(0);
+        }
+    }
+
+    pub fn step_selection(&mut self, forward: bool) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.selected = if forward {
+            (self.selected + 1) % self.entries.len()
+        } else {
+            self.selected
+                .checked_sub(1)
+                .unwrap_or(self.entries.len() - 1)
+        };
+        self.detail_scroll = 0;
+    }
+
+    pub fn scroll_details(&mut self, delta: i16) {
+        self.detail_scroll = if delta >= 0 {
+            self.detail_scroll
+                .saturating_add(delta as usize)
+                .min(self.detail_limit)
+        } else {
+            self.detail_scroll
+                .saturating_sub(delta.unsigned_abs() as usize)
+        };
+    }
+
     pub fn searches_all_scopes(&self) -> bool {
         self.search_all_scopes && self.scope_switchable()
     }
@@ -193,17 +286,35 @@ impl CommandPalette {
         }
     }
 
+    /// Explanation only: the exact target/action remain unchanged.
+    pub fn set_action_presentations(
+        &mut self,
+        presentation: impl Fn(
+            RuntimeNodeId,
+            &PublicOperation,
+        ) -> Option<crate::transcompile::document::ActionPresentation>,
+    ) {
+        if let Some(actions) = self.public_actions.as_mut() {
+            for entry in actions {
+                if let (Some((id, _, _)), Some(action)) = (&entry.target, &entry.action) {
+                    entry.action_presentation = presentation(*id, action);
+                }
+            }
+            self.rebuild();
+        }
+    }
+
     pub fn handle_key(&mut self, event: KeyEvent) -> PaletteOutcome {
         if event.kind == KeyEventKind::Release {
             return PaletteOutcome::Continue;
         }
         match event.code {
             KeyCode::PageDown => {
-                self.detail_scroll = self.detail_scroll.saturating_add(4).min(self.detail_limit);
+                self.scroll_details(4);
                 return PaletteOutcome::Continue;
             }
             KeyCode::PageUp => {
-                self.detail_scroll = self.detail_scroll.saturating_sub(4);
+                self.scroll_details(-4);
                 return PaletteOutcome::Continue;
             }
             _ => self.detail_scroll = 0,
@@ -254,18 +365,11 @@ impl CommandPalette {
                 PaletteOutcome::Continue
             }
             KeyCode::Up => {
-                if !self.entries.is_empty() {
-                    self.selected = self
-                        .selected
-                        .checked_sub(1)
-                        .unwrap_or(self.entries.len() - 1);
-                }
+                self.step_selection(false);
                 PaletteOutcome::Continue
             }
             KeyCode::Down => {
-                if !self.entries.is_empty() {
-                    self.selected = (self.selected + 1) % self.entries.len();
-                }
+                self.step_selection(true);
                 PaletteOutcome::Continue
             }
             KeyCode::Backspace => {
@@ -300,6 +404,7 @@ impl CommandPalette {
                     target: Some((id, locator, UiIntent::Activate)),
                     group_index: None,
                     action: Some(action),
+                    action_presentation: None,
                 })
                 .collect(),
         );
@@ -316,6 +421,10 @@ impl CommandPalette {
                         .label
                         .to_lowercase()
                         .contains(&self.query.to_lowercase())
+                        || entry
+                            .title
+                            .to_lowercase()
+                            .contains(&self.query.to_lowercase())
                 })
                 .cloned()
                 .collect();
@@ -346,6 +455,7 @@ impl CommandPalette {
                     )),
                     group_index: None,
                     action: None,
+                    action_presentation: None,
                 })
                 .collect()
         };
@@ -382,6 +492,7 @@ fn browse_entries(
                     target: None,
                     group_index: Some(index),
                     action: None,
+                    action_presentation: None,
                 })
             }
             CommandEntry::Command(command)
@@ -413,6 +524,7 @@ fn command_entry(command: &SemanticCommand) -> PaletteEntry {
         )),
         group_index: None,
         action: None,
+        action_presentation: None,
     }
 }
 
@@ -498,6 +610,10 @@ mod tests {
         assert!(matches!(palette.handle_key(KeyEvent::from(KeyCode::Enter)),
             PaletteOutcome::InvokeAction(id, locator, PublicOperation::Action(name))
                 if id == RuntimeNodeId::new(2) && locator == BackendLocator::new(":1.2", "/first") && name == "press"));
+        // Human-visible titles remain searchable even when their word order
+        // differs from the full public label shown in Details.
+        palette.set_query("Same title".into());
+        assert_eq!(palette.entries().len(), 2);
     }
 
     #[test]
