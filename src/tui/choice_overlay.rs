@@ -123,6 +123,7 @@ mod tests {
         SemanticChoice {
             owner: RuntimeNodeId::new(1),
             current: Some(RuntimeNodeId::new(2)),
+            current_source: "public_state",
             options: ChoiceOptions::Available(vec![
                 option(2, "Alpha", true),
                 option(3, "Beta", false),

@@ -12,6 +12,7 @@ use crate::{
 pub struct SemanticChoice {
     pub owner: RuntimeNodeId,
     pub current: Option<RuntimeNodeId>,
+    pub current_source: &'static str,
     pub options: ChoiceOptions,
     pub disclosure: DisclosureRequirement,
     pub dismiss: DismissBehavior,
@@ -265,18 +266,64 @@ fn choice_from_candidates(
     if options.is_empty() {
         return unavailable(owner);
     }
-    let current = options
-        .iter()
-        .find(|option| option.selected)
-        .or_else(|| {
-            cache.node(owner).and_then(|owner_node| {
-                owner_node
-                    .name
-                    .as_deref()
-                    .and_then(|name| options.iter().find(|option| option.label == name))
-            })
-        })
-        .map(|option| option.runtime_id);
+    let (current, current_source) = match cache.selection_read(owner) {
+        Some(crate::semantic::SelectionRead::Known(members)) => {
+            for option in &mut options {
+                option.selected = cache
+                    .node(option.runtime_id)
+                    .is_some_and(|n| members.contains(&n.backend_locator));
+            }
+            if members.len() == 1 {
+                let matched = options.iter().find(|o| o.selected).map(|o| o.runtime_id);
+                (
+                    matched,
+                    if matched.is_some() {
+                        "public_selection"
+                    } else {
+                        "unresolved_public_selection"
+                    },
+                )
+            } else {
+                (
+                    None,
+                    if members.is_empty() {
+                        "no_selected_member"
+                    } else {
+                        "multiple_selected_members"
+                    },
+                )
+            }
+        }
+        Some(crate::semantic::SelectionRead::Unavailable) => (None, "selection_read_failed"),
+        Some(crate::semantic::SelectionRead::Unresolved) => (None, "unresolved_public_selection"),
+        None => {
+            let selected: Vec<_> = options.iter().filter(|o| o.selected).collect();
+            if selected.len() == 1 {
+                (Some(selected[0].runtime_id), "public_state")
+            } else if selected.len() > 1 {
+                (None, "multiple_selected_members")
+            } else {
+                let matches: Vec<_> = options
+                    .iter()
+                    .filter(|o| {
+                        cache.node(owner).and_then(|n| n.name.as_deref()) == Some(o.label.as_str())
+                    })
+                    .collect();
+                (
+                    if matches.len() == 1 {
+                        Some(matches[0].runtime_id)
+                    } else {
+                        None
+                    },
+                    if matches.len() == 1 {
+                        "owner_label_match"
+                    } else {
+                        "not_reported"
+                    },
+                )
+            }
+        }
+    };
     let options = if completeness == CollectionCompleteness::Complete {
         ChoiceOptions::Available(options)
     } else {
@@ -285,6 +332,7 @@ fn choice_from_candidates(
     SemanticChoice {
         owner,
         current,
+        current_source,
         options,
         disclosure: DisclosureRequirement::NotRequired,
         dismiss: DismissBehavior::NotApplicable,
@@ -390,6 +438,7 @@ fn unavailable(owner: RuntimeNodeId) -> SemanticChoice {
     SemanticChoice {
         owner,
         current: None,
+        current_source: "options_not_exposed",
         options: ChoiceOptions::Unavailable,
         disclosure: DisclosureRequirement::Unavailable,
         dismiss: DismissBehavior::Unknown,
@@ -445,6 +494,68 @@ mod tests {
             description: None,
             keybinding: None,
         }
+    }
+
+    #[test]
+    fn selection_interface_members_do_not_require_child_selected_flags() {
+        use crate::semantic::SelectionRead;
+        let mut combo = node(1, SemanticRole::ComboBox, "Review status");
+        let mut menu = node(2, SemanticRole::Menu, "");
+        menu.children = vec![
+            node(3, SemanticRole::MenuItem, "Draft"),
+            node(4, SemanticRole::MenuItem, "Approved"),
+        ];
+        combo.children.push(menu);
+        let snapshot = combo.clone();
+        let mut cache = SemanticCache::from_snapshot(combo).unwrap();
+        let owner = cache.root_id();
+        let exact = BackendLocator::new(":1.2", "/node/3");
+        let target = cache.runtime_id(&exact).unwrap();
+        cache.set_selection_read(owner, SelectionRead::Known(vec![exact.clone()]));
+        let catalog = ChoiceCatalog::discover(&cache);
+        let choice = catalog.get(owner).unwrap();
+        assert_eq!(choice.current, Some(target));
+        assert_eq!(choice.current_source, "public_selection");
+        assert!(choice.options.options()[0].selected);
+        assert!(
+            !cache
+                .node(target)
+                .unwrap()
+                .states
+                .contains(&SemanticState::Selected)
+        );
+        for (read, source) in [
+            (SelectionRead::Known(vec![]), "no_selected_member"),
+            (
+                SelectionRead::Known(vec![exact.clone(), BackendLocator::new(":1.2", "/node/4")]),
+                "multiple_selected_members",
+            ),
+            (
+                SelectionRead::Known(vec![BackendLocator::new(":1.3", "/node/3")]),
+                "unresolved_public_selection",
+            ),
+            (SelectionRead::Unavailable, "selection_read_failed"),
+        ] {
+            cache.set_selection_read(owner, read);
+            let catalog = ChoiceCatalog::discover(&cache);
+            assert_eq!(catalog.get(owner).unwrap().current, None);
+            assert_eq!(catalog.get(owner).unwrap().current_source, source);
+        }
+        cache.set_selection_read(owner, SelectionRead::Known(vec![exact]));
+        let public = [owner].into_iter().collect();
+        let view = cache.organization_view(&public, &HashSet::new());
+        assert_eq!(view.selection_read(owner), Some(&SelectionRead::Unresolved));
+        let mut fresh = snapshot.clone();
+        fresh.truncations.push(TreeTruncation::ReadFailure {
+            operation: "read value",
+            node_id: "public-owner".into(),
+        });
+        cache.refresh_node(fresh).unwrap();
+        assert!(cache.selection_read(owner).is_none());
+        assert_eq!(cache.node(owner).unwrap().truncations.len(), 1);
+        cache.set_selection_read(owner, SelectionRead::Unavailable);
+        cache.full_refresh(snapshot).unwrap();
+        assert!(cache.selection_read(owner).is_none());
     }
 
     #[test]

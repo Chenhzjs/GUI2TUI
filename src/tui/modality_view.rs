@@ -1,10 +1,11 @@
 use crate::modality::{
-    ExternalModality, LocalModalityCapabilities, ModalityCandidate, ModalityResolution,
+    ExternalModality, LocalModalityCapabilities, ModalityCandidate, ModalityKind,
+    ModalityResolution,
 };
 use ratatui::{
     Frame,
     layout::{Constraint, Layout},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
 pub struct ModalityView {
@@ -35,34 +36,43 @@ impl ModalityView {
         let status = progress.as_deref().unwrap_or(status);
         let area = frame.area();
         frame.render_widget(Clear, area);
-        let block = Block::default()
-            .title(" External modality — references / explicit static snapshots ")
-            .borders(Borders::ALL);
+        let block = Block::default().title(" Resources ").borders(Borders::ALL);
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        let rows = Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(inner);
+        let rows = Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ])
+        .split(inner);
         let height = rows[0].height as usize;
         let start = self.selected.saturating_sub(height.saturating_sub(1));
         let mut lines = Vec::new();
         for (index, candidate) in self.candidates.iter().enumerate().skip(start).take(height) {
             lines.push(format!(
-                "{} {:?}: {:?}",
+                "{} {}: {}",
                 if index == self.selected { ">" } else { " " },
-                candidate.kind,
+                resource_kind(candidate.kind),
                 candidate.label.as_deref().unwrap_or("Unnamed resource")
             ));
         }
         if lines.is_empty() {
-            lines.push("No external modality objects exposed in the active scope".to_owned());
+            lines.push("No resources exposed in this part of the application.".to_owned());
         }
         if self.file_input.is_some() {
             lines = vec![
-                "Send user-selected file: absolute path on this host".into(),
-                "Enter sends; Esc cancels input; file may differ from unsaved GUI".into(),
+                "Choose a file on this computer: enter its full path".into(),
+                "Esc cancels; Enter sends. File may differ from unsaved GUI content.".into(),
                 String::new(),
             ];
         }
-        frame.render_widget(Paragraph::new(lines.join("\n")), rows[0]);
+        let body = Paragraph::new(lines.join("\n"));
+        let body = if self.candidates.is_empty() || self.file_input.is_some() {
+            body.wrap(Wrap { trim: false })
+        } else {
+            body
+        };
+        frame.render_widget(body, rows[0]);
         if let Some(input) = &self.file_input
             && rows[0].height > 2
             && rows[0].width > 2
@@ -74,57 +84,90 @@ impl ModalityView {
             frame.set_cursor_position((line.x + 2 + cursor, line.y));
         }
         let availability = if self.remote {
-            "Remote endpoint: f transfers file bytes; Enter/o path handoff disabled"
+            "Remote viewer: opening a reference here is unavailable; file transfer needs a receiver."
         } else {
             match &self.resolved {
                 Some(modality) if modality.capabilities.reference_handoff => {
-                    "[Open locally] — approval required in local broker"
+                    "Open in the connected viewer — confirmation required"
                 }
                 Some(modality) => match &modality.resolution {
                     ModalityResolution::LiveVisualState { .. } => {
-                        "Live graphical state — no portable representation"
+                        "Live view: no file or saved preview is available"
                     }
                     ModalityResolution::Unavailable { .. } => {
-                        "Original UNRESOLVED; m Request Image region snapshot (may be occluded)"
+                        "Original file unavailable; m captures an image preview (may include overlapping windows)"
                     }
                     ModalityResolution::RenderedSnapshot(_) => {
-                        "RenderedSnapshot on host; not original bytes; o Same-host viewer if configured"
+                        "Image preview saved on this computer; not the original file"
                     }
                     _ if self.capabilities.is_none() => {
-                        "Headless reference: Enter Inspect; no endpoint required"
+                        "Reference available: Enter for details; no viewer connected"
                     }
-                    _ => "No matching local handler or permitted resource scheme (read-only)",
+                    _ => "No compatible viewer for this resource; details remain available",
                 },
-                None => "No resolved resource",
+                None if self.candidates.is_empty() => {
+                    if self
+                        .capabilities
+                        .as_ref()
+                        .is_some_and(|cap| cap.artifact_receive)
+                    {
+                        "A file receiver is connected; f lets you choose a file"
+                    } else {
+                        "File sending requires a connected file receiver"
+                    }
+                }
+                None => "Select a resource to see its details",
             }
         };
-        frame.render_widget(Paragraph::new(format!("{availability}\n{status}\nf Send file | x Cancel | Enter Reference | m Snapshot | o Same-host | Esc Return")), rows[1]);
+        let receiver = self
+            .capabilities
+            .as_ref()
+            .is_some_and(|cap| cap.artifact_receive);
+        let info = if super::renderer::normal_footer_status(status) {
+            format!("{availability}\n{status}")
+        } else {
+            availability.to_owned()
+        };
+        frame.render_widget(Paragraph::new(info).wrap(Wrap { trim: false }), rows[1]);
+        let hints = if self.file_input.is_some() && !receiver {
+            "Esc Cancel · File receiver required"
+        } else if self.file_input.is_some() {
+            "Esc Cancel · Enter Send"
+        } else if self.candidates.is_empty() && receiver {
+            "Esc Back · f Send file · F1 Help"
+        } else if self.candidates.is_empty() {
+            "Esc Back · F1 Help"
+        } else if self
+            .resolved
+            .as_ref()
+            .is_some_and(|m| m.capabilities.reference_handoff)
+        {
+            "Esc Back · ↑↓ Select · Enter Open · F1 Help"
+        } else {
+            "Esc Back · ↑↓ Select · Enter Details · F1 Help"
+        };
+        frame.render_widget(Paragraph::new(hints), rows[2]);
+    }
+}
+
+fn resource_kind(kind: ModalityKind) -> &'static str {
+    match kind {
+        ModalityKind::Image => "Image",
+        ModalityKind::Document => "Document",
+        ModalityKind::Video => "Video",
+        ModalityKind::Audio => "Audio",
+        ModalityKind::VectorGraphic => "Drawing",
+        ModalityKind::PortableModel => "3D model",
+        ModalityKind::LiveVisual => "Live view",
+        ModalityKind::Unknown => "Resource",
     }
 }
 
 // Keep the insertion point visible, measuring terminal cells rather than bytes.
 fn input_window(input: &super::edit::EditBuffer, width: u16) -> (String, u16) {
-    let chars: Vec<char> = input.text().chars().collect();
-    let cursor = input.cursor().min(chars.len());
-    let cells = |c: char| ratatui::text::Span::raw(c.to_string()).width();
-    let available = usize::from(width.saturating_sub(1));
-    let mut start = cursor;
-    let mut before = 0;
-    while start > 0 && before + cells(chars[start - 1]) <= available {
-        start -= 1;
-        before += cells(chars[start]);
-    }
-    let mut text = String::new();
-    let mut used = 0;
-    for &c in &chars[start..] {
-        let size = cells(c);
-        if used + size > usize::from(width) {
-            break;
-        }
-        text.push(c);
-        used += size;
-    }
-    (text, before as u16)
+    let (text, cursor_byte) = input.visible_window(width);
+    let cursor = ratatui::text::Span::raw(&text[..cursor_byte]).width() as u16;
+    (text, cursor)
 }
 
 #[cfg(test)]
@@ -135,6 +178,35 @@ mod tests {
         semantic::{BackendLocator, RuntimeNodeId},
     };
     use ratatui::{Terminal, backend::TestBackend};
+    #[test]
+    fn empty_resources_show_plain_state_and_return_without_fake_actions() {
+        let view = ModalityView {
+            remote: false,
+            transfer_progress: None,
+            file_input: None,
+            candidates: vec![],
+            selected: 0,
+            resolved: None,
+            capabilities: None,
+        };
+        let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
+        terminal
+            .draw(|frame| view.render(frame, "Loaded 20 semantic nodes via cache"))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Resources"));
+        assert!(output.contains("Esc Back"));
+        assert!(!output.contains("Loaded 20"));
+        assert!(!output.contains("Enter Open"));
+        assert!(!output.contains("Snapshot"));
+    }
+
     #[test]
     fn reopened_view_shows_live_task_progress() {
         let progress =
@@ -211,8 +283,8 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(output.contains("Headless reference"));
-        assert!(!output.contains("[Open locally]"));
+        assert!(output.contains("Reference available"));
+        assert!(!output.contains("Enter Open"));
         view.move_selection(1);
         assert!(view.resolved.is_none());
     }

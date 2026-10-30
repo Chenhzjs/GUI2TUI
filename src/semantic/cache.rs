@@ -77,6 +77,14 @@ pub enum CacheError {
     UnreachableNodes { count: usize },
 }
 
+/// Public Selection facts, distinct from the child's own state flags.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SelectionRead {
+    Known(Vec<BackendLocator>),
+    Unavailable,
+    Unresolved,
+}
+
 /// Single-owner arena with session-stable runtime identities.
 #[derive(Clone, Debug)]
 pub struct SemanticCache {
@@ -84,6 +92,7 @@ pub struct SemanticCache {
     nodes: HashMap<RuntimeNodeId, CachedSemanticNode>,
     by_locator: HashMap<BackendLocator, RuntimeNodeId>,
     relations: HashMap<RuntimeNodeId, RelationState>,
+    selections: HashMap<RuntimeNodeId, SelectionRead>,
     generation: u64,
     full_snapshot_count: u64,
 }
@@ -106,6 +115,7 @@ impl SemanticCache {
             nodes: HashMap::new(),
             by_locator: HashMap::new(),
             relations: HashMap::new(),
+            selections: HashMap::new(),
             generation,
             full_snapshot_count,
         };
@@ -175,6 +185,18 @@ impl SemanticCache {
         view.nodes.retain(|id, _| retained.contains(id));
         view.by_locator.retain(|_, id| retained.contains(id));
         view.relations.retain(|id, _| retained.contains(id));
+        view.selections.retain(|id, _| public.contains(id));
+        for read in view.selections.values_mut() {
+            if let SelectionRead::Known(targets) = read
+                && targets.iter().any(|target| {
+                    !self
+                        .runtime_id(target)
+                        .is_some_and(|id| public.contains(&id))
+                })
+            {
+                *read = SelectionRead::Unresolved;
+            }
+        }
         for node in view.nodes.values_mut() {
             node.children.retain(|id| retained.contains(id));
             if !public.contains(&node.runtime_id) {
@@ -200,6 +222,16 @@ impl SemanticCache {
             }
         }
         view
+    }
+
+    pub fn selection_read(&self, id: RuntimeNodeId) -> Option<&SelectionRead> {
+        self.selections.get(&id)
+    }
+
+    pub fn set_selection_read(&mut self, id: RuntimeNodeId, read: SelectionRead) {
+        if self.nodes.contains_key(&id) {
+            self.selections.insert(id, read);
+        }
     }
 
     pub fn relation_state(&self, id: RuntimeNodeId) -> Option<&RelationState> {
@@ -268,11 +300,11 @@ impl SemanticCache {
             CachedSemanticNode {
                 runtime_id: id,
                 index_in_parent,
-                truncations: Vec::new(),
                 ..replacement
             },
         );
         self.relations.insert(id, RelationState::Unknown);
+        self.selections.clear();
         self.generation = self.generation.saturating_add(1);
         self.validate()?;
         Ok(id)
@@ -289,6 +321,7 @@ impl SemanticCache {
             .ok_or_else(|| CacheError::LocatorNotFound(locator.clone()))?;
         let old = self.materialize_subtree(id)?;
         let old_relations = self.relations.clone();
+        self.selections.clear();
         let parent = self.nodes.get(&id).ok_or(CacheError::MissingRoot)?.parent;
         let old_by_id = self.subtree_locators(id)?;
         let reconciled = reconcile_subtree(&old, fresh);

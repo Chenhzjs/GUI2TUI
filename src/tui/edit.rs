@@ -23,6 +23,36 @@ impl EditBuffer {
         self.cursor
     }
 
+    /// Visible input text and the UTF-8 cursor offset, bounded by terminal cells.
+    /// The full edit buffer is never shortened by this viewport.
+    pub(crate) fn visible_window(&self, width: u16) -> (String, usize) {
+        if width == 0 {
+            return (String::new(), 0);
+        }
+        let chars: Vec<char> = self.text.chars().collect();
+        let cursor = self.cursor.min(chars.len());
+        let cells = |c: char| ratatui::text::Span::raw(c.to_string()).width();
+        let available = usize::from(width.saturating_sub(1));
+        let mut start = cursor;
+        let mut before = 0;
+        while start > 0 && before + cells(chars[start - 1]) <= available {
+            start -= 1;
+            before += cells(chars[start]);
+        }
+        let cursor_byte = chars[start..cursor].iter().collect::<String>().len();
+        let mut text = String::new();
+        let mut used = 0;
+        for &c in &chars[start..] {
+            let size = cells(c);
+            if used + size > usize::from(width) {
+                break;
+            }
+            text.push(c);
+            used += size;
+        }
+        (text, cursor_byte)
+    }
+
     pub fn insert(&mut self, character: char) {
         let byte = byte_index(&self.text, self.cursor);
         self.text.insert(byte, character);

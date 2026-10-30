@@ -514,9 +514,17 @@ fn analyze_model(
         navigation: ContentNavigationIndex::default(),
     };
     let mut roots = Vec::new();
-    for child in &root_node.children {
-        if let Some(block) = builder.visit(*child) {
+    if is_readable_text(root_node) {
+        // A text owner can also expose scrollbars or other auxiliary children.
+        // Keep its own public text as well as those descendants.
+        if let Some(block) = builder.visit(root) {
             roots.push(block);
+        }
+    } else {
+        for child in &root_node.children {
+            if let Some(block) = builder.visit(*child) {
+                roots.push(block);
+            }
         }
     }
     if roots.is_empty()
@@ -996,6 +1004,29 @@ mod tests {
         assert_eq!(model.kind, ContentKind::RichText);
         assert!(matches!(model.blocks[0].kind, ContentBlockKind::Text));
         assert!(model.navigation.form_fields.is_empty());
+    }
+
+    #[test]
+    fn multiline_text_owner_survives_auxiliary_children() {
+        let mut text = node(7, SemanticRole::TextInput, "Document buffer");
+        text.text_input_kind = Some(TextInputKind::Plain);
+        text.states.extend([
+            SemanticState::Editable,
+            SemanticState::Other("multi-line".to_owned()),
+        ]);
+        text.debug.interfaces = vec!["Text".to_owned(), "EditableText".to_owned()];
+        text.children
+            .push(node(8, SemanticRole::Container, "Public auxiliary context"));
+        let cache = SemanticCache::from_snapshot(text).unwrap();
+        let catalog = ContentCatalog::analyze(&cache);
+        let model = catalog.models().next().unwrap();
+        let owner_id = ContentBlockId::new(model.root.get());
+        let child_id = ContentBlockId::new(cache.node(model.root).unwrap().children[0].get());
+        assert_eq!(model.roots, vec![owner_id]);
+        let owner = model.block(owner_id).unwrap();
+        assert_eq!(owner.kind, ContentBlockKind::Text);
+        assert_eq!(owner.children, vec![child_id]);
+        assert!(model.block(child_id).is_some());
     }
 
     #[test]

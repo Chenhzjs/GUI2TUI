@@ -25,7 +25,53 @@ fn matches_palette_text(
         || public_name.is_some_and(|name| matches_text(name, query, exact))
 }
 
+fn matches_current_palette_entry(
+    cache: &SemanticCache,
+    scopes: &InteractionScopes,
+    entry: &crate::tui::palette::PaletteEntry,
+    query: &str,
+    context: Option<&str>,
+    exact: bool,
+) -> bool {
+    let Some((target, locator)) = entry.runtime_target() else {
+        return false;
+    };
+    let Some(node) = cache.node(target).filter(|node| {
+        node.backend_locator == *locator
+            && scopes.allows_node(target)
+            && !document::secret_source(cache, target)
+    }) else {
+        return false;
+    };
+    matches_palette_text(
+        &entry.label,
+        &entry.title,
+        node.name.as_deref(),
+        query,
+        exact,
+    ) && context.is_none_or(|q| {
+        matches_text(&entry.label, q, false) || matches_text(&entry.title, q, false)
+    })
+}
+
 impl TuiApplication {
+    pub(super) fn refresh_tui_palette_query(&mut self) {
+        if let Some(palette) = self.command_palette.as_mut()
+            && let Some((query, context, exact)) = palette.navigation_query()
+        {
+            // Re-evaluate the literal query on current sources, never retain old IDs.
+            palette.retain_entries(|entry| {
+                matches_current_palette_entry(
+                    &self.cache,
+                    &self.scopes,
+                    entry,
+                    &query,
+                    context.as_deref(),
+                    exact,
+                )
+            });
+        }
+    }
     /// Mirror leaving the Human palette before an explicitly requested GUI use.
     pub fn agent_tui_prepare_execution(&mut self) {
         self.command_palette = None;
@@ -304,12 +350,7 @@ impl TuiApplication {
                 if !self.scopes.allows_node(root) || document::secret_source(&self.cache, root) {
                     return None;
                 }
-                let label = model
-                    .metadata
-                    .title
-                    .clone()
-                    .or_else(|| self.document.nodes.get(&root).and_then(|n| n.name.clone()))
-                    .unwrap_or_else(|| "Unnamed content".into());
+                let label = self.document.content_label(root).0;
                 if query.is_some_and(|q| !matches_text(&label, q, exact)) {
                     return None;
                 }
@@ -387,30 +428,16 @@ impl TuiApplication {
         let cache = &self.cache;
         let scopes = &self.scopes;
         let palette = self.command_palette.as_mut().unwrap();
-        palette.set_query(query.to_owned());
+        palette.set_navigation_query(query.to_owned(), context.map(str::to_owned), exact);
+        palette.retain_entries(|entry| {
+            matches_current_palette_entry(cache, scopes, entry, query, context, exact)
+        });
         let found: Vec<_> = palette
             .entries()
             .iter()
             .enumerate()
             .filter_map(|(index, entry)| {
                 let (target, locator) = entry.runtime_target()?;
-                // Never source a search alias from a stale, out-of-scope or secret node.
-                let public_name = cache
-                    .node(target)
-                    .filter(|node| {
-                        node.backend_locator == *locator
-                            && scopes.allows_node(target)
-                            && !document::secret_source(cache, target)
-                    })
-                    .and_then(|node| node.name.as_deref());
-                if !matches_palette_text(&entry.label, &entry.title, public_name, query, exact) {
-                    return None;
-                }
-                if context.is_some_and(|q| {
-                    !matches_text(&entry.label, q, false) && !matches_text(&entry.title, q, false)
-                }) {
-                    return None;
-                }
                 Some((index, target, locator.clone(), entry.label.clone()))
             })
             .collect();

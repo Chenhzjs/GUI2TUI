@@ -272,6 +272,7 @@ pub enum CoverageGap {
     TextUnavailable(RuntimeNodeId),
     RelationsUnknown(RuntimeNodeId),
     RelationsUnavailable(RuntimeNodeId),
+    SelectionUnavailable(RuntimeNodeId),
     UnresolvedRelation(RuntimeNodeId),
     ContentUnknown(RuntimeNodeId),
     ContentPartial(RuntimeNodeId),
@@ -311,6 +312,8 @@ pub struct SourceReferences {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OperationLabelOrigin {
     PublicName,
+    PublicDescription,
+    ContentContext,
     SemanticRegion,
     RoleFallback,
 }
@@ -393,6 +396,35 @@ impl TuiDocument {
         })
     }
 
+    /// A missing source title stays missing; window context is explicitly marked.
+    pub fn content_label(&self, root: RuntimeNodeId) -> (String, Vec<RuntimeNodeId>) {
+        if let Some(title) = self
+            .content
+            .get(root)
+            .and_then(|m| m.metadata.title.as_deref())
+            .or_else(|| self.nodes.get(&root).and_then(|n| n.name.as_deref()))
+            .filter(|title| super::presentation::has_display_text(title))
+        {
+            return (title.into(), vec![root]);
+        }
+        let mut parent = self.nodes.get(&root).and_then(|n| n.parent);
+        while let Some(id) = parent {
+            let Some(node) = self.nodes.get(&id) else {
+                break;
+            };
+            if matches!(node.role, SemanticRole::Window | SemanticRole::Dialog)
+                && let Some(name) = node
+                    .name
+                    .as_deref()
+                    .filter(|s| super::presentation::has_display_text(s))
+            {
+                return (format!("Text content · window: {name}"), vec![root, id]);
+            }
+            parent = node.parent;
+        }
+        ("Text content (no public title)".into(), vec![root])
+    }
+
     pub fn operation_label(&self, target: RuntimeNodeId) -> Option<OperationLabel> {
         let node = self.nodes.get(&target)?;
         if self.boundary_nodes.contains(&target) {
@@ -404,6 +436,16 @@ impl TuiDocument {
                 display_label: label.to_owned(),
                 origin: OperationLabelOrigin::PublicName,
                 source_nodes: vec![target],
+                region: None,
+            });
+        }
+        if self.content.get(target).is_some() {
+            let (display_label, source_nodes) = self.content_label(target);
+            return Some(OperationLabel {
+                source_label: None,
+                display_label,
+                origin: OperationLabelOrigin::ContentContext,
+                source_nodes,
                 region: None,
             });
         }
@@ -421,9 +463,28 @@ impl TuiDocument {
                 source_nodes: region.source_nodes.clone(),
                 region: Some((region.id, region.confidence)),
             },
+            None if node
+                .description
+                .as_deref()
+                .is_some_and(super::presentation::has_display_text) =>
+            {
+                OperationLabel {
+                    source_label: None,
+                    display_label: node.description.clone().expect("public description"),
+                    origin: OperationLabelOrigin::PublicDescription,
+                    source_nodes: vec![target],
+                    region: None,
+                }
+            }
             None => OperationLabel {
                 source_label: None,
-                display_label: format!("Unnamed {}", node.role),
+                display_label: format!(
+                    "Unnamed {}",
+                    match &node.role {
+                        SemanticRole::Unknown(native) => native.clone(),
+                        role => role.to_string(),
+                    }
+                ),
                 origin: OperationLabelOrigin::RoleFallback,
                 source_nodes: vec![target],
                 region: None,
@@ -924,6 +985,15 @@ fn completeness(document: &TuiDocument) -> DocumentCompleteness {
     let mut gaps = Vec::new();
     let mut materialized = true;
     let mut partial = false;
+    for choice in document.choices.choices() {
+        if matches!(
+            choice.current_source,
+            "selection_read_failed" | "unresolved_public_selection"
+        ) {
+            partial = true;
+            gaps.push(CoverageGap::SelectionUnavailable(choice.owner));
+        }
+    }
     for (id, node) in &document.nodes {
         if document.boundary_nodes.contains(id) {
             continue;

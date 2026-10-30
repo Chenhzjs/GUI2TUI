@@ -3,6 +3,7 @@ use clap::Parser;
 use gui2tui::{
     backend::{AtspiBackend, BootstrapStrategy, InspectOptions},
     product::headless::{SessionChoice, select_at_process_start},
+    semantic::BackendLocator,
     transcompile::PresentationMode,
     tui::app::{AgentObservation, TuiApplication},
 };
@@ -17,8 +18,11 @@ use std::{
 #[derive(Parser)]
 #[command(about = "Development Accessibility observation and exact-operation JSONL bridge")]
 struct Cli {
-    #[arg(long)]
-    app: String,
+    #[arg(long, required_unless_present = "application_id")]
+    app: Option<String>,
+    /// Exact public application identity; never rebind by application name.
+    #[arg(long, conflicts_with = "app", required_unless_present = "app", value_parser = parse_application_id)]
+    application_id: Option<BackendLocator>,
     /// Explicit experimental Human spatial TUI projection; full exports remain available.
     #[arg(long)]
     spatial_tui: bool,
@@ -38,6 +42,35 @@ struct Cli {
     timeout_ms: u64,
     #[arg(long, default_value_t = 262144)]
     max_edit_bytes: usize,
+}
+fn parse_application_id(value: &str) -> Result<BackendLocator, String> {
+    BackendLocator::decode(value).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod exact_application_tests {
+    use super::*;
+
+    #[test]
+    fn exact_locator_and_name_are_explicit_alternatives() {
+        let locator = BackendLocator::new(":1.42", "/org/a11y/atspi/accessible/root");
+        let encoded = locator.encode();
+        let exact = Cli::try_parse_from(["gui2tui-agent", "--application-id", &encoded]).unwrap();
+        assert_eq!(exact.application_id, Some(locator));
+        assert!(
+            Cli::try_parse_from([
+                "gui2tui-agent",
+                "--app",
+                "old name",
+                "--application-id",
+                &encoded
+            ])
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(["gui2tui-agent", "--application-id", "invalid"]).is_err());
+        assert!(Cli::try_parse_from(["gui2tui-agent"]).is_err());
+        assert!(Cli::try_parse_from(["gui2tui-agent", "--app", "current public name"]).is_ok());
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,23 +136,48 @@ async fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     let backend = AtspiBackend::connect(Duration::from_millis(cli.timeout_ms))
         .await?
         .with_tree_read_concurrency(usize::from(cli.ax_read_concurrency));
-    let mut app = TuiApplication::new(
-        backend,
-        cli.app,
-        InspectOptions {
-            verbose: false,
-            max_depth: cli.max_depth,
-            max_nodes: cli.max_nodes,
-        },
-        Duration::from_millis(500),
-        BootstrapStrategy::Walk,
-        2048,
-        PresentationMode::Transcompiled,
-        cli.spatial_tui,
-        (120, 40),
-        false,
-    )
-    .await?;
+    let options = InspectOptions {
+        verbose: false,
+        max_depth: cli.max_depth,
+        max_nodes: cli.max_nodes,
+    };
+    let mut app = if let Some(locator) = cli.application_id {
+        let selected = backend
+            .applications()
+            .await?
+            .into_iter()
+            .find(|application| application.backend_locator == locator)
+            .ok_or_else(|| {
+                io::Error::other("Exact application is no longer present; no name rebinding")
+            })?;
+        TuiApplication::new_selected(
+            backend,
+            selected,
+            options,
+            Duration::from_millis(500),
+            BootstrapStrategy::Walk,
+            2048,
+            PresentationMode::Transcompiled,
+            cli.spatial_tui,
+            (120, 40),
+            false,
+        )
+        .await?
+    } else {
+        TuiApplication::new(
+            backend,
+            cli.app.expect("validated application selector"),
+            options,
+            Duration::from_millis(500),
+            BootstrapStrategy::Walk,
+            2048,
+            PresentationMode::Transcompiled,
+            cli.spatial_tui,
+            (120, 40),
+            false,
+        )
+        .await?
+    };
     app.configure_decision_annotations(cli.decision_annotations);
     let mut observation: Option<AgentObservation> = None;
     let mut serial = 0u64;

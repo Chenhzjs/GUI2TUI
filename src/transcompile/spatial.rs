@@ -1640,6 +1640,20 @@ fn presentation_for_region(
                 "visible single-line field has a direct, possibly read-only presentation payload",
             )
         }
+        (_, Some(SemanticRole::ComboBox))
+            if source.is_some_and(|node| {
+                node.states
+                    .iter()
+                    .any(|state| matches!(state, SemanticState::Other(value) if value == "showing"))
+            }) =>
+        {
+            (
+                RegionPresentationKind::ControlGroup,
+                1,
+                false,
+                "visible choice owner has a presentation; ChoiceCatalog determines interactivity",
+            )
+        }
         (SemanticRegionKind::Field | SemanticRegionKind::Control, _) if actionable > 0 => (
             RegionPresentationKind::ControlGroup,
             actionable,
@@ -4811,6 +4825,38 @@ mod tests {
                 .iter()
                 .any(|reason| reason == "role = Dialog")
         }));
+    }
+
+    #[test]
+    fn visible_choice_owner_is_presented_before_choice_capability_is_projected() {
+        let mut root = node(0, SemanticRole::Window, "Form", None);
+        let mut choice = node(1, SemanticRole::ComboBox, "Review status", None);
+        choice.states.push(SemanticState::Other("showing".into()));
+        root.children.push(choice);
+        let analysis = analyze_regions(&root);
+        assert!(analysis.root.children[0].interactions.is_empty());
+        let evidence = SpatialEvidenceIndex::from_tree(
+            &root,
+            ApplicationGenerationId(15),
+            SpatialProbeBudget::default(),
+        );
+        let layout = infer_layout(&analysis, &root, &evidence);
+        let region = layout
+            .plan
+            .regions
+            .iter()
+            .find(|r| {
+                r.presentation.source_nodes.contains(&RuntimeNodeId::new(1))
+                    && r.presentation.kind.is_meaningful()
+            })
+            .unwrap();
+        assert_ne!(region.demand, LayoutDemand::Hidden);
+        let scene = crate::transcompile::compile_scene(&root, &analysis);
+        assert!(region_focus_order(&layout.plan, &scene).contains(&region.id));
+        assert!(
+            plan_leaves(&realize_responsive_layout(&layout.plan, 40, 12, Some(region.id)).root)
+                .contains(&region.id)
+        );
     }
 
     #[test]

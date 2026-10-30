@@ -8,6 +8,40 @@ use crate::{
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
+/// Reuse Human palette wording as non-callable discovery for the exact focus.
+fn focused_operation_discovery(
+    cache: &SemanticCache,
+    scopes: &InteractionScopes,
+    document: &TuiDocument,
+    binding: &SceneBinding,
+) -> Option<Value> {
+    let target = binding.runtime_id;
+    let node = cache.node(target)?;
+    if node.backend_locator != binding.backend_locator
+        || document.nodes.get(&target)?.backend_locator != binding.backend_locator
+        || !scopes.allows_node(target)
+        || document::secret_source(cache, target)
+    {
+        return None;
+    }
+    let queries: Vec<_> = public_action_entries_for_document(document)
+        .into_iter()
+        .filter(|(id, locator, _, operation)| {
+            *id == target
+                && *locator == binding.backend_locator
+                && document::wire::agent_supports(operation)
+        })
+        .map(|(_, _, label, operation)| {
+            let mut hint = document::wire::operation_kind(&operation);
+            // This is the existing full Human row label, not a new alias or ID.
+            hint["query"] = json!(label);
+            hint["exact"] = json!(true);
+            hint
+        })
+        .collect();
+    Some(json!({"execution_authority":false,"find_action_queries":queries}))
+}
+
 impl TuiApplication {
     /// Experimental Human viewport projection of this owner's current document.
     /// This is deliberately partial presentation, never a complete document.
@@ -46,6 +80,7 @@ impl TuiApplication {
         } else if let Some(palette) = self.command_palette.as_mut() {
             palette.refresh_commands(self.commands.clone(), self.scopes.active());
         }
+        self.refresh_tui_palette_query();
         let mut terminal =
             Terminal::new(TestBackend::new(width, height)).map_err(|error| error.to_string())?;
         terminal
@@ -153,9 +188,16 @@ impl TuiApplication {
             })
             .flatten()
             .and_then(|id| self.scene.element(id))
-            .map(|element| {
-                json!({"scene":element.id.get(),"label":element.label(),
-                "target":element.binding.as_ref().map(|b|b.runtime_id.get())})
+            .and_then(|element| {
+                let binding = element.binding.as_ref()?;
+                let discovery = focused_operation_discovery(
+                    &self.cache,
+                    &self.scopes,
+                    &self.document,
+                    binding,
+                )?;
+                Some(json!({"scene":element.id.get(),"label":element.label(),
+                "target":binding.runtime_id.get(),"operation_discovery":discovery}))
             });
         let reader = self.content_view.as_ref().map(|v| {
             json!({"root":v.root.get(),
@@ -196,7 +238,7 @@ impl TuiApplication {
                 "close_commands",
             ]);
         }
-        Ok(json!({"version":"gui2tui.agent.tui-text.experimental.v3",
+        Ok(json!({"version":"gui2tui.agent.tui-text.experimental.v4",
             "observation_id":observed.data["observation_id"],
             "session":observed.data["session"],"generation":observed.data["generation"],
             "interaction_scope":observed.data["interaction_scope"],
@@ -350,6 +392,12 @@ impl TuiApplication {
             }
         };
         let relations_ms = relations_started.elapsed().as_secs_f64() * 1000.0;
+        let selection_started = Instant::now();
+        enrich_choice_selections(&self.backend, &mut cache, Some(cancel)).await;
+        if cancel.is_cancelled() {
+            return Err("Document observation cancelled".into());
+        }
+        let selection_ms = selection_started.elapsed().as_secs_f64() * 1000.0;
         let (reads, text_metrics) =
             crate::content::materialize::read_public_texts(&self.backend, &cache, &scopes, cancel)
                 .await?;
@@ -454,11 +502,143 @@ impl TuiApplication {
         let annotation_ms = annotation_started.elapsed().as_secs_f64() * 1000.0;
         let organization_ms = organize_started.elapsed().as_secs_f64() * 1000.0;
         let timings = json!({"ax_walk_ms":discovery_ms,"ax_walk_read_groups":bootstrap.metrics.walk,"arena_ms":arena_ms,"capability_qualification_ms":qualification_ms,
-            "relations_ms":relations_ms,"relation_requests":relation_rpcs,"relations_unavailable":unavailable,
+            "selection_ms":selection_ms,"relations_ms":relations_ms,"relation_requests":relation_rpcs,"relations_unavailable":unavailable,
             "full_text":text_metrics,"value_domains_ms":values_ms,"document_metadata_ms":metadata_ms,"value_sources":values.len(),
             "table_positions_ms":table_positions_ms,"table_position_sources":table_positions.len(),"shared_organization_ms":organization_ms,"human_scene_layout_ms":0,"human_scene_layout_performed":false,
             "collection_and_organization_ms":started.elapsed().as_secs_f64()*1000.0,
             "decision_annotations_ms":annotation_ms,"provider_model_decision_ms":null});
         Ok((cache, scopes, document, timings))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::semantic::{DebugInfo, RelationalSemanticGraph, SemanticNode, TextInputKind};
+    use std::collections::HashSet;
+
+    fn fixture(modal: bool) -> (SemanticCache, InteractionScopes, TuiDocument, SceneBinding) {
+        let node = |path: &str, role, kind| SemanticNode {
+            runtime_id: RuntimeNodeId::new(0),
+            backend_locator: BackendLocator::new(":1.70", path),
+            index_in_parent: None,
+            role,
+            name: None,
+            description: None,
+            value: None,
+            text_input_kind: kind,
+            states: vec![SemanticState::Enabled],
+            actions: Vec::new(),
+            capabilities: vec![SemanticCapability::EditComplexText],
+            children: Vec::new(),
+            truncations: Vec::new(),
+            debug: DebugInfo::default(),
+        };
+        let mut root = node("/window", SemanticRole::Window, None);
+        root.capabilities.clear();
+        let public = node("/body", SemanticRole::TextInput, Some(TextInputKind::Plain));
+        let mut password = node(
+            "/password",
+            SemanticRole::TextInput,
+            Some(TextInputKind::Password),
+        );
+        let mut child = node("/password/child", SemanticRole::TextInput, None);
+        child.name = Some("secret-marker".into());
+        password.children.push(child);
+        root.children = vec![public, password];
+        if modal {
+            let mut dialog = node("/dialog", SemanticRole::Dialog, None);
+            dialog.states.extend([
+                SemanticState::Other("modal".into()),
+                SemanticState::Other("showing".into()),
+                SemanticState::Other("visible".into()),
+            ]);
+            root.children.push(dialog);
+        }
+        let cache = SemanticCache::from_snapshot(root).unwrap();
+        let scopes = InteractionScopes::analyze(&cache, &RelationalSemanticGraph::new(&cache));
+        let target = cache
+            .runtime_id(&BackendLocator::new(":1.70", "/body"))
+            .unwrap();
+        let operations = document::public_operations(&cache, &scopes, &BTreeMap::new());
+        let document = document::build_document(&DocumentInput {
+            observation: document::DocumentObservation {
+                session: crate::runtime::RuntimeSessionId::default(),
+                generation: crate::runtime::ApplicationGenerationId(1),
+                observation_id: 1,
+                started_at_ms: 1,
+                finished_at_ms: 1,
+            },
+            cache: &cache,
+            scopes: &scopes,
+            redacted: &HashSet::new(),
+            text_reads: &BTreeMap::new(),
+            value_domains: &BTreeMap::new(),
+            metadata_reads: &BTreeMap::new(),
+            table_positions: &BTreeMap::new(),
+            content_roots: &[],
+            operations: &operations,
+        })
+        .unwrap();
+        let binding = SceneBinding {
+            runtime_id: target,
+            backend_locator: cache.node(target).unwrap().backend_locator.clone(),
+            semantic_role: SemanticRole::TextInput,
+            actions: Vec::new(),
+            capability: InteractionCapability::BrowseContent,
+            default_intent: UiIntent::BeginRead,
+        };
+        (cache, scopes, document, binding)
+    }
+
+    #[test]
+    fn focus_discovery_reuses_human_operations_without_callable_ids() {
+        let (cache, scopes, doc, binding) = fixture(false);
+        let hint = focused_operation_discovery(&cache, &scopes, &doc, &binding).unwrap();
+        assert_eq!(hint["execution_authority"], false);
+        let queries = hint["find_action_queries"].as_array().unwrap();
+        assert_eq!(queries.len(), 1);
+        assert_eq!(queries[0]["kind"], "replace_text");
+        assert_eq!(queries[0]["multiline"], true);
+        assert_eq!(queries[0]["parameter"], "text");
+        assert_eq!(queries[0]["exact"], true);
+        let expected = public_action_entries_for_document(&doc)
+            .into_iter()
+            .find(|entry| {
+                entry.0 == binding.runtime_id
+                    && matches!(
+                        entry.3,
+                        crate::tui::palette::PublicOperation::EditText { .. }
+                    )
+            })
+            .unwrap()
+            .2;
+        assert_eq!(queries[0]["query"], expected);
+        assert!(!hint.to_string().contains("op-"));
+        assert!(!hint.to_string().contains("secret-marker"));
+    }
+
+    #[test]
+    fn focus_discovery_rejects_stale_missing_secret_and_modal_targets() {
+        let (cache, scopes, doc, binding) = fixture(false);
+        let mut invalid = binding.clone();
+        invalid.backend_locator = BackendLocator::new(":1.70", "/different");
+        assert!(focused_operation_discovery(&cache, &scopes, &doc, &invalid).is_none());
+        invalid.runtime_id = RuntimeNodeId::new(u64::MAX);
+        assert!(focused_operation_discovery(&cache, &scopes, &doc, &invalid).is_none());
+        for path in ["/password", "/password/child"] {
+            invalid.runtime_id = cache
+                .runtime_id(&BackendLocator::new(":1.70", path))
+                .unwrap();
+            invalid.backend_locator = cache
+                .node(invalid.runtime_id)
+                .unwrap()
+                .backend_locator
+                .clone();
+            assert!(focused_operation_discovery(&cache, &scopes, &doc, &invalid).is_none());
+        }
+        let (cache, scopes, doc, binding) = fixture(true);
+        assert!(!scopes.allows_node(binding.runtime_id));
+        assert!(focused_operation_discovery(&cache, &scopes, &doc, &binding).is_none());
     }
 }

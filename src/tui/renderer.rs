@@ -147,7 +147,8 @@ pub struct ContentRender {
     pub table_cell_activation: bool,
 }
 
-pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegion> {
+pub fn render(frame: &mut Frame<'_>, mut context: RenderContext<'_>) -> Vec<HitRegion> {
+    let panel_has_key_guide = context.palette.is_some() || context.edit_session.is_some();
     let navigator = context
         .spatial
         .map(|plan| RegionNavigator::derive(plan, context.scene));
@@ -157,11 +158,11 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     let focused_document_summary = focused_element
         .is_some_and(|element| matches!(element.kind, SceneElementKind::DocumentSummary { .. }));
     let hints = if context.edit_session.is_some() {
-        "? Help · Enter Apply · Esc Cancel"
+        "Esc Cancel · Ctrl+S Apply · F1 Help"
     } else if context.choice.is_some() {
-        "? Help · ↑/↓ Select · Enter Apply · Esc Cancel"
+        "Esc Cancel · ↑↓ Select · Enter Use"
     } else if context.palette.is_some() {
-        "↑/↓ Select · Enter Use · PgUp/PgDn Details · Esc Back"
+        palette_help(frame.area().width)
     } else if let Some(content) = &context.content {
         match content.mode {
             ContentViewMode::Reader => "? Help · j/k Scroll · / Search · o Outline · Esc Back",
@@ -190,20 +191,32 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     } else if focused_external_edit {
         if context.external_text_handler_available {
             if focused_document_summary {
-                "? Help · Enter Read · e Edit externally · Tab Control"
+                "? Help · Enter Read · F3 Actions · e Edit externally · Tab Control"
             } else {
-                "? Help · Enter Edit · e Edit externally · Tab Control"
+                "? Help · Enter Edit · F3 Actions · e Edit externally · Tab Control"
             }
+        } else if focused_document_summary {
+            "? Help · Enter Read · F3 Actions · external editor not configured · Tab Control"
         } else {
-            "? Help · external edit not configured · Tab Control"
+            "? Help · F3 Actions · external editor not configured · Tab Control"
         }
     } else if navigator
         .as_ref()
         .is_some_and(RegionNavigator::has_subregions)
     {
-        "? Help · F6 Region · Ctrl+Tab Pane · Tab Control · Enter Use · : Commands · F3 Actions"
+        "Tab Move · Enter Use · F3 Find action · F6 Region · Ctrl+Tab Pane · F1 Help"
     } else {
-        "? Help · F6 Region · Tab Control · Enter Use · : Commands · F3 Actions"
+        "Tab Move · Enter Use · F3 Find action · F6 Region · F1 Help"
+    };
+    let hints = if frame.area().width < 60
+        && context.edit_session.is_none()
+        && context.choice.is_none()
+        && context.palette.is_none()
+        && context.content.is_none()
+    {
+        "Tab · Enter Use · F3 Find · F1 Help"
+    } else {
+        hints
     };
     let area = frame.area();
     let content_area = main_content_area(area);
@@ -234,6 +247,9 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
         Rect::new(area.x, area.y, area.width, u16::from(area.height > 0)),
     );
     let mut hit_regions = Vec::new();
+    // The local editor owns one input surface. Background controls continue
+    // to show the authoritative GUI value, not a second copy of the buffer.
+    let edit_session = context.edit_session.take();
     if context.application_available {
         if let Some(plan) = context.spatial {
             render_spatial(
@@ -253,7 +269,11 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
             content_area,
         );
     }
+    context.edit_session = edit_session;
     if let Some(palette) = context.palette {
+        // The background remains visible, but is not an interactive surface.
+        hit_regions.clear();
+        frame.buffer_mut().set_style(content_area, secondary());
         render_palette(frame, content_area, palette);
     }
     if let Some(choice) = context.choice {
@@ -265,6 +285,7 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
     // A public text target need not have a visible scene element. The input
     // surface belongs to the edit session, not to the region projection.
     if let Some(session) = context.edit_session {
+        hit_regions.clear();
         let area = Rect::new(
             content_area.x,
             content_area.y,
@@ -272,16 +293,29 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
             content_area.height.min(5),
         );
         frame.render_widget(Clear, area);
+        let edit_label = context
+            .scene
+            .elements
+            .iter()
+            .find(|element| {
+                element.binding.as_ref().is_some_and(|binding| {
+                    binding.runtime_id == session.target
+                        && binding.backend_locator == session.backend_locator
+                })
+            })
+            .map(|element| element.label())
+            .unwrap_or("text");
+        let title = if session.range_parameter {
+            " Edit range: start:end:text (Unicode characters, end exclusive) ".to_owned()
+        } else if session.value_parameter {
+            " Set value ".to_owned()
+        } else {
+            format!(" Edit {edit_label} ")
+        };
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(accent())
-            .title(if session.range_parameter {
-                " Edit range: start:end:text (Unicode characters, end exclusive) "
-            } else if session.value_parameter {
-                " Set value "
-            } else {
-                " Edit text "
-            });
+            .title(title);
         let inner = block.inner(area);
         frame.render_widget(block, area);
         frame.render_widget(
@@ -289,17 +323,29 @@ pub fn render(frame: &mut Frame<'_>, context: RenderContext<'_>) -> Vec<HitRegio
                 "[editing] {}\n{}",
                 edit_buffer_window(session, inner.width.saturating_sub(10)),
                 if session.value_parameter || session.range_parameter {
-                    "Ctrl+S / Enter Apply · Esc Cancel"
+                    "Esc Cancel · Enter Apply"
                 } else {
-                    "Ctrl+S Apply · Enter Apply+Submit · Esc Cancel"
+                    "Esc Cancel · Ctrl+S Apply · F1 Help"
                 }
             ))
             .style(accent()),
             inner,
         );
     }
-    let footer = if normal_footer_status(context.status) {
-        format!("{} · {hints}", context.status)
+    let footer = if panel_has_key_guide {
+        // These floating panels already contain their own key guide. Reserve
+        // the outer footer for meaningful outcomes or warnings.
+        if normal_footer_status(context.status) && !context.status.starts_with("Editing \"") {
+            context.status.to_owned()
+        } else {
+            String::new()
+        }
+    } else if normal_footer_status(context.status) {
+        if area.width < 60 || context.edit_session.is_some() {
+            format!("{hints} · {}", context.status)
+        } else {
+            format!("{} · {hints}", context.status)
+        }
     } else {
         hints.to_owned()
     };
@@ -676,12 +722,17 @@ fn navigation_line(
     Line::from(spans)
 }
 
-fn normal_footer_status(status: &str) -> bool {
+pub(crate) fn normal_footer_status(status: &str) -> bool {
     !status.is_empty()
         && !status.starts_with("Loaded ")
         && !status.starts_with("Live update")
         && !status.starts_with("Replayed bootstrap events")
         && !status.starts_with("Full refresh fallback:")
+        && !status.starts_with("Reader loaded ")
+        && !status.starts_with("Command palette — ")
+        && !status.starts_with("Choice overlay — ")
+        && !status.starts_with("Region: ")
+        && status != "Public actions — choose the exact named operation"
 }
 
 fn bounded_non_expanding_composition_area(
@@ -713,13 +764,9 @@ fn bounded_non_expanding_composition_area(
     if height == 0 || area.height <= height {
         return area;
     }
-    Rect::new(
-        area.x,
-        area.y
-            .saturating_add(area.height.saturating_sub(height) / 2),
-        area.width,
-        height,
-    )
+    // Main content starts at a stable reading edge; floating overlays own
+    // centering. Do not spend the first terminal rows on empty padding.
+    Rect::new(area.x, area.y, area.width, height)
 }
 
 fn terminal_height_demand(plan: &TuiLayoutPlan, node: &LayoutNode) -> Option<u16> {
@@ -1491,7 +1538,7 @@ fn render_compact_surface(
         frame.render_widget(
             Paragraph::new(format!(
                 "[editing] {}",
-                edit_buffer_window(session, area.width)
+                edit_buffer_window(session, area.width.saturating_sub(10))
             ))
             .style(accent()),
             area,
@@ -1512,9 +1559,17 @@ fn render_compact_surface(
                     ""
                 }
             ),
+            SceneElementKind::Value { label, display } => {
+                format!("[{}{label}: {display}]", if focused { "> " } else { "" },)
+            }
+            SceneElementKind::Checkbox { label, checked } => format!(
+                "[{}{} {label}]",
+                if focused { "> " } else { "" },
+                if *checked { "x" } else { " " },
+            ),
             _ => format!("[{}{}]", if focused { "> " } else { "" }, element.label()),
         };
-        let reserve = if shown + 1 < elements.len() { 9 } else { 0 };
+        let reserve = if shown + 1 < elements.len() { 10 } else { 0 };
         let available = area.right().saturating_sub(x).saturating_sub(reserve);
         if available < 4 {
             break;
@@ -1549,8 +1604,8 @@ fn render_compact_surface(
     }
     if shown < elements.len() {
         frame.render_widget(
-            Paragraph::new("[: More…]"),
-            Rect::new(x.min(area.right().saturating_sub(1)), area.y, 9, 1),
+            Paragraph::new("[F3 More]"),
+            Rect::new(x.min(area.right().saturating_sub(9)), area.y, 9, 1),
         );
     } else if shown == 0 {
         let label = match region.presentation.kind {
@@ -1696,10 +1751,14 @@ fn element_lines_for_width(
         };
     match &element.kind {
         SceneElementKind::Text { text } | SceneElementKind::Status { text } => {
-            vec![format!("  {text}")]
+            SceneElement::wrap_display_lines(&format!("  {text}"), width)
         }
-        SceneElementKind::Hint { text } => vec![format!("    Hint: {text}")],
-        SceneElementKind::Error { text } => vec![format!("    Error: {text}")],
+        SceneElementKind::Hint { text } => {
+            SceneElement::wrap_display_lines(&format!("    Hint: {text}"), width)
+        }
+        SceneElementKind::Error { text } => {
+            SceneElement::wrap_display_lines(&format!("    Error: {text}"), width)
+        }
         SceneElementKind::Group { label } | SceneElementKind::CommandHeader { label } => {
             vec![format!("  {label}:")]
         }
@@ -1721,7 +1780,10 @@ fn element_lines_for_width(
             }) {
                 vec![
                     format!("{marker}{label}  [editing]"),
-                    format!("    > {}", edit_buffer_window(session, width)),
+                    format!(
+                        "    > {}",
+                        edit_buffer_window(session, width.saturating_sub(6))
+                    ),
                 ]
             } else if element.height_for_width(width) == 1 {
                 vec![format!("{marker}{label}: {display}{unavailable}")]
@@ -1751,7 +1813,8 @@ fn element_lines_for_width(
             if *external_edit && external_text_handler_available {
                 "    [ Enter: Read document | e: Edit externally ]".to_owned()
             } else if *external_edit {
-                "    [ Enter: Read document | external edit not configured ]".to_owned()
+                "    [ Enter: Read document | F3: Actions | external editor not configured ]"
+                    .to_owned()
             } else {
                 "    [ Enter: Read document ]".to_owned()
             },
@@ -1784,8 +1847,17 @@ fn element_lines_for_width(
 }
 
 pub(crate) fn palette_areas(area: Rect) -> [Rect; 6] {
-    let width = area.width.min(120);
-    let height = area.height.min(30);
+    // Leave context around the floating palette when the terminal can afford it.
+    let width = if area.width >= 60 {
+        (area.width.saturating_mul(9) / 10).min(112)
+    } else {
+        area.width
+    };
+    let height = if area.height >= 16 {
+        (area.height.saturating_mul(4) / 5).min(28)
+    } else {
+        area.height
+    };
     let popup = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
         area.y + area.height.saturating_sub(height) / 2,
@@ -1825,6 +1897,14 @@ pub(crate) fn palette_result_range(
     start..start.saturating_add(visible).min(count)
 }
 
+fn palette_help(width: u16) -> &'static str {
+    if width < 60 {
+        "↑↓ Select · Enter Use · Esc Back"
+    } else {
+        "↑/↓ Select · Enter Use · PgUp/PgDn Details · Esc Back"
+    }
+}
+
 fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>) {
     let [popup, search, scope, results, details, footer] = palette_areas(area);
     frame.render_widget(Clear, popup);
@@ -1836,7 +1916,12 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
     frame.render_widget(
         Block::default()
             .title(format!(
-                " Command palette {}/{} ",
+                " {} {}/{} ",
+                if palette.scope_switchable {
+                    "Commands"
+                } else {
+                    "Public actions"
+                },
                 palette
                     .selected
                     .saturating_add(1)
@@ -1886,10 +1971,16 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
         .take(range.len())
     {
         let selected = index == palette.selected;
+        let section = entry.section_label().filter(|section| {
+            index == start || palette.entries[index - 1].section_label() != Some(*section)
+        });
         let text = format!(
             "{} {}{}",
             if selected { ">" } else { " " },
-            entry.short_label(),
+            section.map_or_else(
+                || entry.short_label(),
+                |label| format!("{label} · {}", entry.short_label())
+            ),
             if entry.group { " ›" } else { "" }
         );
         frame.render_widget(
@@ -1936,27 +2027,16 @@ fn render_palette(frame: &mut Frame<'_>, area: Rect, palette: PaletteRender<'_>)
         );
     }
     frame.render_widget(
-        Paragraph::new(clipped(
-            "↑/↓ Select · Enter Use · PgUp/PgDn Details · Esc Back",
-            footer.width,
-        ))
-        .style(secondary()),
+        Paragraph::new(clipped(palette_help(footer.width), footer.width)).style(secondary()),
         footer,
     );
 }
 
 fn edit_buffer_window(session: &EditSession, width: u16) -> String {
-    let available = usize::from(width.saturating_sub(7)).max(1);
-    let characters: Vec<char> = session.buffer.text().chars().collect();
-    let cursor = session.buffer.cursor().min(characters.len());
-    let start = cursor.saturating_sub(available / 2);
-    let end = (start + available.saturating_sub(1)).min(characters.len());
-    let mut rendered: String = characters[start..end].iter().collect();
-    let local_cursor = cursor.saturating_sub(start).min(rendered.chars().count());
-    let byte = rendered
-        .char_indices()
-        .nth(local_cursor)
-        .map_or(rendered.len(), |(index, _)| index);
+    if width == 0 {
+        return String::new();
+    }
+    let (mut rendered, byte) = session.buffer.visible_window(width.saturating_sub(1));
     rendered.insert(byte, '|');
     rendered
 }
@@ -2026,6 +2106,57 @@ mod tests {
             },
             reasons: Vec::new(),
         }
+    }
+
+    #[test]
+    fn narrow_unicode_editor_keeps_the_cursor_inside_its_cell_budget() {
+        let text = "中文abc".repeat(20);
+        let mut edit = EditSession::new(
+            RuntimeNodeId::new(1),
+            BackendLocator::new(":1.2", "/input"),
+            text.clone(),
+            1,
+        );
+        for _ in 0..35 {
+            edit.buffer.move_left();
+        }
+        let view = edit_buffer_window(&edit, 18);
+        assert!(view.contains('|'));
+        assert!(Line::from(view.as_str()).width() <= 18);
+        assert_eq!(edit.buffer.text(), text);
+    }
+
+    #[test]
+    fn routine_status_noise_does_not_hide_errors_or_coverage_warnings() {
+        assert!(!normal_footer_status(
+            "Reader loaded 2 blocks (text_rpcs=0 ranges=0 cache=0 bytes) in 1 ms"
+        ));
+        assert!(!normal_footer_status("Choice overlay — arrows select"));
+        assert!(normal_footer_status(
+            "Reader content load failed: unavailable"
+        ));
+        assert!(normal_footer_status(
+            "Public actions — partial tree; refresh"
+        ));
+        assert!(normal_footer_status(
+            "External change detected; commit blocked"
+        ));
+    }
+
+    #[test]
+    fn explanation_text_wraps_without_losing_its_tail_or_row_height() {
+        let e = element(SceneElementKind::Text {
+            text: "Confirm the project details before applying changes. 中文说明。".into(),
+        });
+        let lines = element_lines_for_width(&e, false, None, 38, false);
+        assert!(lines.len() > 1);
+        assert_eq!(usize::from(e.height_for_width(38)), lines.len());
+        assert_eq!(lines.concat(), format!("  {}", e.label()));
+        assert!(
+            lines
+                .iter()
+                .all(|line| Line::from(line.as_str()).width() <= 38)
+        );
     }
 
     #[test]
@@ -2118,8 +2249,9 @@ mod tests {
         assert!(
             missing
                 .iter()
-                .any(|line| line.contains("external edit not configured"))
+                .any(|line| line.contains("external editor not configured"))
         );
+        assert!(missing.iter().any(|line| line.contains("F3: Actions")));
         assert!(!missing.iter().any(|line| line.contains("e: Edit")));
 
         let configured = element_lines_for_width(&document, true, None, 120, true);
@@ -2201,6 +2333,54 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(rendered.contains("e Edit externally"));
+        for document_summary in [false, true] {
+            let mut focused = scene.element(field_id).unwrap().clone();
+            if document_summary {
+                focused.kind = SceneElementKind::DocumentSummary {
+                    title: "Notes".into(),
+                    blocks: 2,
+                    headings: 0,
+                    links: 0,
+                    forms: 0,
+                    completeness: "Complete".into(),
+                    external_edit: true,
+                };
+                let binding = focused.binding.as_mut().unwrap();
+                binding.capability = InteractionCapability::BrowseContent;
+                binding.default_intent = UiIntent::BeginRead;
+            }
+            let missing_handler_scene = TuiScene::new("Editor".into(), &root, vec![focused]);
+            terminal
+                .draw(|frame| {
+                    render(
+                        frame,
+                        RenderContext {
+                            scene: &missing_handler_scene,
+                            interaction_scope: None,
+                            focused: Some(field_id),
+                            scroll_offset: 0,
+                            status: "ready",
+                            application_available: true,
+                            external_text_handler_available: false,
+                            edit_session: None,
+                            palette: None,
+                            choice: None,
+                            content: None,
+                            spatial: None,
+                            active_region: None,
+                            inline_content: None,
+                        },
+                    );
+                })
+                .unwrap();
+            let footer = (0..100)
+                .map(|x| terminal.backend().buffer()[(x, 11)].symbol())
+                .collect::<String>();
+            assert!(footer.contains("F3 Actions"));
+            assert!(footer.contains("external editor not configured"));
+            assert!(!footer.contains("e Edit externally"));
+            assert_eq!(footer.contains("Enter Read"), document_summary);
+        }
         let edit = EditSession::new(
             RuntimeNodeId::new(1),
             BackendLocator::new(":1.2", "/node/1"),
@@ -2459,6 +2639,21 @@ mod tests {
     }
 
     #[test]
+    fn palette_floats_with_context_and_falls_back_in_small_terminals() {
+        for area in [Rect::new(0, 0, 100, 28), Rect::new(2, 3, 140, 38)] {
+            let [popup, _, _, results, details, _] = palette_areas(area);
+            assert!(popup.x > area.x && popup.y > area.y);
+            assert!(popup.right() < area.right() && popup.bottom() < area.bottom());
+            assert!(results.height >= 3 && details.height >= 3);
+            let range = palette_result_range(results, 949, 948);
+            assert!(range.contains(&948));
+            assert!(range.end <= 949);
+        }
+        let small = Rect::new(0, 0, 40, 12);
+        assert_eq!(palette_areas(small)[0], small);
+    }
+
+    #[test]
     fn long_palette_labels_do_not_wrap_over_other_results() {
         use crate::transcompile::{CommandGroup, CommandHierarchy, InteractionScopeId};
         use crate::tui::palette::{CommandPalette, PublicOperation};
@@ -2517,10 +2712,14 @@ mod tests {
                 .collect::<Vec<_>>();
             let first = rows
                 .iter()
-                .position(|row| row.contains("#2  Action: press"))
+                .position(|row| row.contains("Action: press"))
                 .unwrap();
-            assert!(rows[first + 1].contains("#3  Action: press"));
-            assert!(rows.iter().any(|row| row.contains("Snapshot target: #2")));
+            assert!(rows[first + 1].contains("Action: press"));
+            assert!(
+                palette.entries()[0]
+                    .detail_text()
+                    .contains("Snapshot target: #2")
+            );
         }
     }
 
@@ -2632,6 +2831,40 @@ mod tests {
                 .any(|hit| hit.scene_id == SceneElementId::new(9))
         );
         assert_eq!(scene.elements, before);
+        terminal
+            .draw(|frame| {
+                hits = render(
+                    frame,
+                    RenderContext {
+                        scene: &scene,
+                        interaction_scope: None,
+                        focused: Some(SceneElementId::new(9)),
+                        scroll_offset: 0,
+                        status: "",
+                        application_available: true,
+                        external_text_handler_available: false,
+                        edit_session: None,
+                        palette: Some(PaletteRender {
+                            query: "",
+                            entries: &[],
+                            selected: 0,
+                            all_scopes: false,
+                            scope_switchable: false,
+                            detail_scroll: 0,
+                        }),
+                        choice: None,
+                        content: None,
+                        spatial: Some(&plan),
+                        active_region: None,
+                        inline_content: None,
+                    },
+                );
+            })
+            .unwrap();
+        assert!(
+            hits.is_empty(),
+            "palette must not expose background hit targets"
+        );
     }
 
     #[test]
@@ -2847,6 +3080,6 @@ mod tests {
         let area =
             bounded_non_expanding_composition_area(&plan, &plan.root, Rect::new(0, 0, 100, 50));
         assert_eq!(area.height, 17);
-        assert!(area.y > 0);
+        assert_eq!(area.y, 0);
     }
 }

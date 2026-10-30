@@ -1264,7 +1264,14 @@ impl AtspiBackend {
                 },
             )
             .await?;
-        node.truncations.clear();
+        // Node-only traversal limits do not truncate the retained cache tree.
+        // Attribute failures still belong to this fresh property's provenance.
+        node.truncations.retain(|truncation| {
+            matches!(
+                truncation,
+                TreeTruncation::ReadFailure { .. } | TreeTruncation::OperationTimeout { .. }
+            )
+        });
         Ok(node)
     }
 
@@ -2983,6 +2990,76 @@ impl AtspiBackend {
             metadata.maximum,
             metadata.increment,
         ))
+    }
+
+    /// Read every current public Selection member; no mutation or guessed index.
+    pub async fn read_public_selection(
+        &self,
+        locator: &BackendLocator,
+        cancel: Option<&crate::modality::CancellationToken>,
+    ) -> Result<Vec<BackendLocator>, BackendError> {
+        let id = locator.encode();
+        let object = object_ref_from_id(locator)?;
+        let proxy = self
+            .accessible_proxy(&object)
+            .await
+            .map_err(|e| BackendError::ObjectUnavailable(id.clone(), e))?;
+        let role = dbus_operation(
+            self.operation_timeout,
+            "read Selection role",
+            &id,
+            proxy.get_role(),
+        )
+        .await?;
+        if role == Role::PasswordText {
+            return Err(BackendError::SecretContentDisabled(id));
+        }
+        let proxies = atspi_operation(
+            self.operation_timeout,
+            "create public Selection proxies",
+            &id,
+            proxy.proxies(),
+        )
+        .await?;
+        let selection = atspi_operation(
+            self.operation_timeout,
+            "create public Selection proxy",
+            &id,
+            proxies.selection(),
+        )
+        .await?;
+        let count = dbus_operation(
+            self.operation_timeout,
+            "read public selected count",
+            &id,
+            selection.n_selected_children(),
+        )
+        .await?;
+        if count < 0 {
+            return Err(BackendError::SelectionReadbackAmbiguous(id));
+        }
+        let mut members = Vec::new();
+        for index in 0..count {
+            if cancel.is_some_and(|token| token.is_cancelled()) {
+                return Err(BackendError::SemanticCache(
+                    "Selection read cancelled".into(),
+                ));
+            }
+            let member = dbus_operation(
+                self.operation_timeout,
+                "read public selected member",
+                &id,
+                selection.get_selected_child(index),
+            )
+            .await?;
+            let member = node_id_from_ref(&member)
+                .ok_or_else(|| BackendError::SelectionReadbackAmbiguous(id.clone()))?;
+            if members.contains(&member) {
+                return Err(BackendError::SelectionReadbackAmbiguous(id));
+            }
+            members.push(member);
+        }
+        Ok(members)
     }
 
     /// Read public Value facts without granting a mutation capability.
@@ -4782,7 +4859,15 @@ impl AtspiBackend {
                 interfaces,
                 proxies.as_ref(),
             )
-            .await;
+            .await
+            .unwrap_or_else(|error| {
+                warn!(node_id = %encoded_id, %error, "could not read AT-SPI value");
+                truncations.push(TreeTruncation::ReadFailure {
+                    operation: "read value",
+                    node_id: encoded_id.clone(),
+                });
+                None
+            });
             let adjustable_value = if interfaces.contains(Interface::Value)
                 && states.contains(&SemanticState::Enabled)
                 && !states.contains(&SemanticState::ReadOnly)
@@ -5596,57 +5681,63 @@ async fn read_value(
     role: Role,
     interfaces: atspi::InterfaceSet,
     proxies: Option<&atspi::proxy::proxy_ext::Proxies<'_>>,
-) -> Option<String> {
-    let proxies = proxies?;
+) -> Result<Option<String>, BackendError> {
+    if role == Role::PasswordText
+        || (!role_allows_text_value(role, interfaces) && !interfaces.contains(Interface::Value))
+    {
+        return Ok(None);
+    }
+    let proxies =
+        proxies.ok_or_else(|| BackendError::SemanticCache("value proxy unavailable".into()))?;
     if role_allows_text_value(role, interfaces) && interfaces.contains(Interface::Text) {
         let text_proxy: TextProxy<'_> =
-            atspi_operation(timeout, "create Text proxy", node_id, proxies.text())
-                .await
-                .ok()?;
+            atspi_operation(timeout, "create Text proxy", node_id, proxies.text()).await?;
         let total_count = dbus_operation(
             timeout,
             "read character count",
             node_id,
             text_proxy.character_count(),
         )
-        .await
-        .ok()?;
-        let count = total_count.clamp(0, 256);
+        .await?;
+        if total_count < 0 {
+            return Err(BackendError::SemanticCache(
+                "negative Text character count".into(),
+            ));
+        }
+        let count = total_count.min(256);
         let mut text = dbus_operation(
             timeout,
             "read text value",
             node_id,
             text_proxy.get_text(0, count),
         )
-        .await
-        .ok()?;
+        .await?;
         if total_count > count {
             text.push('…');
         }
-        return nonempty(text);
+        return Ok(Some(text));
     }
     if interfaces.contains(Interface::Value) {
         let value_proxy: ValueProxy<'_> =
-            atspi_operation(timeout, "create Value proxy", node_id, proxies.value())
-                .await
-                .ok()?;
+            atspi_operation(timeout, "create Value proxy", node_id, proxies.value()).await?;
         if let Ok(text) =
             dbus_operation(timeout, "read textual value", node_id, value_proxy.text()).await
             && let Some(text) = nonempty(text)
         {
-            return Some(text);
+            return Ok(Some(text));
         }
-        return dbus_operation(
-            timeout,
-            "read numeric value",
-            node_id,
-            value_proxy.current_value(),
-        )
-        .await
-        .ok()
-        .map(|value| value.to_string());
+        return Ok(Some(
+            dbus_operation(
+                timeout,
+                "read numeric value",
+                node_id,
+                value_proxy.current_value(),
+            )
+            .await?
+            .to_string(),
+        ));
     }
-    None
+    Ok(None)
 }
 
 fn text_update_is_verified(requested: &str, readback: &str) -> bool {

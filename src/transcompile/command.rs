@@ -277,7 +277,15 @@ fn collect_command_entries(
         {
             let mut group = CommandGroup {
                 source: child.runtime_id,
-                label: child.name.clone().unwrap_or_else(|| child.role.to_string()),
+                label: command_source_name(child).unwrap_or_else(|| match child.role {
+                    SemanticRole::MenuBar => "Menus".into(),
+                    SemanticRole::Toolbar => "Tools".into(),
+                    SemanticRole::StatusBar => "Status".into(),
+                    SemanticRole::ComboBox => "Choice and input actions".into(),
+                    SemanticRole::TextInput => "Text field actions".into(),
+                    SemanticRole::Container | SemanticRole::Unknown(_) => "Other controls".into(),
+                    _ => child.role.to_string(),
+                }),
                 scope,
                 children: Vec::new(),
             };
@@ -286,7 +294,23 @@ fn collect_command_entries(
             }
             collect_command_entries(cache, scopes, child.runtime_id, &mut group.children);
             if !group.children.is_empty() {
-                output.push(CommandEntry::Group(group));
+                // Unnamed implementation wrappers add no command context.
+                // Preserve named/window/dialog boundaries and every leaf scope.
+                if command.is_none()
+                    && child
+                        .name
+                        .as_deref()
+                        .is_none_or(|name| name.trim().is_empty())
+                    && matches!(
+                        child.role,
+                        SemanticRole::Container | SemanticRole::Unknown(_)
+                    )
+                    && scopes.scope_for_node(id) == Some(scope)
+                {
+                    output.extend(group.children);
+                } else {
+                    output.push(CommandEntry::Group(group));
+                }
                 continue;
             }
         }
@@ -435,8 +459,19 @@ fn capability_intent(capability: InteractionCapability) -> Option<UiIntent> {
     }
 }
 
+fn command_source_name(node: &CachedSemanticNode) -> Option<String> {
+    node.name
+        .clone()
+        .filter(|label| super::presentation::has_display_text(label))
+        .or_else(|| {
+            node.description
+                .clone()
+                .filter(|label| super::presentation::has_display_text(label))
+        })
+}
+
 fn command_label(node: &CachedSemanticNode, intent: UiIntent) -> String {
-    let label = node.name.clone().unwrap_or_else(|| node.role.to_string());
+    let label = command_source_name(node).unwrap_or_else(|| node.role.to_string());
     match intent {
         UiIntent::Expand => format!("Expand {label}"),
         UiIntent::Collapse => format!("Collapse {label}"),

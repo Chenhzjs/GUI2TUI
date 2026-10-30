@@ -108,6 +108,13 @@ source's read result in this response; content blocks can reference it without
 requiring expansion. `nodes.value` retains the semantic cache value separately
 and is not a claim of complete Text.
 
+For this document response, `nodes.value_complete` is `true` only when the
+cached value is byte-equal to the same source's complete public Text payload
+in this observation. It is `false` when those strings differ and `null` when
+that comparison is unavailable. The cache value and complete Text both remain
+unchanged; a missing flag is unknown, not confirmation of whole-text equality.
+This is collected evidence, not an atomic snapshot or a task-completion claim.
+
 Operation `label` and `label_provenance` serialize the shared core description:
 public name, named semantic region with source IDs, or an explicit role fallback.
 Human F3 uses this same description and public document ancestors, then adds
@@ -326,11 +333,22 @@ remain separate. Legacy `observe` v1 operation shape is unchanged.
 ## Experimental shared Human Reader navigation
 
 `observe_tui_text` renders the actual Human spatial TUI with explicit
-`gui2tui.agent.tui-text.experimental.v3` metadata. This is partial viewport
+`gui2tui.agent.tui-text.experimental.v4` metadata. This is partial viewport
 content (`complete_document: false`); the complete current document remains in
 the same local response for validation. It is not a lossless model-input mode.
 `tui_navigate` publishes `gui2tui.agent.tui-navigation.experimental.v2` receipts.
 Legacy `observe`, document v1 and their execution registry remain unchanged.
+
+Version v4 adds `focused.operation_discovery` for the exact current, public,
+in-scope focus, even when the layout has clipped that object's binding. Its
+`find_action_queries` reuse existing Human public-palette labels and operation
+kinds; each `query`/`exact` pair can be passed to `find_action`. No operation ID,
+locator or value payload is added. `execution_authority:false` means these hints
+are neither executable references nor done evidence. Navigate first, then use
+only the newly published `visible_bindings`. Missing/empty hints do not prove
+absence elsewhere. Password subtrees, stale bindings and modal-excluded targets
+cannot supply a focus or hints; Reader/palette overlays have no base focus.
+Older v1-v3 captures retain their original meaning.
 
 The advertised `navigation_tools.actions` are mode-dependent. `open_reader`
 uses the existing Rust content catalogue, optionally matched by literal
@@ -402,3 +420,32 @@ the same literal palette finder (including exact/context/ambiguity). Without a
 query they preserve ordinary whole-palette opening. This remains local navigation,
 with `gui_write:false` and `activation:not_attempted`; it never dispatches a GUI
 operation or limits the complete underlying document inventory.
+The literal query, exact mode and context restriction survive palette refresh.
+Rendered results and visible operation references use the same current-source
+predicate as the navigation result; refreshing does not expand an exact or
+context-filtered result into the broader substring list. Multiple matches
+remain ambiguous, and an unavailable old locator is not rebound.
+
+### Public read provenance (development source)
+
+Shared document node records add `value_read_status`: `known`, `known_empty`,
+`not_requested`, `not_exposed`, `unavailable`, or `redacted`. `value: null` alone
+is not evidence of an empty input. The existing `value_complete` field still
+separately describes equality with a complete Text payload; a known preview
+need not be the whole text.
+
+Choice records add `current_source`. `public_selection` identifies one exact
+member returned by the owner's public Selection interface and matched to an
+available, scope-checked option. Other values distinguish `public_state`,
+`owner_label_match`, `not_reported`, `no_selected_member`,
+`multiple_selected_members`, `selection_read_failed`,
+`unresolved_public_selection`, and `options_not_exposed`. A public Selection
+read does not rewrite cached child state flags or grant execution authority.
+Unmatched/multiple members never select the first option by position.
+
+Operation `label_provenance.origin` additionally accepts `public_description` and `content_context`. The latter
+marks an untitled content source using explicitly labelled owning-window
+context; it does not invent a title on the source node.
+The raw name/description remain available, and the Human F3 title and search
+reuse the shared label. Description wording does not establish action effects.
+These are additive fields; existing v1 command and authority rules are unchanged.

@@ -209,7 +209,7 @@ impl ApplicationSelector {
         let footer = areas[1];
         let block = Block::default()
             .title(if self.query.is_empty() && !self.filtering {
-                " Select application ".to_owned()
+                " Choose an application · Enter to open ".to_owned()
             } else {
                 format!(
                     " Select application /{}{} ",
@@ -228,7 +228,7 @@ impl ApplicationSelector {
         let entries: Vec<_> = self.filtered().cloned().collect();
         if entries.is_empty() {
             let message = self.message.as_deref().unwrap_or(if self.query.is_empty() {
-                "No accessible applications found. Start a GUI application in the same desktop session.\n\n[d] diagnostics  [r] refresh  [q] quit"
+                "No accessible applications found.\n\nStart an application in the selected desktop/managed session, then press r.\nStill empty? Press d to check the connection and Accessibility service.\n\n[d] diagnostics  [r] refresh  [q] quit"
             } else { "No applications match this filter. Press / then Esc to clear." });
             frame.render_widget(
                 Paragraph::new(message).wrap(ratatui::widgets::Wrap { trim: true }),
@@ -269,7 +269,7 @@ impl ApplicationSelector {
             } else if self.filtering {
                 "Type filter | Enter Apply | Esc Clear"
             } else {
-                "↑/↓ Select | Enter Open/Launch | / Filter | r/F5 Refresh | d Diagnose | q Quit"
+                "↑↓ Choose · Enter Open · / Search · r Refresh · d Check setup · q Quit"
             })
             .style(Style::default().fg(Color::Cyan)),
             footer,

@@ -568,6 +568,10 @@ impl Analyzer {
             vec![node.runtime_id],
         );
         region.label = semantic_label(node);
+        if let Some((label_id, label)) = self.relations.labels.get(&node.runtime_id) {
+            region.label = Some(label.clone());
+            region.source_nodes.push(*label_id);
+        }
         region.command_path = command_path.to_vec();
         if let Some(intent) = intent_for_capability(capability) {
             region.interactions.push(RegionInteraction {
@@ -589,7 +593,12 @@ impl Analyzer {
         region.children = node
             .children
             .iter()
-            .map(|child| self.control_region(child, &node.capabilities, &node.states, &[]))
+            .map(|child| {
+                let mut member = self.control_region(child, &node.capabilities, &node.states, &[]);
+                // A selectable member may own a whole page, not just its label.
+                member.children = self.analyze_children(child, &[]);
+                member
+            })
             .collect();
         region
     }
@@ -1388,6 +1397,30 @@ mod tests {
                 .command_path
                 .contains(&"File".to_owned())
         );
+    }
+
+    #[test]
+    fn selection_members_retain_nested_content_and_bindings() {
+        let mut tabs = node(1, SemanticRole::TabList, "Pages");
+        tabs.capabilities.push(SemanticCapability::SelectChildren);
+        let mut page = node(2, SemanticRole::Tab, "Notes");
+        page.states = vec![SemanticState::Enabled, SemanticState::Selected];
+        let mut body = node(3, SemanticRole::TextInput, "Body");
+        body.states = vec![SemanticState::Enabled, SemanticState::Editable];
+        body.capabilities.push(SemanticCapability::EditText);
+        body.text_input_kind = Some(TextInputKind::Plain);
+        body.value = Some("Public document body".into());
+        page.children.push(body);
+        tabs.children.push(page);
+        let result = analyze_regions(&tabs);
+        fn contains(region: &SemanticRegion, id: RuntimeNodeId) -> bool {
+            region.source_nodes.contains(&id)
+                || region.children.iter().any(|child| contains(child, id))
+        }
+        assert!(contains(&result.root, RuntimeNodeId::new(3)));
+        let scene = crate::transcompile::compile_scene(&tabs, &result);
+        assert!(scene.scene_id_for_runtime(RuntimeNodeId::new(2)).is_some());
+        assert!(scene.scene_id_for_runtime(RuntimeNodeId::new(3)).is_some());
     }
 
     #[test]

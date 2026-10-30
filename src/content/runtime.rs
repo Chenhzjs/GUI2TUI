@@ -510,6 +510,25 @@ impl ContentRuntime {
                 "content root {root} disappeared during materialization"
             ))
         })?;
+        let unavailable_sources: HashSet<_> = requested
+            .iter()
+            .filter_map(|id| model.block(*id))
+            .filter(|block| {
+                semantic
+                    .node(block.source)
+                    .is_some_and(|n| n.debug.interfaces.iter().any(|i| i == "Text"))
+            })
+            .filter(|block| {
+                matches!(block.text, TextContentState::Unavailable)
+                    || (matches!(block.text, TextContentState::Unknown)
+                        && matches!(
+                            self.text_capability(block.source),
+                            TextCapabilityStatus::Unsupported | TextCapabilityStatus::Quarantined
+                        ))
+            })
+            .map(|block| block.source)
+            .collect();
+        report.unavailable_blocks = report.unavailable_blocks.max(unavailable_sources.len());
         let blocks = requested
             .iter()
             .take(budget.visible_blocks)
@@ -518,7 +537,11 @@ impl ContentRuntime {
                 id: block.id,
                 source: block.source,
                 kind: block.kind.clone(),
-                text: reader_text(block, &self.cache),
+                text: reader_display_text(
+                    block,
+                    &self.cache,
+                    unavailable_sources.contains(&block.source),
+                ),
             })
             .collect();
         report.duration_micros = started.elapsed().as_micros();
@@ -692,6 +715,19 @@ fn analyze_tables(semantic: &SemanticCache) -> Vec<super::SemanticTableModel> {
         .collect()
 }
 
+fn reader_display_text(
+    block: &super::ContentBlock,
+    cache: &ContentCache,
+    unavailable: bool,
+) -> String {
+    let text = reader_text(block, cache);
+    if unavailable {
+        format!("{text}\n[public text unavailable]")
+    } else {
+        text
+    }
+}
+
 fn reader_text(block: &super::ContentBlock, cache: &ContentCache) -> String {
     let loaded = cache
         .ranges_for_source(block.source)
@@ -733,6 +769,25 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn reader_preserves_known_label_but_marks_unavailable_public_payload() {
+        let mut document = node(1, SemanticRole::Document, "Doc");
+        let mut paragraph = node(2, SemanticRole::Paragraph, "Known heading");
+        paragraph.debug.interfaces.push("Text".into());
+        document.children.push(paragraph);
+        let semantic = SemanticCache::from_snapshot(document).unwrap();
+        let runtime = ContentRuntime::new(&semantic, ContentCacheBudget::default());
+        let model = runtime.catalog().models().next().unwrap();
+        let block = model.ordered_blocks().next().unwrap();
+        let visible = reader_display_text(block, &runtime.cache, true);
+        assert!(visible.contains("Known heading"));
+        assert!(visible.contains("[public text unavailable]"));
+        assert!(
+            !reader_display_text(block, &runtime.cache, false)
+                .contains("[public text unavailable]")
+        );
     }
 
     #[test]

@@ -124,6 +124,8 @@ pub fn operation_label(doc: &TuiDocument, target: RuntimeNodeId) -> Value {
         .expect("validated public operation target");
     let origin = match label.origin {
         OperationLabelOrigin::PublicName => "public_name",
+        OperationLabelOrigin::PublicDescription => "public_description",
+        OperationLabelOrigin::ContentContext => "content_context",
         OperationLabelOrigin::SemanticRegion => "semantic_region",
         OperationLabelOrigin::RoleFallback => "role_fallback",
     };
@@ -165,7 +167,15 @@ pub fn to_agent_document(doc: &TuiDocument) -> Value {
         "id":node.runtime_id.get(),"parent":node.parent.map(|id|id.get()),
         "children":node.children.iter().map(|id|id.get()).collect::<Vec<_>>(),"index_in_parent":node.index_in_parent,
         "role":node.role.to_string(),"native_role":node.debug.atspi_role,"label":node.name,"description":node.description,
-        "value":node.value,"value_source":"semantic_cache","boundary_only":doc.boundary_nodes.contains(&node.runtime_id),
+        "value":node.value,"value_source":"semantic_cache",
+        "value_read_status":crate::semantic::value_read_status(node.value.as_deref(),node.text_input_kind,&node.debug.interfaces,&node.truncations),
+        // A cache preview proves exact text only when this observation also
+        // contains the same source's complete, byte-equal public Text payload.
+        "value_complete":match (node.value.as_deref(),doc.text_reads.get(&node.runtime_id)) {
+            (Some(value),Some(TextRead::Complete(text)))=>Some(value==text.as_str()),
+            _=>None,
+        },
+        "boundary_only":doc.boundary_nodes.contains(&node.runtime_id),
         "text_input_kind":node.text_input_kind.map(|k|format!("{k:?}")),
         "states":node.states.iter().map(|s|format!("{s:?}")).collect::<Vec<_>>(),
         "interfaces":node.debug.interfaces,"capabilities":node.capabilities.iter().map(|c|format!("{c:?}")).collect::<Vec<_>>(),
@@ -223,6 +233,12 @@ pub fn to_agent_document(doc: &TuiDocument) -> Value {
     })).collect();
     let mut choices: Vec<_> = doc.choices.choices().collect();
     choices.sort_by_key(|c| c.owner);
+    let choice_rows = choices.iter().map(|c|json!({"owner":c.owner.get(),"current":c.current.map(|id|id.get()),"current_source":c.current_source,"completeness":format!("{:?}",c.completeness),
+            "disclosure":format!("{:?}",c.disclosure),"dismiss":format!("{:?}",c.dismiss),"options_status":match c.options{super::super::ChoiceOptions::Available(_)=>"available",super::super::ChoiceOptions::Partial(_)=>"partial",super::super::ChoiceOptions::Unavailable=>"unavailable"},
+            "options":c.options.options().iter().map(|o|json!({"id":o.runtime_id.get(),"label":o.label,"selected":o.selected,"enabled":o.enabled,
+                "selection":o.selection.as_ref().map(|s|match s{super::super::ChoiceSelectionStrategy::ParentSelection{parent,child}=>json!({"kind":"parent_selection","parent":parent.get(),"child":child.get()}),
+                    super::super::ChoiceSelectionStrategy::ChildSemanticAction{child,action}=>json!({"kind":"named_action","child":child.get(),"name":action.name})})})).collect::<Vec<_>>()
+        })).collect::<Vec<_>>();
     let mut data = json!({"version":DOCUMENT_VERSION,"observation_id":doc.observation.observation_id,
         "session":doc.observation.session,"generation":doc.observation.generation,
         "collection":{"started_at_ms":doc.observation.started_at_ms,"finished_at_ms":doc.observation.finished_at_ms,"atomic_snapshot":false},
@@ -255,12 +271,7 @@ pub fn to_agent_document(doc: &TuiDocument) -> Value {
             "realized_items":c.realized_items.iter().map(|id|id.get()).collect::<Vec<_>>(),"selected_items":c.selected_items.iter().map(|id|id.get()).collect::<Vec<_>>(),
             "known_total":c.known_total,"active_descendant":c.active_descendant.map(|id|id.get()),"active_descendant_status":"not_collected"})).collect::<Vec<_>>(),
         "content":content,"regions":region(&doc.regions.root),"commands":command_group(&doc.commands.root),
-        "choices":choices.iter().map(|c|json!({"owner":c.owner.get(),"current":c.current.map(|id|id.get()),"completeness":format!("{:?}",c.completeness),
-            "disclosure":format!("{:?}",c.disclosure),"dismiss":format!("{:?}",c.dismiss),"options_status":match c.options{super::super::ChoiceOptions::Available(_)=>"available",super::super::ChoiceOptions::Partial(_)=>"partial",super::super::ChoiceOptions::Unavailable=>"unavailable"},
-            "options":c.options.options().iter().map(|o|json!({"id":o.runtime_id.get(),"label":o.label,"selected":o.selected,"enabled":o.enabled,
-                "selection":o.selection.as_ref().map(|s|match s{super::super::ChoiceSelectionStrategy::ParentSelection{parent,child}=>json!({"kind":"parent_selection","parent":parent.get(),"child":child.get()}),
-                    super::super::ChoiceSelectionStrategy::ChildSemanticAction{child,action}=>json!({"kind":"named_action","child":child.get(),"name":action.name})})})).collect::<Vec<_>>()
-        })).collect::<Vec<_>>(),
+        "choices":choice_rows,
         "operations":operations,"sources":doc.sources.iter().map(|(id,refs)|json!({"source":id.get(),"content_refs":refs.content.iter().map(|(root,block)|json!({"root":root.get(),"block":block.get()})).collect::<Vec<_>>(),"operation_refs":refs.operations})).collect::<Vec<_>>(),
         "shared_organization_policy":"tui.document.v1","execution_authority":"current G2T registry only; document is not authority"});
     if let Some(annotations) = &doc.decision_annotations {

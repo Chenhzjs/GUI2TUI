@@ -127,6 +127,10 @@ struct Cli {
     #[arg(long, global = true)]
     no_mouse: bool,
 
+    /// Optional workflow-center executable opened by F7; no shell command parsing.
+    #[arg(long, global = true, default_value = "jev-anything-console")]
+    workflow_client: std::path::PathBuf,
+
     /// Write contents-free product lifecycle diagnostics to a private runtime log.
     #[arg(long, value_enum, default_value_t = LogLevel::Off, global = true)]
     log_level: LogLevel,
@@ -762,6 +766,7 @@ async fn run(
     // text path explicitly retires it before giving the real terminal to the
     // configured handler, then creates exactly one replacement on return.
     let mut input_available = true;
+    let mut pending_terminal_event: Option<io::Result<Event>> = None;
     let mut liveness =
         tokio::time::interval(gui2tui::runtime::RuntimeLimits::default().lifecycle_probe);
     liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -776,7 +781,10 @@ async fn run(
         tokio::select! {
             signal = signals.recv() => {
                 match signal {
-                    RuntimeSignal::Stop => break,
+                    RuntimeSignal::Stop => {
+                        tracing::debug!(target: "gui2tui::product", "terminal stop signal received");
+                        break;
+                    }
                     RuntimeSignal::Detach => {
                         guard.detach();
                         app.set_terminal_attached(false);
@@ -831,7 +839,11 @@ async fn run(
             },
             terminal_event = async {
                 if guard.attached && input_available {
-                    terminal_events.next().await
+                    if let Some(event) = pending_terminal_event.take() {
+                        Some(event)
+                    } else {
+                        terminal_events.next().await
+                    }
                 } else {
                     std::future::pending().await
                 }
@@ -845,6 +857,58 @@ async fn run(
                 redraw = true;
                 match terminal_event? {
                     Event::Key(key) => {
+                        if key.code == crossterm::event::KeyCode::Char('c')
+                            && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                            tracing::debug!(target: "gui2tui::product", "terminal interrupt key received");
+                        }
+                        if key.code == crossterm::event::KeyCode::F(7)
+                            && key.kind != crossterm::event::KeyEventKind::Release
+                            && app.accepts_application_selector_shortcut() {
+                            let Some(application_id) = app.workflow_application_id() else {
+                                app.set_shell_status("Workflow center unavailable while application work is pending");
+                                continue;
+                            };
+                            let bridge = std::env::current_exe()?.with_file_name("gui2tui-agent");
+                            // Retire Crossterm before the optional client owns the
+                            // terminal. No parent GUI operations run during this wait.
+                            drop(terminal_events);
+                            guard.detach();
+                            app.set_terminal_attached(false);
+                            let bridge_options = vec![
+                                "--max-nodes".to_owned(), cli.max_nodes.to_string(),
+                                "--max-depth".to_owned(), cli.max_depth.to_string(),
+                                "--max-edit-bytes".to_owned(), cli.max_edit_bytes.to_string(),
+                                "--timeout-ms".to_owned(), config.runtime.backend_timeout_ms.to_string(),
+                                "--decision-annotations".to_owned(),
+                                cli.decision_annotations.to_possible_value().expect("annotation enum").get_name().to_owned(),
+                            ];
+                            let (message, shutdown) = run_workflow_center(
+                                &cli.workflow_client, &bridge, &application_id, &bridge_options, &mut signals,
+                            ).await;
+                            if shutdown { break 'runtime; }
+                            app.begin_terminal_reattach();
+                            terminal_events = EventStream::new();
+                            // Drop wakes Crossterm's Mio poller. Prime that wake
+                            // while the TTY is still canonical, before a fresh
+                            // raw key can share the same readiness batch with it.
+                            // Preserve an already queued event rather than discard it.
+                            pending_terminal_event = futures_lite::future::poll_once(
+                                terminal_events.next(),
+                            ).await.flatten();
+                            guard = TerminalGuard::attach(config.terminal.mouse)?;
+                            input_available = true;
+                            let (width, height) = crossterm::terminal::size()?;
+                            terminal.resize(ratatui::layout::Rect::new(0, 0, width, height))?;
+                            app.set_terminal_attached(true);
+                            app.refresh_after_terminal_resume().await;
+                            app.set_shell_status(if app.is_available() {
+                                message
+                            } else {
+                                format!("{message} Original application unavailable; b/F5 selects a current application.")
+                            });
+                            redraw = true;
+                            continue;
+                        }
                         let selector_requested = app.accepts_application_selector_shortcut()
                             && (key.code == crossterm::event::KeyCode::Char('b')
                                 || (!app.is_available()
@@ -919,6 +983,7 @@ async fn run(
                             continue;
                         }
                         if app.handle_key_event(key).await {
+                            tracing::debug!(target: "gui2tui::product", "terminal key requested exit");
                             break;
                         }
                     }
@@ -1048,8 +1113,87 @@ async fn run(
             redraw = true;
         }
     }
+    tracing::debug!(target: "gui2tui::product", "interactive input loop ended; retiring application work");
     app.shutdown().await;
+    tracing::debug!(target: "gui2tui::product", "interactive application work retired");
     Ok(())
+}
+
+async fn run_workflow_center(
+    client: &Path,
+    bridge: &Path,
+    application_id: &str,
+    bridge_options: &[String],
+    signals: &mut RuntimeSignals,
+) -> (String, bool) {
+    let report_dir = match tempfile::Builder::new()
+        .prefix("gui2tui-workflow-")
+        .tempdir()
+    {
+        Ok(directory) => directory,
+        Err(_) => {
+            return (
+                "Cannot create a private workflow outcome directory".into(),
+                false,
+            );
+        }
+    };
+    let report = report_dir.path().join("outcome.json");
+    let mut command = tokio::process::Command::new(client);
+    command
+        .arg("--result-file")
+        .arg(&report)
+        .arg("--bridge")
+        .arg(bridge)
+        .args([
+            "--application-id",
+            application_id,
+            "--spatial-tui",
+            "--session",
+            "desktop",
+        ])
+        .args(bridge_options)
+        .kill_on_drop(true);
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(_) => return ("Workflow center not installed. Install a compatible Jev console client, or set --workflow-client. Normal TUI use does not need it.".into(), false),
+    };
+    loop {
+        tokio::select! {
+            status = child.wait() => {
+                let message = match status {
+                    Ok(status) if status.success() => "Workflow center closed. Checkpoints are not independent task completion.",
+                    _ => "Workflow center stopped. No automatic replay; inspect its recorded result before a new run.",
+                };
+                let summary = std::fs::File::open(&report).ok().and_then(|file| {
+                    serde_json::from_reader::<_, serde_json::Value>(file).ok()
+                }).filter(|value| value["version"] == "jev.workflow.ui-result.v1")
+                    .map(|value| {
+                        let status = value["status"].as_str().unwrap_or("unknown");
+                        let reason: String = value["reason"].as_str().unwrap_or("").chars()
+                            .filter(|c| !c.is_control()).take(180).collect();
+                        format!("Workflow: {status}; {reason}. Independent task completion not established.")
+                    });
+                return (summary.unwrap_or_else(|| message.into()), false);
+            }
+            signal = signals.recv() => match signal {
+                RuntimeSignal::Stop => {
+                    if let Some(pid) = child.id().and_then(|id| rustix::process::Pid::from_raw(id as i32)) {
+                        let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
+                    }
+                    // The client closes its owned bridge before returning.
+                    if tokio::time::timeout(Duration::from_secs(15), child.wait()).await.is_err() {
+                        let _ = child.kill().await;
+                    }
+                    return ("Workflow interrupted; no automatic replay".into(), true);
+                }
+                RuntimeSignal::Suspend => {
+                    let _ = gui2tui::runtime::signals::suspend_current_process();
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

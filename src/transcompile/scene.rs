@@ -173,6 +173,21 @@ impl SceneElement {
 
     pub fn height_for_width(&self, width: u16) -> u16 {
         match &self.kind {
+            SceneElementKind::Text { text } | SceneElementKind::Status { text } => {
+                Self::wrap_display_lines(&format!("  {text}"), width)
+                    .len()
+                    .min(u16::MAX as usize) as u16
+            }
+            SceneElementKind::Hint { text } => {
+                Self::wrap_display_lines(&format!("    Hint: {text}"), width)
+                    .len()
+                    .min(u16::MAX as usize) as u16
+            }
+            SceneElementKind::Error { text } => {
+                Self::wrap_display_lines(&format!("    Error: {text}"), width)
+                    .len()
+                    .min(u16::MAX as usize) as u16
+            }
             SceneElementKind::Field { label, display, .. } => {
                 let suffix =
                     if self.capability() == InteractionCapability::None && self.is_focusable() {
@@ -192,6 +207,32 @@ impl SceneElement {
             SceneElementKind::DocumentSummary { .. } => 5,
             _ => 1,
         }
+    }
+
+    /// Shared terminal-cell wrapping for text rows and scrollable details.
+    pub(crate) fn wrap_display_lines(text: &str, width: u16) -> Vec<String> {
+        use ratatui::{
+            style::Style,
+            text::{Line, Span},
+        };
+        let width = usize::from(width).max(1);
+        let mut output = Vec::new();
+        for line in text.split('\n') {
+            let line = Line::from(line);
+            let mut current = String::new();
+            let mut used = 0;
+            for grapheme in line.styled_graphemes(Style::default()) {
+                let cells = Span::raw(grapheme.symbol).width();
+                if used + cells > width && !current.is_empty() {
+                    output.push(std::mem::take(&mut current));
+                    used = 0;
+                }
+                current.push_str(grapheme.symbol);
+                used += cells;
+            }
+            output.push(current);
+        }
+        output
     }
 }
 

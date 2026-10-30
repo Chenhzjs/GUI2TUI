@@ -92,6 +92,9 @@ X11 target; key delivery is not semantic authority or proof of success.
 
 ## Quick start
 
+New to the terminal interface? Start with the [five-key walkthrough](docs/first-steps.md)
+or [中文入门](docs/first-steps.zh-CN.md). No model or API key is needed for Human TUI use.
+
 GUI2TUI runs live on Linux. macOS is useful for building and testing the
 project, but it cannot provide the Linux AT-SPI runtime needed to operate a
 GUI application. Before installing, make sure the host has a UTF-8 terminal,
@@ -169,7 +172,7 @@ and explicit command-line use.
 The selector accepts arrows, Enter and `/` for filtering. In a scene, use
 Tab/Shift-Tab and the arrow keys to move through available semantic controls;
 Enter invokes the currently advertised operation. `F1` or `?` opens contextual
-help, `F5` refreshes/reconnects where applicable, `:` opens scoped commands,
+help, `F3` searches public actions, `r` refreshes the main view (`F5` retries a disconnected application), `:` opens scoped commands,
 and `q` or Ctrl-C exits while restoring the terminal.
 
 For the complete first-use path, external text configuration, Docker and SSH

@@ -38,9 +38,24 @@ pub struct PaletteEntry {
     group_index: Option<usize>,
     action: Option<PublicOperation>,
     action_presentation: Option<crate::transcompile::document::ActionPresentation>,
+    section: Option<ActionSection>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ActionSection {
+    Current,
+    Controls,
+    Interfaces,
 }
 
 impl PaletteEntry {
+    pub(crate) fn section_label(&self) -> Option<&'static str> {
+        self.section.map(|section| match section {
+            ActionSection::Current => "Current object",
+            ActionSection::Controls => "Controls",
+            ActionSection::Interfaces => "Interface operations",
+        })
+    }
     pub(crate) fn runtime_target(&self) -> Option<(RuntimeNodeId, &BackendLocator)> {
         self.target.as_ref().map(|(id, locator, _)| (*id, locator))
     }
@@ -67,22 +82,43 @@ impl PaletteEntry {
                 PublicOperation::Value { increase: true } => "Increase value".into(),
                 PublicOperation::Value { increase: false } => "Decrease value".into(),
             });
-        let id = self.target.as_ref().map(|target| target.0).unwrap();
-        format!("#{id}  {operation} · {}", self.title)
+        format!("{operation} · {}", self.title)
     }
 
     pub fn detail_text(&self) -> String {
-        let mut text = match &self.target {
-            Some((id, locator, _)) => format!(
-                "Snapshot target: #{id}\n{}\n\nLocator: {}",
-                self.label,
-                locator.encode()
-            ),
-            None => self.label.clone(),
-        };
+        let mut text = self.short_label();
         if let Some(presentation) = &self.action_presentation {
             text.push_str("\n\n");
             text.push_str(&presentation.detail_text());
+        } else if let Some(operation) = &self.action {
+            let explanation = match operation {
+                PublicOperation::SetValue => "Parameter: requested numeric value",
+                PublicOperation::EditRange => {
+                    "Parameters: start:end:text (Unicode characters, end exclusive)"
+                }
+                PublicOperation::ReadSelection => {
+                    "Read the current public text selection; no text write"
+                }
+                PublicOperation::EditText { multiline: true } => {
+                    "Parameter: replacement text for the whole accessible text"
+                }
+                PublicOperation::EditText { multiline: false } => {
+                    "Parameter: replacement text for this field"
+                }
+                PublicOperation::Selection { .. } => {
+                    "Change selection for this exact public object"
+                }
+                PublicOperation::Value { .. } => "Adjust this object's public value",
+                PublicOperation::Action(_) => "Invoke the exact advertised public action",
+            };
+            text.push_str(&format!("\n{explanation}"));
+        }
+        if let Some((id, locator, _)) = &self.target {
+            text.push_str(&format!(
+                "\n\nSource details\nSnapshot target: #{id}\n{}\n\nLocator: {}",
+                self.label,
+                locator.encode()
+            ));
         }
         text
     }
@@ -91,28 +127,7 @@ impl PaletteEntry {
 /// Wrap exact detail text at grapheme boundaries using terminal cell widths.
 /// Unlike result labels this is not an ellipsis projection.
 pub(crate) fn detail_lines(text: &str, width: u16) -> Vec<String> {
-    use ratatui::{
-        style::Style,
-        text::{Line, Span},
-    };
-    let width = usize::from(width).max(1);
-    let mut output = Vec::new();
-    for line in text.split('\n') {
-        let line = Line::from(line);
-        let mut current = String::new();
-        let mut used = 0;
-        for grapheme in line.styled_graphemes(Style::default()) {
-            let cells = Span::raw(grapheme.symbol).width();
-            if used + cells > width && !current.is_empty() {
-                output.push(std::mem::take(&mut current));
-                used = 0;
-            }
-            current.push_str(grapheme.symbol);
-            used += cells;
-        }
-        output.push(current);
-    }
-    output
+    crate::transcompile::SceneElement::wrap_display_lines(text, width)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,6 +135,7 @@ pub struct CommandPalette {
     hierarchy: CommandHierarchy,
     active_scope: InteractionScopeId,
     query: String,
+    navigation_query: Option<(Option<String>, bool)>,
     selected: usize,
     group_path: Vec<usize>,
     entries: Vec<PaletteEntry>,
@@ -148,6 +164,7 @@ impl CommandPalette {
             hierarchy,
             active_scope,
             query: String::new(),
+            navigation_query: None,
             selected: 0,
             group_path: Vec::new(),
             entries: Vec::new(),
@@ -177,22 +194,95 @@ impl CommandPalette {
         self.public_actions.is_some()
     }
 
+    /// Contextual ordering only: retain every operation and its exact binding.
+    pub(crate) fn prioritize_target(&mut self, target: RuntimeNodeId, locator: &BackendLocator) {
+        if let Some(actions) = self.public_actions.as_mut() {
+            for entry in actions.iter_mut() {
+                if entry
+                    .runtime_target()
+                    .is_some_and(|(id, source)| id == target && source == locator)
+                {
+                    entry.section = Some(ActionSection::Current);
+                }
+            }
+            actions.sort_by_key(|entry| {
+                !entry
+                    .runtime_target()
+                    .is_some_and(|(id, source)| id == target && source == locator)
+            });
+            self.rebuild();
+        }
+    }
+
+    /// Flat presentation sections: no entry, parameter, or binding is removed.
+    pub(crate) fn group_public_actions(&mut self, auxiliary: impl Fn(RuntimeNodeId) -> bool) {
+        if let Some(actions) = self.public_actions.as_mut() {
+            for entry in actions.iter_mut() {
+                let interface = entry.runtime_target().is_some_and(|(id, _)| auxiliary(id))
+                    || !matches!(
+                        entry.action,
+                        Some(PublicOperation::Action(_) | PublicOperation::EditText { .. })
+                    );
+                entry.section = Some(if interface {
+                    ActionSection::Interfaces
+                } else {
+                    ActionSection::Controls
+                });
+            }
+            actions.sort_by_key(|entry| entry.section);
+            self.rebuild();
+        }
+    }
+
     pub(crate) fn restore_query_and_exact_selection(&mut self, previous: &Self) {
         self.set_query(previous.query.clone());
+        self.navigation_query = previous.navigation_query.clone();
         if let Some(old) = previous.entries.get(previous.selected) {
-            self.selected = self
+            if let Some(index) = self
                 .entries
                 .iter()
                 .position(|entry| entry.target == old.target && entry.action == old.action)
-                .unwrap_or(0);
+            {
+                self.selected = index;
+                self.detail_scroll = previous.detail_scroll;
+            }
         }
     }
 
     /// The same local query used by Human typing, without GUI key delivery.
     pub fn set_query(&mut self, query: String) {
         self.query = query;
+        self.navigation_query = None;
         self.detail_scroll = 0;
         self.rebuild();
+    }
+
+    pub(crate) fn set_navigation_query(
+        &mut self,
+        query: String,
+        context: Option<String>,
+        exact: bool,
+    ) {
+        self.set_query(query);
+        self.navigation_query = Some((context, exact));
+    }
+
+    pub(crate) fn navigation_query(&self) -> Option<(String, Option<String>, bool)> {
+        self.navigation_query
+            .as_ref()
+            .map(|(context, exact)| (self.query.clone(), context.clone(), *exact))
+    }
+
+    pub(crate) fn retain_entries(&mut self, mut matches: impl FnMut(&PaletteEntry) -> bool) {
+        let selected = self.entries.get(self.selected).cloned();
+        self.entries.retain(|entry| matches(entry));
+        self.selected = selected
+            .and_then(|old| {
+                self.entries
+                    .iter()
+                    .position(|entry| entry.target == old.target && entry.action == old.action)
+            })
+            .unwrap_or(0);
     }
 
     pub(crate) fn refresh_commands(
@@ -308,6 +398,12 @@ impl CommandPalette {
         if event.kind == KeyEventKind::Release {
             return PaletteOutcome::Continue;
         }
+        if !matches!(
+            event.code,
+            KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+        ) {
+            self.navigation_query = None;
+        }
         match event.code {
             KeyCode::PageDown => {
                 self.scroll_details(4);
@@ -405,6 +501,7 @@ impl CommandPalette {
                     group_index: None,
                     action: Some(action),
                     action_presentation: None,
+                    section: None,
                 })
                 .collect(),
         );
@@ -456,6 +553,7 @@ impl CommandPalette {
                     group_index: None,
                     action: None,
                     action_presentation: None,
+                    section: None,
                 })
                 .collect()
         };
@@ -493,6 +591,7 @@ fn browse_entries(
                     group_index: Some(index),
                     action: None,
                     action_presentation: None,
+                    section: None,
                 })
             }
             CommandEntry::Command(command)
@@ -525,12 +624,186 @@ fn command_entry(command: &SemanticCommand) -> PaletteEntry {
         group_index: None,
         action: None,
         action_presentation: None,
+        section: None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_target_ordering_preserves_every_exact_operation() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let locator = BackendLocator::new(":1.2", "/current");
+        let mut palette = CommandPalette::public_actions(
+            CommandHierarchy {
+                root: CommandGroup {
+                    source: RuntimeNodeId::new(1),
+                    label: "Commands".into(),
+                    scope,
+                    children: vec![],
+                },
+            },
+            scope,
+            vec![
+                (
+                    RuntimeNodeId::new(1),
+                    BackendLocator::new(":1.2", "/other"),
+                    "Other".into(),
+                    PublicOperation::Action("press".into()),
+                ),
+                (
+                    RuntimeNodeId::new(2),
+                    locator.clone(),
+                    "Current".into(),
+                    PublicOperation::EditText { multiline: true },
+                ),
+                (
+                    RuntimeNodeId::new(2),
+                    BackendLocator::new(":1.2", "/stale"),
+                    "Same numeric ID".into(),
+                    PublicOperation::Action("press".into()),
+                ),
+            ],
+        );
+        let before = palette.entries().to_vec();
+        palette.prioritize_target(RuntimeNodeId::new(2), &locator);
+        assert_eq!(palette.entries().len(), before.len());
+        let mut current = before[1].clone();
+        current.section = Some(ActionSection::Current);
+        assert_eq!(palette.entries()[0], current);
+        assert_eq!(
+            palette.entries()[1..],
+            [before[0].clone(), before[2].clone()]
+        );
+    }
+
+    #[test]
+    fn presentation_sections_preserve_every_operation_and_global_search() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let locator = |id| BackendLocator::new(":1.2", format!("/{id}"));
+        let mut palette = CommandPalette::public_actions(
+            CommandHierarchy {
+                root: CommandGroup {
+                    source: RuntimeNodeId::new(1),
+                    label: "Commands".into(),
+                    scope,
+                    children: vec![],
+                },
+            },
+            scope,
+            vec![
+                (
+                    RuntimeNodeId::new(1),
+                    locator(1),
+                    "Scroll value".into(),
+                    PublicOperation::SetValue,
+                ),
+                (
+                    RuntimeNodeId::new(2),
+                    locator(2),
+                    "Save".into(),
+                    PublicOperation::Action("press".into()),
+                ),
+                (
+                    RuntimeNodeId::new(3),
+                    locator(3),
+                    "Query".into(),
+                    PublicOperation::EditText { multiline: false },
+                ),
+                (
+                    RuntimeNodeId::new(4),
+                    locator(4),
+                    "Select item".into(),
+                    PublicOperation::Selection {
+                        parent: locator(5),
+                        selected: true,
+                    },
+                ),
+            ],
+        );
+        let before = palette
+            .entries()
+            .iter()
+            .map(|e| (e.label.clone(), e.target.clone(), e.action.clone()))
+            .collect::<Vec<_>>();
+        palette.group_public_actions(|id| id == RuntimeNodeId::new(1));
+        palette.prioritize_target(RuntimeNodeId::new(3), &locator(3));
+        assert_eq!(palette.entries().len(), before.len());
+        assert_eq!(
+            palette
+                .entries()
+                .iter()
+                .map(PaletteEntry::section_label)
+                .collect::<Vec<_>>(),
+            vec![
+                Some("Current object"),
+                Some("Controls"),
+                Some("Interface operations"),
+                Some("Interface operations")
+            ]
+        );
+        for entry in palette.entries() {
+            assert!(before.contains(&(
+                entry.label.clone(),
+                entry.target.clone(),
+                entry.action.clone()
+            )));
+        }
+        palette.set_query("Scroll value".into());
+        assert_eq!(palette.entries().len(), 1);
+        assert_eq!(
+            palette.entries()[0].runtime_target().unwrap().0,
+            RuntimeNodeId::new(1)
+        );
+    }
+
+    #[test]
+    fn navigation_predicate_survives_rebuild_and_human_typing_clears_it() {
+        let scope = InteractionScopeId(RuntimeNodeId::new(1));
+        let actions = vec![
+            (
+                RuntimeNodeId::new(2),
+                BackendLocator::new(":1.2", "/status"),
+                "Statusbar [CheckBox] · View".to_owned(),
+                PublicOperation::Action("click".into()),
+            ),
+            (
+                RuntimeNodeId::new(3),
+                BackendLocator::new(":1.2", "/file"),
+                "File [Menu] · /tmp/statusbar-results".to_owned(),
+                PublicOperation::Action("click".into()),
+            ),
+        ];
+        let hierarchy = CommandHierarchy {
+            root: CommandGroup {
+                source: RuntimeNodeId::new(1),
+                label: "root".into(),
+                scope,
+                children: Vec::new(),
+            },
+        };
+        let mut previous =
+            CommandPalette::public_actions(hierarchy.clone(), scope, actions.clone());
+        previous.set_navigation_query("Statusbar".into(), Some("View".into()), true);
+        previous.retain_entries(|entry| entry.label.starts_with("Statusbar "));
+        assert_eq!(previous.entries().len(), 1);
+        let mut refreshed = CommandPalette::public_actions(hierarchy, scope, actions);
+        refreshed.restore_query_and_exact_selection(&previous);
+        assert_eq!(
+            refreshed.navigation_query(),
+            Some(("Statusbar".into(), Some("View".into()), true))
+        );
+        refreshed.retain_entries(|entry| entry.label.starts_with("Statusbar "));
+        assert_eq!(refreshed.entries().len(), 1);
+        assert_eq!(
+            refreshed.entries()[0].runtime_target().unwrap().0,
+            RuntimeNodeId::new(2)
+        );
+        refreshed.handle_key(KeyEvent::from(KeyCode::Char('x')));
+        assert_eq!(refreshed.navigation_query(), None);
+    }
     use crate::transcompile::{CommandEntry, CommandGroup, SemanticCommand};
 
     fn command(id: u64, scope: InteractionScopeId, label: &str) -> CommandEntry {
@@ -582,7 +855,9 @@ mod tests {
         palette.handle_key(KeyEvent::from(KeyCode::F(2)));
         assert!(!palette.searches_all_scopes());
         assert!(!palette.scope_switchable());
-        assert_ne!(
+        // Same public titles/actions remain ambiguous; numeric IDs belong in
+        // source details and must not manufacture a semantic distinction.
+        assert_eq!(
             palette.entries()[0].short_label(),
             palette.entries()[1].short_label()
         );
@@ -599,6 +874,12 @@ mod tests {
             palette.handle_key(KeyEvent::from(KeyCode::PageDown));
         }
         assert_eq!(palette.detail_scroll(), lines.len() - 3);
+        let old = palette.clone();
+        let mut refreshed = palette.clone();
+        refreshed.set_query(String::new());
+        refreshed.restore_query_and_exact_selection(&old);
+        refreshed.set_detail_viewport(20, 3);
+        assert_eq!(refreshed.detail_scroll(), old.detail_scroll());
         assert_eq!(palette.selected(), 0);
         palette.handle_key(KeyEvent::from(KeyCode::Down));
         assert_eq!(palette.detail_scroll(), 0);

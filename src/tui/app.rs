@@ -335,6 +335,17 @@ impl TuiApplication {
         std::mem::take(&mut self.external_text_requested)
     }
 
+    /// A user-invoked optional workflow client starts a separate fresh runtime.
+    /// Only the exact public application locator crosses that boundary.
+    pub fn workflow_application_id(&self) -> Option<String> {
+        (self.is_available()
+            && self.accepts_application_selector_shortcut()
+            && self.modality_task.is_none()
+            && self.capture_task.is_none()
+            && !self.external_text_requested)
+            .then(|| self.application_locator.encode())
+    }
+
     pub fn set_terminal_attached(&mut self, attached: bool) {
         self.runtime.set_terminal_attached(attached);
         // Preserve semantic focus/Reader offsets; the next draw recomputes
@@ -1073,7 +1084,23 @@ impl TuiApplication {
         if let Some(layout) = layout_analysis.as_mut() {
             refine_layout_demands_from_scene(layout, &scene);
         }
-        let active_region = layout_analysis.as_ref().and_then(default_active_region);
+        let active_region = layout_analysis.as_ref().and_then(|layout| {
+            // Start in the pane that owns the actual TUI focus, so a narrow
+            // terminal does not display a different pane and hide that focus.
+            focus
+                .current()
+                .and_then(|id| scene.element(id))
+                .and_then(|focused| {
+                    layout.plan.regions.iter().find(|region| {
+                        focused
+                            .sources
+                            .iter()
+                            .any(|source| region.presentation.source_nodes.contains(source))
+                    })
+                })
+                .map(|region| region.id)
+                .or_else(|| default_active_region(layout))
+        });
         let inline_materialized_extent = if spatial_layout {
             inline_materialization_budget(initial_terminal_size.1.saturating_sub(3).max(1), 0)
                 .visible_blocks
@@ -1874,22 +1901,44 @@ impl TuiApplication {
         );
         palette.set_target_titles(|id| {
             let node = self.cache.node(id)?;
-            let name = node
-                .name
-                .as_deref()
-                .filter(|name| !name.trim().is_empty())
-                .or_else(|| {
-                    self.scene
-                        .scene_id_for_runtime(id)
-                        .and_then(|id| self.scene.element(id))
-                        .map(element_label)
-                })
-                .unwrap_or("Unnamed");
-            Some(format!("[{}] {name}", node.role))
+            let shared = self.document.operation_label(id)?;
+            let name = shared
+                .display_label
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let role = match &node.role {
+                SemanticRole::Unknown(native) => native.clone(),
+                role => role.to_string(),
+            };
+            Some(format!("[{role}] {name}"))
         });
         palette.set_action_presentations(|id, operation| {
             self.document.action_presentation(id, operation)
         });
+        palette.group_public_actions(|id| {
+            self.cache
+                .node(id)
+                .is_some_and(|node| node.debug.atspi_role == "scroll bar")
+        });
+        if let Some(binding) = self
+            .focus
+            .current()
+            .and_then(|id| self.scene.element(id))
+            .and_then(|element| element.binding.as_ref())
+            .filter(|binding| {
+                self.cache.node(binding.runtime_id).is_some_and(|node| {
+                    node.backend_locator == binding.backend_locator
+                        && self.scopes.allows_node(node.runtime_id)
+                        && !crate::transcompile::document::secret_source(
+                            &self.cache,
+                            node.runtime_id,
+                        )
+                })
+            })
+        {
+            palette.prioritize_target(binding.runtime_id, &binding.backend_locator);
+        }
         palette
     }
 
@@ -1933,8 +1982,12 @@ impl TuiApplication {
                 H::Edit
             } else if self.modality_view.is_some() {
                 H::Modality
-            } else if self.command_palette.is_some() {
-                H::Command
+            } else if let Some(palette) = &self.command_palette {
+                if palette.is_public_actions() {
+                    H::PublicActions
+                } else {
+                    H::Command
+                }
             } else if self.choice_overlay.is_some() {
                 H::Choice
             } else if let Some(view) = &self.content_view {
@@ -2036,8 +2089,7 @@ impl TuiApplication {
 
                 KeyCode::Esc => {
                     self.modality_view = None;
-                    self.status =
-                        "Returned from modality task; semantic position preserved".to_owned();
+                    self.status = "Returned to the application".to_owned();
                 }
                 KeyCode::Up | KeyCode::Down => {
                     self.modality_view
@@ -2427,7 +2479,7 @@ impl TuiApplication {
         {
             return;
         }
-        if self.modality_view.is_some() {
+        if self.modality_view.is_some() || self.command_palette.is_some() {
             return;
         }
         match intent {
@@ -3152,14 +3204,21 @@ impl TuiApplication {
                 if let Some(view) = self.content_view.as_mut() {
                     view.reader_blocks = blocks;
                 }
-                self.status = format!(
-                    "Reader loaded {} blocks (text_rpcs={} ranges={} cache={} bytes) in {:.3} ms",
-                    report.requested_blocks,
-                    report.backend_text_rpcs,
-                    report.loaded_ranges,
-                    report.cache.bytes,
-                    report.duration_micros as f64 / 1000.0
-                );
+                self.status = if report.unavailable_blocks > 0 {
+                    format!(
+                        "Reader partial: {} block(s) could not be read",
+                        report.unavailable_blocks
+                    )
+                } else {
+                    format!(
+                        "Reader loaded {} blocks (text_rpcs={} ranges={} cache={} bytes) in {:.3} ms",
+                        report.requested_blocks,
+                        report.backend_text_rpcs,
+                        report.loaded_ranges,
+                        report.cache.bytes,
+                        report.duration_micros as f64 / 1000.0
+                    )
+                };
             }
             Err(error) => {
                 self.status = format!("Reader content load failed: {error}");
@@ -3745,9 +3804,20 @@ impl TuiApplication {
             return;
         };
         let label = self
-            .cache
-            .node(runtime_id)
-            .and_then(|node| node.name.clone())
+            .scene
+            .elements
+            .iter()
+            .find(|element| {
+                element.binding.as_ref().is_some_and(|binding| {
+                    binding.runtime_id == runtime_id && binding.backend_locator == locator
+                })
+            })
+            .map(|element| element_label(element).to_owned())
+            .or_else(|| {
+                self.cache
+                    .node(runtime_id)
+                    .and_then(|node| node.name.clone())
+            })
             .unwrap_or_else(|| "Text".into());
         match self
             .native_input
@@ -7055,6 +7125,36 @@ async fn build_spatial_layout(
     Some((layout, evidence))
 }
 
+pub(super) async fn enrich_choice_selections(
+    backend: &AtspiBackend,
+    cache: &mut SemanticCache,
+    cancel: Option<&crate::modality::CancellationToken>,
+) {
+    let scopes =
+        InteractionScopes::analyze(cache, &crate::semantic::RelationalSemanticGraph::new(cache));
+    let mut owners: Vec<_> = cache
+        .nodes()
+        .filter(|n| {
+            scopes.allows_node(n.runtime_id)
+                && !crate::transcompile::document::secret_source(cache, n.runtime_id)
+                && matches!(n.role, SemanticRole::ComboBox | SemanticRole::List)
+                && n.debug.interfaces.iter().any(|i| i == "Selection")
+        })
+        .map(|n| (n.runtime_id, n.backend_locator.clone()))
+        .collect();
+    owners.sort_by_key(|(id, _)| *id);
+    for (id, locator) in owners {
+        if cancel.is_some_and(|token| token.is_cancelled()) {
+            break;
+        }
+        let read = match backend.read_public_selection(&locator, cancel).await {
+            Ok(members) => crate::semantic::SelectionRead::Known(members),
+            Err(_) => crate::semantic::SelectionRead::Unavailable,
+        };
+        cache.set_selection_read(id, read);
+    }
+}
+
 async fn enrich_relational_cache(
     backend: &AtspiBackend,
     cache: &mut SemanticCache,
@@ -7168,6 +7268,7 @@ async fn enrich_relational_cache(
         relation_ms = metrics.duration.as_secs_f64() * 1000.0,
         "priority-driven semantic relation enrichment"
     );
+    enrich_choice_selections(backend, cache, None).await;
     Ok(())
 }
 
@@ -7644,7 +7745,16 @@ fn choice_scene_label(choice: &crate::transcompile::SemanticChoice, owner_label:
             format!("Choice: {value}")
         }
         (_, Some(value)) => format!("{owner_label}: {value}"),
-        _ => format!("{owner_label} (current value unavailable)"),
+        _ => format!(
+            "{owner_label} ({})",
+            match choice.current_source {
+                "no_selected_member" => "no selection",
+                "multiple_selected_members" => "multiple selections",
+                "selection_read_failed" => "selection read failed",
+                "unresolved_public_selection" => "selected item not in available options",
+                _ => "current value not reported",
+            }
+        ),
     }
 }
 
@@ -8275,6 +8385,7 @@ mod tests {
         let choice = SemanticChoice {
             owner: RuntimeNodeId::new(1),
             current: Some(RuntimeNodeId::new(3)),
+            current_source: "public_state",
             options: ChoiceOptions::Available(vec![
                 ChoiceOption {
                     runtime_id: RuntimeNodeId::new(2),

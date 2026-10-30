@@ -214,6 +214,9 @@ impl SceneCompiler<'_> {
                 );
                 for child in &region.children {
                     self.compile_selection_control(child);
+                    for content in &child.children {
+                        self.compile_region(content);
+                    }
                 }
             }
             SemanticRegionKind::CommandSet => {
@@ -359,7 +362,8 @@ impl SceneCompiler<'_> {
                 label: region
                     .label
                     .clone()
-                    .or_else(|| node.name.clone())
+                    .filter(|label| has_display_text(label))
+                    .or_else(|| node_label(node))
                     .unwrap_or_else(|| "Field".to_owned()),
                 display,
                 input_kind,
@@ -418,6 +422,11 @@ impl SceneCompiler<'_> {
         else {
             return;
         };
+        // Terminal scrolling/Reader own navigation in this projection. Keep
+        // the GUI scrollbar facts and public operations in TuiDocument/F3.
+        if node.debug.atspi_role == "scroll bar" {
+            return;
+        }
         if node.role == SemanticRole::Menu
             && region.interactions.is_empty()
             && node.actions.is_empty()
@@ -435,11 +444,27 @@ impl SceneCompiler<'_> {
             let input_kind = node.text_input_kind.unwrap_or(TextInputKind::Plain);
             self.push(
                 SceneElementKind::Field {
-                    label: node.name.clone().unwrap_or_else(|| "Text input".to_owned()),
+                    label: control_label(node, region).unwrap_or_else(|| "Text input".to_owned()),
                     display: if input_kind == TextInputKind::Password {
                         "[password]".to_owned()
                     } else {
-                        node.value.clone().unwrap_or_else(|| "[empty]".to_owned())
+                        node.value
+                            .clone()
+                            .filter(|value| !value.is_empty())
+                            .unwrap_or_else(|| {
+                                match crate::semantic::value_read_status(
+                                    node.value.as_deref(),
+                                    node.text_input_kind,
+                                    &node.debug.interfaces,
+                                    &node.truncations,
+                                ) {
+                                    "known_empty" => "[empty]",
+                                    "unavailable" => "[read failed]",
+                                    "not_requested" => "[not read]",
+                                    _ => "[not exposed]",
+                                }
+                                .to_owned()
+                            })
                     },
                     input_kind,
                 },
@@ -452,7 +477,7 @@ impl SceneCompiler<'_> {
         if node.capabilities.contains(&SemanticCapability::Value) {
             self.push(
                 SceneElementKind::Value {
-                    label: node.name.clone().unwrap_or_else(|| "Value".to_owned()),
+                    label: control_label(node, region).unwrap_or_else(|| "Value".to_owned()),
                     display: node
                         .value
                         .clone()
@@ -464,7 +489,7 @@ impl SceneCompiler<'_> {
             );
             return;
         }
-        let label = node_label(node).unwrap_or_else(|| node.role.to_string());
+        let label = control_label(node, region).unwrap_or_else(|| node.role.to_string());
         let disclosure = region
             .interactions
             .iter()
@@ -567,11 +592,8 @@ pub(crate) fn has_display_text(value: &str) -> bool {
 }
 
 fn is_accessibility_diagnostic(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
+    // Source payload is not a diagnostic merely because of its wording.
     !has_display_text(value)
-        || matches!(normalized.as_str(), "empty" | "unknown" | "unsupported")
-        || normalized.contains("text unavailable through")
-        || normalized.contains("unavailable through the accessibility")
 }
 
 fn index_by_runtime(root: &SemanticNode) -> HashMap<RuntimeNodeId, &SemanticNode> {
@@ -599,13 +621,31 @@ fn window_title(root: &SemanticNode) -> String {
 }
 
 fn node_label(node: &SemanticNode) -> Option<String> {
-    node.name.clone().or_else(|| {
-        let mut labels = Vec::new();
-        collect_text_labels(node, &mut labels);
-        labels.sort();
-        labels.dedup();
-        (labels.len() == 1).then(|| labels[0].clone())
-    })
+    node.name
+        .clone()
+        .filter(|label| has_display_text(label))
+        .or_else(|| {
+            let mut labels = Vec::new();
+            collect_text_labels(node, &mut labels);
+            labels.sort();
+            labels.dedup();
+            (labels.len() == 1).then(|| labels[0].clone())
+        })
+        .or_else(|| {
+            node.description
+                .clone()
+                .filter(|label| has_display_text(label))
+        })
+}
+
+fn control_label(node: &SemanticNode, region: &SemanticRegion) -> Option<String> {
+    // A related label is carried with its source by the common region analyzer.
+    if region.source_nodes.len() > 1
+        && let Some(label) = region.label.clone().filter(|label| has_display_text(label))
+    {
+        return Some(label);
+    }
+    node_label(node)
 }
 
 fn collect_text_labels(node: &SemanticNode, labels: &mut Vec<String>) {
@@ -701,6 +741,141 @@ mod tests {
             truncations: Vec::new(),
             debug: DebugInfo::default(),
         }
+    }
+
+    #[test]
+    fn empty_failed_and_unread_fields_are_not_conflated() {
+        let mut input = node(1, SemanticRole::TextInput, "Search");
+        input.debug.interfaces = vec!["Text".into(), "EditableText".into()];
+        input.value = Some(String::new());
+        for (value, failure, expected) in [
+            (Some(String::new()), false, "[empty]"),
+            (None, true, "[read failed]"),
+            (None, false, "[not read]"),
+        ] {
+            input.value = value;
+            input.truncations = if failure {
+                vec![crate::semantic::TreeTruncation::ReadFailure {
+                    operation: "read value",
+                    node_id: "public-target".into(),
+                }]
+            } else {
+                vec![]
+            };
+            let scene = compile_scene(&input, &analyze_regions(&input));
+            assert!(scene.elements.iter().any(|e| matches!(&e.kind, SceneElementKind::Field { display, .. } if display == expected)));
+        }
+    }
+
+    #[test]
+    fn public_descriptions_label_controls_without_changing_authority() {
+        let mut root = node(0, SemanticRole::Window, "Public form");
+        let mut input = node(1, SemanticRole::TextInput, " ");
+        input.description = Some("Search...".into());
+        input.capabilities.push(SemanticCapability::EditText);
+        let mut button = node(2, SemanticRole::Button, "");
+        button.description = Some("Next (F3)".into());
+        button.actions.push(SemanticAction {
+            index: 4,
+            name: "Press".into(),
+            description: None,
+            keybinding: Some("F3".into()),
+        });
+        let mut checkbox = node(3, SemanticRole::CheckBox, "");
+        checkbox.description = Some("Match Case (F5)".into());
+        checkbox.states.push(SemanticState::Checked);
+        root.children = vec![input, button.clone(), checkbox];
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        let find = |id| {
+            scene
+                .elements
+                .iter()
+                .find(|e| {
+                    e.binding
+                        .as_ref()
+                        .is_some_and(|b| b.runtime_id == RuntimeNodeId::new(id))
+                })
+                .unwrap()
+        };
+        assert_eq!(find(1).label(), "Search...");
+        assert_eq!(find(2).label(), "Next (F3)");
+        assert!(
+            matches!(&find(3).kind, SceneElementKind::Checkbox { label, checked: true } if label == "Match Case (F5)")
+        );
+        let binding = find(2).binding.as_ref().unwrap();
+        assert_eq!(binding.backend_locator, button.backend_locator);
+        assert_eq!(binding.actions, button.actions);
+        assert_eq!(binding.semantic_role, SemanticRole::Button);
+    }
+
+    #[test]
+    fn gui_scrollbars_do_not_occupy_terminal_controls() {
+        let mut root = node(0, SemanticRole::Window, "Scroll controls");
+        for (id, direction) in [(1, Some("horizontal")), (2, Some("vertical")), (3, None)] {
+            let mut scroll = node(id, SemanticRole::Slider, "");
+            scroll.debug.atspi_role = "scroll bar".into();
+            scroll.capabilities.push(SemanticCapability::Value);
+            scroll.value = Some("0".into());
+            if let Some(direction) = direction {
+                scroll.states.push(SemanticState::Other(direction.into()));
+            }
+            root.children.push(scroll);
+        }
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        assert!(scene.elements.iter().all(|e| {
+            e.binding
+                .as_ref()
+                .is_none_or(|b| ![1, 2, 3].contains(&b.runtime_id.get()))
+        }));
+        let mut value = node(4, SemanticRole::Slider, "Volume");
+        value.capabilities.push(SemanticCapability::Value);
+        value.value = Some("50".into());
+        root.children.push(value);
+        let scene = compile_scene(&root, &analyze_regions(&root));
+        assert!(scene.elements.iter().any(|e| matches!(&e.kind, SceneElementKind::Value { label, display } if label == "Volume" && display == "50")));
+    }
+
+    #[test]
+    fn related_control_label_keeps_its_source_and_exact_target() {
+        use crate::semantic::{
+            BackendRelation, RelationalSemanticGraph, SemanticCache, SemanticRelationKind,
+        };
+        let mut root = node(0, SemanticRole::Window, "Related labels");
+        let mut button = node(1, SemanticRole::Button, "");
+        button.description = Some("Public tooltip".into());
+        let label = node(2, SemanticRole::Label, "Related operation");
+        let locator = button.backend_locator.clone();
+        let label_locator = label.backend_locator.clone();
+        root.children = vec![button, label];
+        let mut cache = SemanticCache::from_snapshot(root).unwrap();
+        let target = cache
+            .nodes()
+            .find(|n| n.backend_locator == locator)
+            .unwrap()
+            .runtime_id;
+        cache
+            .set_relations(
+                target,
+                vec![BackendRelation {
+                    kind: SemanticRelationKind::LabelledBy,
+                    targets: vec![label_locator],
+                }],
+            )
+            .unwrap();
+        let tree = cache.materialize_tree().unwrap();
+        let analysis = super::super::analyze::analyze_regions_with_graph(
+            &tree,
+            &RelationalSemanticGraph::new(&cache),
+        );
+        let scene = compile_scene(&tree, &analysis);
+        let e = scene
+            .elements
+            .iter()
+            .find(|e| e.binding.as_ref().is_some_and(|b| b.runtime_id == target))
+            .unwrap();
+        assert_eq!(e.label(), "Related operation");
+        assert_eq!(e.sources.len(), 2);
+        assert_eq!(e.binding.as_ref().unwrap().backend_locator, locator);
     }
 
     #[test]
@@ -887,7 +1062,7 @@ mod tests {
     }
 
     #[test]
-    fn accessibility_diagnostics_do_not_enter_the_normal_surface() {
+    fn public_unknown_role_labels_are_not_guessed_to_be_diagnostics() {
         let mut root = node(
             0,
             SemanticRole::Unknown("unsupported".to_owned()),
@@ -896,7 +1071,7 @@ mod tests {
         root.children
             .push(node(1, SemanticRole::Button, "Still available"));
         let scene = compile_scene(&root, &analyze_regions(&root));
-        assert!(!scene.elements.iter().any(|element| {
+        assert!(scene.elements.iter().any(|element| {
             matches!(
                 &element.kind,
                 SceneElementKind::Unsupported { label }

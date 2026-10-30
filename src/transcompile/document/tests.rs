@@ -211,6 +211,31 @@ fn full_fixture() -> Fixture {
 }
 
 #[test]
+fn cached_value_completeness_requires_same_source_complete_public_text() {
+    let fixture = full_fixture();
+    let id = fixture.id("/a/body");
+    let mut document = build_document(&fixture.input()).unwrap();
+    let value_flag = |doc: &TuiDocument| {
+        wire::to_agent_document(doc)["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["id"] == id.get())
+            .unwrap()["value_complete"]
+            .clone()
+    };
+    assert_eq!(value_flag(&document), serde_json::json!(false));
+    let original_cache = document.nodes[&id].value.clone();
+    document
+        .text_reads
+        .insert(id, TextRead::Complete(original_cache.clone().unwrap()));
+    assert_eq!(value_flag(&document), serde_json::json!(true));
+    document.text_reads.insert(id, TextRead::Unavailable);
+    assert_eq!(value_flag(&document), serde_json::Value::Null);
+    assert_eq!(document.nodes[&id].value, original_cache);
+}
+
+#[test]
 fn complete_sources_survive_multiple_documents_deep_ancestry_and_noncurrent_policy() {
     let fixture = full_fixture();
     // Independent denominator: the source cache, explicit root/read/operation
@@ -1401,5 +1426,38 @@ fn named_input_action_contract_is_shared_without_inventing_submission() {
         serde_json::json!({"document":wire,
         "human_result":palette.entries()[0].short_label(),
         "human_details":palette.entries()[0].detail_text(),"human_tui":human_tui,"operation":descriptor})
+    );
+}
+
+#[test]
+fn public_description_labels_actions_without_scene_or_showing_and_redacts_secrets() {
+    let mut button = node("/described", SemanticRole::Button, None, vec![]);
+    button.description = Some("Clear search text".into());
+    button.actions.push(action("press"));
+    let mut secret = button.clone();
+    secret.backend_locator = BackendLocator::new(":1.90", "/secret");
+    secret.role = SemanticRole::TextInput;
+    secret.text_input_kind = Some(crate::semantic::TextInputKind::Password);
+    secret.description = Some("private-description-marker".into());
+    let fixture = Fixture::new(node(
+        "/window",
+        SemanticRole::Window,
+        Some("Public window"),
+        vec![button, secret],
+    ));
+    let doc = build_document(&fixture.input()).unwrap();
+    let label = doc.operation_label(fixture.id("/described")).unwrap();
+    assert_eq!(label.display_label, "Clear search text");
+    assert_eq!(label.origin, OperationLabelOrigin::PublicDescription);
+    let wire = wire::to_agent_document(&doc);
+    assert!(!wire.to_string().contains("private-description-marker"));
+    assert_eq!(
+        wire["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == fixture.id("/described").get())
+            .unwrap()["description"],
+        "Clear search text"
     );
 }
